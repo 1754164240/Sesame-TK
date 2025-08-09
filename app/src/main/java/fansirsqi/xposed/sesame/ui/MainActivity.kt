@@ -94,7 +94,7 @@ class MainActivity : BaseActivity() {
                 Log.error(TAG, "dexkit file copy failed")
             }
             Detector.loadLibrary("checker")
-            Detector.initDetector(this)
+//            Detector.initDetector(this)
         } catch (e: Exception) {
             Log.error(TAG, "load libSesame err:" + e.message)
         }
