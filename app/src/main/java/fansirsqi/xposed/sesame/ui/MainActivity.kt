@@ -41,6 +41,7 @@ import fansirsqi.xposed.sesame.util.Files
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.PermissionUtil
 import fansirsqi.xposed.sesame.util.ToastUtil
+import fansirsqi.xposed.sesame.util.UserMap
 import fansirsqi.xposed.sesame.util.maps.UserMap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -103,7 +104,7 @@ class MainActivity : BaseActivity() {
             oneWord.text = result
         }
         c = SecureApiClient(baseUrl = getRandomApi(0x22), signatureKey = getRandomEncryptData(0xCF))
-        lifecycleScope.launch {
+        /*lifecycleScope.launch {
             val result = withContext(Dispatchers.IO) {
                 c.secureVerify(deviceId = verifyId, path = getRandomEncryptData(0x9e))
             }
@@ -119,7 +120,7 @@ class MainActivity : BaseActivity() {
                 }
 
             }
-        }
+        }*/
 
     }
 
