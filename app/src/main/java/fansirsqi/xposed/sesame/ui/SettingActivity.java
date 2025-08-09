@@ -114,12 +114,12 @@ public class SettingActivity extends BaseActivity {
             setBaseSubtitle(getString(R.string.settings) + ": " + this.userName);
         }
         initializeTabs();
-        WatermarkView watermarkView = WatermarkView.Companion.install(this);
+//        WatermarkView watermarkView = WatermarkView.Companion.install(this);
         String tag = "用户: " + userName + "\n ID: " + userId;
         if (userName.equals("默认") || userId == null) {
             tag = "用户: " + "未登录" + "\n ID: " + "*************";
         }
-        watermarkView.setWatermarkText(tag);
+//        watermarkView.setWatermarkText(tag);
     }
 
     private void initializeTabs() {

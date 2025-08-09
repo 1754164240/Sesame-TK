@@ -205,12 +205,12 @@ public class WebSettingsActivity extends BaseActivity {
         for (ModelGroup modelGroup : ModelGroup.values()) {
             groupList.add(new ModelGroupDto(modelGroup.getCode(), modelGroup.getName(), modelGroup.getIcon()));
         }
-        WatermarkView watermarkView = WatermarkView.Companion.install(this);
+//        WatermarkView watermarkView = WatermarkView.Companion.install(this);
         String tag = "用户: " + userName + "\n ID: " + userId;
         if (userName.equals("默认") || userId == null) {
             tag = "用户: " + "未登录" + "\n ID: " + "*************";
         }
-        watermarkView.setWatermarkText(tag);
+//        watermarkView.setWatermarkText(tag);
     }
 
 

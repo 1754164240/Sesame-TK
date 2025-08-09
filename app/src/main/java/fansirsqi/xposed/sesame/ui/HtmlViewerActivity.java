@@ -47,7 +47,7 @@ public class HtmlViewerActivity extends BaseActivity {
         super.onCreate(savedInstanceState);
         LanguageUtil.setLocale(this);
         setContentView(R.layout.activity_html_viewer);
-        WatermarkView.Companion.install(this);
+//        WatermarkView.Companion.install(this);
         // 初始化 WebView 和进度条
         mWebView = findViewById(R.id.mwv_webview);
         progressBar = findViewById(R.id.pgb_webview);

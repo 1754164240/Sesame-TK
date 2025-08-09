@@ -108,7 +108,7 @@ class MainActivity : BaseActivity() {
                 c.secureVerify(deviceId = verifyId, path = getRandomEncryptData(0x9e))
             }
             Log.runtime("verify result = $result")
-            ToastUtil.makeText("${result?.optString("message")}", Toast.LENGTH_SHORT).show()
+//            ToastUtil.makeText("${result?.optString("message")}", Toast.LENGTH_SHORT).show()
             when (result?.optInt("status")) {
                 208, 400, 210, 209, 300, 200, 202, 203, 204, 205 -> {
                     ViewAppInfo.veriftag = true
@@ -182,7 +182,7 @@ class MainActivity : BaseActivity() {
             }
 
             R.id.btn_github -> {
-                data = "https://github.com/Fansirsqi/Sesame-TK"
+                data = "https://github.com/1754164240/Sesame-TK"
             }
 
             R.id.btn_settings -> {
