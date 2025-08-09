@@ -20,7 +20,7 @@ object ViewAppInfo {
     var appBuildTarget: String = ""
     var appBuildNumber: String = ""
     var verifyId: String = ""
-    var veriftag: Boolean = false
+    var veriftag: Boolean = true
 
     @SuppressLint("HardwareIds")
 

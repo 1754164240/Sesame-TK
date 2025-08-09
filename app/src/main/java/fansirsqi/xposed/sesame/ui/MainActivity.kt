@@ -75,7 +75,7 @@ class MainActivity : BaseActivity() {
         setContentView(R.layout.activity_main)
         oneWord = findViewById(R.id.one_word)
         val deviceInfo: ComposeView = findViewById(R.id.device_info)
-        val v = WatermarkView.install(this)
+//        val v = WatermarkView.install(this)
         deviceInfo.setContent {
             val customColorScheme = lightColorScheme(
                 primary = Color(0xFF3F51B5), onPrimary = Color.White, background = Color(0xFFF5F5F5), onBackground = Color.Black
@@ -111,7 +111,7 @@ class MainActivity : BaseActivity() {
             ToastUtil.makeText("${result?.optString("message")}", Toast.LENGTH_SHORT).show()
             when (result?.optInt("status")) {
                 208, 400, 210, 209, 300, 200, 202, 203, 204, 205 -> {
-                    ViewAppInfo.veriftag = false
+                    ViewAppInfo.veriftag = true
                 }
 
                 101, 100 -> {
