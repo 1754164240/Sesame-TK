@@ -1323,7 +1323,7 @@ public class AntFarm extends ModelTask {
             };
             Set<String> badTaskSet = DataStore.INSTANCE.getOrCreate("badFarmTaskSet", typeRef);
             if (badTaskSet.isEmpty()) {
-                badTaskSet.addAll(presetBad);
+//                badTaskSet.addAll(presetBad);
                 DataStore.INSTANCE.put("badFarmTaskSet", badTaskSet);
             }
             JSONObject jo = new JSONObject(AntFarmRpcCall.listFarmTask());
