@@ -8,6 +8,9 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
 }
+var isCIBuild: Boolean = System.getenv("CI").toBoolean()
+
+//isCIBuild = true // 没有c++源码时开启CI构建, push前关闭
 
 android {
     namespace = "fansirsqi.xposed.sesame"
@@ -33,7 +36,7 @@ android {
         minSdk = 23
         targetSdk = 36
 
-        if (!System.getenv("CI").toBoolean()) {
+        if (!isCIBuild) {
             ndk {
                 abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64"))
             }
@@ -161,7 +164,7 @@ android {
         }
     }
     val cmakeFile = file("src/main/cpp/CMakeLists.txt")
-    if (!System.getenv("CI").toBoolean() && cmakeFile.exists()) {
+    if (!isCIBuild && cmakeFile.exists()) {
         externalNativeBuild {
             cmake {
                 path = cmakeFile
@@ -213,7 +216,13 @@ dependencies {
     implementation(libs.viewpager2)
     implementation(libs.material)
     implementation(libs.webkit)
-    compileOnly(libs.xposed.api)
+//    compileOnly(libs.xposed.api)
+//    compileOnly(libs.libxposed.api)
+    compileOnly(files("libs/api-100.aar"))
+    compileOnly(files("libs/api-82.jar"))
+//    implementation(libs.libxposed.service)
+//    implementation(files("libs/framework.jar"))
+
     compileOnly(libs.lombok)
     annotationProcessor(libs.lombok)
     implementation(libs.okhttp)

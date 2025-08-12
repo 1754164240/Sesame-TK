@@ -19,8 +19,6 @@ import android.os.PowerManager;
 
 import androidx.annotation.NonNull;
 
-import org.json.JSONException;
-import org.json.JSONObject;
 import org.luckypray.dexkit.DexKitBridge;
 
 import java.io.File;
@@ -71,9 +69,8 @@ import fansirsqi.xposed.sesame.util.maps.UserMap;
 import fi.iki.elonen.NanoHTTPD;
 import lombok.Getter;
 
-public class ApplicationHook implements IXposedHookLoadPackage {
+public class ApplicationHook  implements IXposedHookLoadPackage {
     static final String TAG = ApplicationHook.class.getSimpleName();
-
     private ModuleHttpServer httpServer;
     private static final String modelVersion = BuildConfig.VERSION_NAME;
     private static final Map<String, PendingIntent> wakenAtTimeAlarmMap = new ConcurrentHashMap<>();

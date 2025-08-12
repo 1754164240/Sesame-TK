@@ -65,7 +65,7 @@ object ViewAppInfo {
                     MMKVSettingsManager.mmkv.encode("verify", it)
                 }
             appBuildNumber = BuildConfig.VERSION_CODE.toString()
-            appTitle = context.getString(R.string.app_name) //+ BuildConfig.VERSION_NAME
+            appTitle = context.getString(R.string.app_name)
             appBuildTarget = BuildConfig.BUILD_DATE + " " + BuildConfig.BUILD_TIME + " ⏰"
             try {
                 appVersion = "${BuildConfig.VERSION_NAME} " + emojiList.random()
