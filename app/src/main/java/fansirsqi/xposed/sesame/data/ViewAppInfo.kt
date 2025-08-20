@@ -2,12 +2,12 @@ package fansirsqi.xposed.sesame.data
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.util.Log
 import fansirsqi.xposed.sesame.BuildConfig
 import fansirsqi.xposed.sesame.R
 import fansirsqi.xposed.sesame.newutil.DataStore
 import fansirsqi.xposed.sesame.newutil.MMKVSettingsManager
 import fansirsqi.xposed.sesame.util.Files
-import fansirsqi.xposed.sesame.util.Log
 import java.util.UUID
 
 
@@ -56,6 +56,7 @@ object ViewAppInfo {
      */
     @SuppressLint("HardwareIds")
     fun init(context: Context) {
+        Log.d(TAG, "app data init")
         if (ViewAppInfo.context == null) {
             ViewAppInfo.context = context
             MMKVSettingsManager.init(context)
@@ -70,10 +71,8 @@ object ViewAppInfo {
             try {
                 appVersion = "${BuildConfig.VERSION_NAME} " + emojiList.random()
             } catch (e: Exception) {
-                Log.printStackTrace(e)
+                Log.e(TAG, "init: ", e)
             }
         }
     }
-
-
 }

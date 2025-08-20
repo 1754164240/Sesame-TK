@@ -39,7 +39,6 @@ import fansirsqi.xposed.sesame.util.Detector.getRandomEncryptData
 import fansirsqi.xposed.sesame.util.FansirsqiUtil
 import fansirsqi.xposed.sesame.util.Files
 import fansirsqi.xposed.sesame.util.Log
-import fansirsqi.xposed.sesame.util.PermissionUtil
 import fansirsqi.xposed.sesame.util.ToastUtil
 import fansirsqi.xposed.sesame.util.maps.UserMap
 import kotlinx.coroutines.Dispatchers
@@ -54,7 +53,6 @@ import java.util.concurrent.TimeUnit
 //   那我只能说你妈死了 就当开源项目给你妈烧纸钱了
 class MainActivity : BaseActivity() {
     private val TAG = "MainActivity"
-    private var hasPermissions = false
     private var userNameArray = arrayOf("默认")
     private var userEntityArray = arrayOf<UserEntity?>(null)
     private lateinit var oneWord: TextView
@@ -67,12 +65,7 @@ class MainActivity : BaseActivity() {
         super.onCreate(savedInstanceState)
         ToastUtil.init(this) // 初始化全局 Context
 
-        hasPermissions = PermissionUtil.checkOrRequestFilePermissions(this)
-        if (!hasPermissions) {
-            Toast.makeText(this, "未获取文件读写权限", Toast.LENGTH_LONG).show()
-            finish() // 如果权限未获取，终止当前 Activity
-            return
-        }
+
         setContentView(R.layout.activity_main)
         oneWord = findViewById(R.id.one_word)
         val deviceInfo: ComposeView = findViewById(R.id.device_info)
@@ -128,43 +121,41 @@ class MainActivity : BaseActivity() {
 
     override fun onResume() {
         super.onResume()
-        if (hasPermissions) {
-            try { //打开设置前需要确认设置了哪个UI
-                UIConfig.load()
-            } catch (e: Exception) {
-                Log.printStackTrace(e)
-            }
-            try {
-                val userNameList: MutableList<String> = ArrayList()
-                val userEntityList: MutableList<UserEntity?> = ArrayList()
-                val configFiles = Files.CONFIG_DIR.listFiles()
-                if (configFiles != null) {
-                    for (configDir in configFiles) {
-                        if (configDir.isDirectory) {
-                            val userId = configDir.name
-                            UserMap.loadSelf(userId)
-                            val userEntity = UserMap.get(userId)
-                            val userName = if (userEntity == null) {
-                                userId
-                            } else {
-                                userEntity.showName + ": " + userEntity.account
-                            }
-                            userNameList.add(userName)
-                            userEntityList.add(userEntity)
+        try { //打开设置前需要确认设置了哪个UI
+            UIConfig.load()
+        } catch (e: Exception) {
+            Log.printStackTrace(e)
+        }
+        try {
+            val userNameList: MutableList<String> = ArrayList()
+            val userEntityList: MutableList<UserEntity?> = ArrayList()
+            val configFiles = Files.CONFIG_DIR.listFiles()
+            if (configFiles != null) {
+                for (configDir in configFiles) {
+                    if (configDir.isDirectory) {
+                        val userId = configDir.name
+                        UserMap.loadSelf(userId)
+                        val userEntity = UserMap.get(userId)
+                        val userName = if (userEntity == null) {
+                            userId
+                        } else {
+                            userEntity.showName + ": " + userEntity.account
                         }
+                        userNameList.add(userName)
+                        userEntityList.add(userEntity)
                     }
                 }
-                userNameList.add(0, "默认")
-                userEntityList.add(0, null)
-                userNameArray = userNameList.toTypedArray<String>()
-                userEntityArray = userEntityList.toTypedArray<UserEntity?>()
-            } catch (e: Exception) {
-                userNameArray = arrayOf("默认")
-                userEntityArray = arrayOf(null)
-                Log.printStackTrace(e)
             }
-            updateSubTitle(RunType.LOADED.nickName)
+            userNameList.add(0, "默认")
+            userEntityList.add(0, null)
+            userNameArray = userNameList.toTypedArray<String>()
+            userEntityArray = userEntityList.toTypedArray<UserEntity?>()
+        } catch (e: Exception) {
+            userNameArray = arrayOf("默认")
+            userEntityArray = arrayOf(null)
+            Log.printStackTrace(e)
         }
+        updateSubTitle(RunType.LOADED.nickName)
     }
 
     fun onClick(v: View) {
@@ -201,6 +192,7 @@ class MainActivity : BaseActivity() {
 
             R.id.one_word -> {
                 oneWord.text = "正在获取句子，请稍后……"
+                updateSubTitle(RunType.LOADED.nickName)
 
                 lifecycleScope.launch {
                     val result = FansirsqiUtil.getOneWord()
@@ -403,6 +395,7 @@ class MainActivity : BaseActivity() {
 
     fun updateSubTitle(runType: String) {
         baseTitle = ViewAppInfo.appTitle + "[" + runType + "]" + userNickName
+        Log.runtime("updateSubTitle: $baseTitle")
         when (runType) {
             RunType.DISABLE.nickName -> setBaseTitleTextColor(
                 ContextCompat.getColor(

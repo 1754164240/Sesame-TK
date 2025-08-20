@@ -31,9 +31,13 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.lang.reflect.Method;
+import java.lang.reflect.Member;
+import java.lang.reflect.InvocationTargetException;
 
 import de.robv.android.xposed.IXposedHookLoadPackage;
 import de.robv.android.xposed.XC_MethodHook;
+import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
 import fansirsqi.xposed.sesame.BuildConfig;
@@ -53,7 +57,6 @@ import fansirsqi.xposed.sesame.hook.rpc.intervallimit.RpcIntervalLimit;
 import fansirsqi.xposed.sesame.hook.server.ModuleHttpServer;
 import fansirsqi.xposed.sesame.model.BaseModel;
 import fansirsqi.xposed.sesame.model.Model;
-import fansirsqi.xposed.sesame.net.SecureApiClient;
 import fansirsqi.xposed.sesame.newutil.DataStore;
 import fansirsqi.xposed.sesame.task.BaseTask;
 import fansirsqi.xposed.sesame.task.ModelTask;
@@ -67,9 +70,10 @@ import fansirsqi.xposed.sesame.util.StringUtil;
 import fansirsqi.xposed.sesame.util.TimeUtil;
 import fansirsqi.xposed.sesame.util.maps.UserMap;
 import fi.iki.elonen.NanoHTTPD;
+import kotlin.jvm.JvmStatic;
 import lombok.Getter;
 
-public class ApplicationHook  implements IXposedHookLoadPackage {
+public class ApplicationHook implements IXposedHookLoadPackage {
     static final String TAG = ApplicationHook.class.getSimpleName();
     private ModuleHttpServer httpServer;
     private static final String modelVersion = BuildConfig.VERSION_NAME;
@@ -79,16 +83,26 @@ public class ApplicationHook  implements IXposedHookLoadPackage {
     @Getter
     private static Object microApplicationContextObject = null;
 
-    @Getter
     @SuppressLint("StaticFieldLeak")
     static Context appContext = null;
+
+    @JvmStatic
+    public static Context getAppContext() {
+        return appContext;
+    }
+
     @SuppressLint("StaticFieldLeak")
     static Context moduleContext = null;
 
     @Getter
     static AlipayVersion alipayVersion = new AlipayVersion("");
-    @Getter
     private static volatile boolean hooked = false;
+
+    @JvmStatic
+    public static boolean isHooked() {
+        return hooked;
+    }
+
     private static volatile boolean init = false;
     static volatile Calendar dayCalendar;
     @Getter
@@ -106,7 +120,6 @@ public class ApplicationHook  implements IXposedHookLoadPackage {
     private static RpcVersion rpcVersion;
     private static PowerManager.WakeLock wakeLock;
     private static PendingIntent alarm0Pi;
-    private static SecureApiClient c;
 
     public static void setOffline(boolean offline) {
         ApplicationHook.offline = offline;
@@ -125,6 +138,28 @@ public class ApplicationHook  implements IXposedHookLoadPackage {
         dayCalendar.set(Calendar.SECOND, 0);
     }
 
+
+    private final static Method deoptimizeMethod;
+
+    static {
+        Method m = null;
+        try {
+            m = XposedBridge.class.getDeclaredMethod("deoptimizeMethod", Member.class);
+        } catch (Throwable t) {
+            XposedBridge.log("E/" + TAG + " " + android.util.Log.getStackTraceString(t));
+        }
+        deoptimizeMethod = m;
+    }
+
+    static void deoptimizeMethod(Class<?> c, String n) throws InvocationTargetException, IllegalAccessException {
+        for (Method m : c.getDeclaredMethods()) {
+            if (deoptimizeMethod != null && m.getName().equals(n)) {
+                deoptimizeMethod.invoke(null, m);
+                if (BuildConfig.DEBUG)
+                    XposedBridge.log("D/" + TAG + " Deoptimized " + m.getName());
+            }
+        }
+    }
 
     /**
      * 调度定时执行
@@ -201,6 +236,14 @@ public class ApplicationHook  implements IXposedHookLoadPackage {
                 if (hooked) return;
                 appLloadPackageParam = loadPackageParam;
                 classLoader = appLloadPackageParam.classLoader;
+                // 在Hook Application.attach 之前，先 deoptimize LoadedApk.makeApplicationInner
+                try {
+                    Class<?> loadedApkClass = classLoader.loadClass("android.app.LoadedApk");
+                    deoptimizeMethod(loadedApkClass, "makeApplicationInner");
+                } catch (Throwable t) {
+                    Log.runtime(TAG, "deoptimize makeApplicationInner err:");
+                    Log.printStackTrace(TAG, t);
+                }
                 XposedHelpers.findAndHookMethod(Application.class, "attach", Context.class, new XC_MethodHook() {
                     @Override
                     protected void afterHookedMethod(MethodHookParam param) throws Throwable {
@@ -212,7 +255,6 @@ public class ApplicationHook  implements IXposedHookLoadPackage {
                         Log.runtime(TAG, "handleLoadPackage alipayVersion: " + alipayVersion.getVersionString());
                         loadNativeLibs(appContext, AssetUtil.INSTANCE.getCheckerDestFile());
                         loadNativeLibs(appContext, AssetUtil.INSTANCE.getDexkitDestFile());
-                        c = new SecureApiClient(Detector.INSTANCE.getRandomApi(0x22), Detector.INSTANCE.getRandomEncryptData(0xCF));
                         HookUtil.INSTANCE.fuckAccounLimit(loadPackageParam);
                         if (BuildConfig.DEBUG) {
                             try {
@@ -287,6 +329,7 @@ public class ApplicationHook  implements IXposedHookLoadPackage {
                                 if (!General.CURRENT_USING_SERVICE.equals(appService.getClass().getCanonicalName())) {
                                     return;
                                 }
+
                                 Log.runtime(TAG, "Service onCreate");
                                 appContext = appService.getApplicationContext();
                                 boolean isok = Detector.INSTANCE.isLegitimateEnvironment(appContext);

@@ -28,6 +28,7 @@ object Detector {
     fun loadLibrary(libraryName: String): Boolean {
         try {
             System.loadLibrary(libraryName)
+            Log.runtime(TAG, "loadLibrary $libraryName success")
             return true
         } catch (e: UnsatisfiedLinkError) {
             Log.error(TAG, "loadLibrary${e.message}")

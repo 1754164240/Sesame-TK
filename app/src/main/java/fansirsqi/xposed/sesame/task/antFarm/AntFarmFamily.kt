@@ -370,7 +370,6 @@ data object AntFarmFamily {
                 val sceneId = resp1.getString("sceneId")
                 val sceneName = resp1.getString("sceneName")
                 val success = resp1.getBoolean("success")
-
                 val resp2 = JSONObject(AntFarmRpcCall.deliverContentExpand(ariverRpcTraceId, eventId, eventName, memo, resultCode, sceneId, sceneName, success, userIds))
                 if (ResChecker.checkRes(TAG, resp2)) {
                     val deliverId = resp2.getString("deliverId")

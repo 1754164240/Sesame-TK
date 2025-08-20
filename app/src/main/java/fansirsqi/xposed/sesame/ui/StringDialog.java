@@ -13,6 +13,7 @@ import android.widget.EditText;
 
 import androidx.appcompat.app.AlertDialog;
 import androidx.core.content.ContextCompat;
+import androidx.core.text.HtmlCompat;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
@@ -113,14 +114,8 @@ public class StringDialog {
         showAlertDialog(c, title, msg, "确定");
     }
 
-    @SuppressLint("ObsoleteSdkInt")
     public static void showAlertDialog(Context c, String title, String msg, String positiveButton) {
-        CharSequence parsedMsg;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            parsedMsg = Html.fromHtml(msg, Html.FROM_HTML_MODE_LEGACY);
-        } else {
-            parsedMsg = Html.fromHtml(msg);
-        }
+        CharSequence parsedMsg = HtmlCompat.fromHtml(msg, HtmlCompat.FROM_HTML_MODE_LEGACY);
 
         AlertDialog alertDialog = new MaterialAlertDialogBuilder(c)
                 .setTitle(title)

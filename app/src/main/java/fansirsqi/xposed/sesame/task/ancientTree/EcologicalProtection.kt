@@ -16,9 +16,9 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-class AncientTree : ModelTask() {
+class EcologicalProtection : ModelTask() {
     override fun getName(): String {
-        return "古树"
+        return "生态保护"
     }
 
     override fun getGroup(): ModelGroup {
@@ -68,7 +68,7 @@ class AncientTree : ModelTask() {
     }
 
     companion object {
-        private val TAG: String = AncientTree::class.java.getSimpleName()
+        private val TAG: String = EcologicalProtection::class.java.getSimpleName()
         private fun ancientTree(ancientTreeCityCodeList: MutableCollection<String?>) {
             try {
                 for (cityCode in ancientTreeCityCodeList) {
