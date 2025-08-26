@@ -1,5 +1,8 @@
 # ---------- 框架 ----------
 -keep class de.robv.android.xposed.** { *; }
+-keep class io.github.libxposed.service.** { *; }
+-dontwarn io.github.libxposed.service.**
+
 
 # ---------- 日志 ----------
 -keep class ch.qos.logback.** { *; }

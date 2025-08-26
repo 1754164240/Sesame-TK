@@ -1,6 +1,6 @@
-<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name" translatable="false">Sesame-TK</string>
+    <string name="app_name">Sesame-TK</string>
+    <string name="xposed_description">All the willow branches snapped, all the blossoms gone; I ask the traveler, will they be returning home?</string>
     <string name="start_check_energy">Start check energy</string>
     <string name="start_message"><![CDATA[
 This APP is developed for learning and research,
@@ -126,8 +126,6 @@ If you purchased it, please contact the seller for a refund or report the seller
     <string name="antdodo_collect">Antdodo collect</string>
     <string name="ant_ocean">Ant ocean</string>
     <string name="water_friend_count">Water friend count</string>
-    <string name="the_image_of_main" translatable="false">The image of main</string>
-    <string name="the_image_of_unactivated" translatable="false">The image of unactivated</string>
     <string name="beach">Beach</string>
     <string name="beach_list">Beach list</string>
     <string name="test">Test</string>
@@ -199,8 +197,16 @@ If you purchased it, please contact the seller for a refund or report the seller
     <string name="search_for_unlocked_regions">search_for_unlocked_regions</string>
     <string name="search_for_new_items_on_saplings">search_for_new_items_on_saplings</string>
     <string name="query_the_remaining_amount_of_saplings">query the_remaining_amount_of_saplings</string>
-    <string name="extended_func">扩展功能</string>
+    <string name="extended_func">Extended Function</string>
     <string name="debug_tips">Please check the results in the debug log!</string>
-    <string name="clear_photo">清空光盘行动图片💿</string>
+    <string name="clear_photo">Clear 💿 image</string>
+
+    <string name="home_view_source_code"><![CDATA[View source code at %1$s<br/>Join our %2$s channel]]></string>
+    <string name="home_about">About</string>
+    <string name="home_description">Sesame-TK is an Open Source Automation tool designed to help users quickly and efficiently collect alipay ant forest energy.</string>
+    <string name="shizuku_available">Shizuku service available</string>
+    <string name="shizuku_unavailable">Shizuku service not connected</string>
+    <string name="home_shizuku_warning">Some functions unavailable</string>
+
 
 </resources>

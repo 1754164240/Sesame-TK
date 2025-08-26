@@ -1,3 +1,4 @@
+
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -7,6 +8,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.rikka.tools.refine)
 }
 var isCIBuild: Boolean = System.getenv("CI").toBoolean()
 
@@ -33,7 +35,7 @@ android {
     defaultConfig {
         vectorDrawables.useSupportLibrary = true
         applicationId = "fansirsqi.xposed.sesame"
-        minSdk = 23
+        minSdk = 24
         targetSdk = 36
 
         if (!isCIBuild) {
@@ -183,9 +185,13 @@ android {
         }
     }
 }
-
 dependencies {
+
+    implementation(libs.rikka.shizuku.api)
+    implementation(libs.rikka.shizuku.provider)
+    implementation(libs.rikka.refine)
     implementation(libs.ui.tooling.preview.android)
+
     val composeBom = platform("androidx.compose:compose-bom:2025.05.00")
     implementation(composeBom)
     testImplementation(composeBom)
@@ -216,10 +222,11 @@ dependencies {
     implementation(libs.viewpager2)
     implementation(libs.material)
     implementation(libs.webkit)
-//    compileOnly(libs.xposed.api)
-//    compileOnly(libs.libxposed.api)
-    compileOnly(files("libs/api-100.aar"))
+
     compileOnly(files("libs/api-82.jar"))
+
+    compileOnly(files("libs/api-100.aar"))
+    implementation(files("libs/service-100-1.0.0.aar"))
 //    implementation(libs.libxposed.service)
 //    implementation(files("libs/framework.jar"))
 
@@ -231,6 +238,7 @@ dependencies {
     implementation("com.tencent:mmkv:2.2.2")
 
     coreLibraryDesugaring(libs.desugar)
+    implementation("org.lsposed.hiddenapibypass:hiddenapibypass:+")
 
     add("normalImplementation", libs.jackson.core)
     add("normalImplementation", libs.jackson.databind)

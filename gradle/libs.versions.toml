@@ -6,6 +6,8 @@ constraintlayout = "2.1.4"
 
 kotlin-plugin = "2.2.0-Beta2"
 kotlin-stdlib = "2.1.20"
+shizukuVersion = "13.1.5"
+hiddenapi = "4.4.0"
 slf4j = "2.1.0-alpha1"
 logback-android = "3.0.0"
 appcompat = "1.7.0"
@@ -32,6 +34,11 @@ androidx-constraintlayout = { module = "androidx.constraintlayout:constraintlayo
 jackson-kotlin = { module = "com.fasterxml.jackson.module:jackson-module-kotlin", version.ref = "jackson" }
 kotlin-stdlib = { module = "org.jetbrains.kotlin:kotlin-stdlib", version.ref = "kotlin-stdlib" }
 activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activity-compose" }
+rikka-shizuku-api = { module = "dev.rikka.shizuku:api", version.ref = "shizukuVersion" }
+rikka-shizuku-provider = { module = "dev.rikka.shizuku:provider", version.ref = "shizukuVersion" }
+rikka-refine = { module = "dev.rikka.tools.refine:runtime", version.ref = "hiddenapi" }
+rikka-hidden-stub = { module = "dev.rikka.hidden:stub", version.ref = "hiddenapi" }
+
 slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
 logback-android = { module = "com.github.tony19:logback-android", version.ref = "logback-android" }
 appcompat = { module = "androidx.appcompat:appcompat", version.ref = "appcompat" }
@@ -71,4 +78,5 @@ android-application = { id = "com.android.application", version.ref = "android-p
 android-library = { id = "com.android.library", version.ref = "android-plugin" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin-plugin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version = "2.0.0" }
+rikka-tools-refine = { id = "dev.rikka.tools.refine", version.ref = "hiddenapi" }
 

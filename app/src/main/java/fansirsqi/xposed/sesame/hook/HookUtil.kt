@@ -4,11 +4,11 @@ import de.robv.android.xposed.XC_MethodHook
 import de.robv.android.xposed.XC_MethodReplacement
 import de.robv.android.xposed.XposedBridge
 import de.robv.android.xposed.XposedHelpers
-import de.robv.android.xposed.callbacks.XC_LoadPackage
 import fansirsqi.xposed.sesame.data.General
 import fansirsqi.xposed.sesame.entity.UserEntity
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.maps.UserMap
+import io.github.libxposed.api.XposedModuleInterface
 import org.json.JSONObject
 import java.util.concurrent.ConcurrentHashMap
 
@@ -25,7 +25,7 @@ object HookUtil {
     /**
      * Hook RpcBridgeExtension.rpc 方法，记录请求信息
      */
-    fun hookRpcBridgeExtension(lpparam: XC_LoadPackage.LoadPackageParam, isdebug: Boolean, debugUrl: String) {
+    fun hookRpcBridgeExtension(lpparam: XposedModuleInterface.PackageLoadedParam, isdebug: Boolean, debugUrl: String) {
         try {
             val className = "com.alibaba.ariver.commonability.network.rpc.RpcBridgeExtension"
             val jsonClassName = General.JSON_OBJECT_NAME // 替换为你项目中的实际 JSON 类名
@@ -119,7 +119,7 @@ object HookUtil {
         }
     }
 
-    fun hookOtherService(lpparam: XC_LoadPackage.LoadPackageParam) {
+    fun hookOtherService(lpparam: XposedModuleInterface.PackageLoadedParam) {
         try {
             //hook 服务不在后台
             XposedHelpers.findAndHookMethod("com.alipay.mobile.common.fgbg.FgBgMonitorImpl", lpparam.classLoader, "isInBackground", XC_MethodReplacement.returnConstant(false))
@@ -147,7 +147,7 @@ object HookUtil {
     /**
      * Hook DefaultBridgeCallback.sendJSONResponse 方法，记录响应内容
      */
-    fun hookDefaultBridgeCallback(lpparam: XC_LoadPackage.LoadPackageParam) {
+    fun hookDefaultBridgeCallback(lpparam: XposedModuleInterface.PackageLoadedParam) {
         try {
             val className = "com.alibaba.ariver.engine.common.bridge.internal.DefaultBridgeCallback"
             val jsonClassName = General.JSON_OBJECT_NAME
@@ -175,7 +175,7 @@ object HookUtil {
      * 突破支付宝最大可登录账号数量限制
      * @param lpparam 加载包参数
      */
-    fun fuckAccounLimit(lpparam: XC_LoadPackage.LoadPackageParam) {
+    fun fuckAccounLimit(lpparam: XposedModuleInterface.PackageLoadedParam) {
         Log.runtime(TAG, "Hook AccountManagerListAdapter#getCount")
         XposedHelpers.findAndHookMethod(
             "com.alipay.mobile.security.accountmanager.data.AccountManagerListAdapter",  // target class
@@ -205,10 +205,9 @@ object HookUtil {
         Log.runtime(TAG, "Hook AccountManagerListAdapter#getCount END")
     }
 
-    fun hookActive(lpparam: XC_LoadPackage.LoadPackageParam) {
+    fun hookActive(lpparam: XposedModuleInterface.PackageLoadedParam) {
         try {
             XposedBridge.log("Hooking fansirsqi.xposed.sesame.ui.MainActivity...")
-
             // Hook updateSubTitle 方法
             XposedHelpers.findAndHookMethod(
                 "fansirsqi.xposed.sesame.ui.MainActivity",
@@ -266,7 +265,7 @@ object HookUtil {
         Log.printStackTrace(TAG, it)
     }.getOrNull()
 
-    fun hookUser(lpparam: XC_LoadPackage.LoadPackageParam) {
+    fun hookUser(lpparam: XposedModuleInterface.PackageLoadedParam) {
         runCatching {
             UserMap.unload()
             val selfId = getUserId(lpparam.classLoader)

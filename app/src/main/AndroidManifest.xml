@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -17,7 +16,8 @@
         android:roundIcon="@drawable/ic_launcher"
         android:theme="@style/AppTheme"
         android:usesCleartextTraffic="true"
-        tools:targetApi="33">
+        android:description="@string/xposed_description"
+        >
         <meta-data
             android:name="xposedmodule"
             android:value="true" />
@@ -50,11 +50,7 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity-alias>
-        <!-- ✅ 新增 MMKV 测试页面 -->
-        <activity
-            android:name="fansirsqi.xposed.sesame.newui.SettingDemo"
-            android:exported="true"
-            android:label="MMKV测试页面" />
+
 
         <activity android:name="fansirsqi.xposed.sesame.ui.ExtendActivity" />
         <activity android:name="fansirsqi.xposed.sesame.ui.WebSettingsActivity" />
