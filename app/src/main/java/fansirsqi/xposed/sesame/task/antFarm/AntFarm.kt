@@ -366,10 +366,10 @@ class AntFarm : ModelTask() {
             if (recordFarmGame!!.value) {
                 for (time in farmGameTime!!.value) {
                     if (TimeUtil.checkNowInTimeRange(time)) {
-                        recordFarmGame(GameType.StarGame)
-                        recordFarmGame(GameType.JumpGame)
-                        recordFarmGame(GameType.FlyGame)
-                        recordFarmGame(GameType.HitGame)
+                        recordFarmGame(GameType.starGame)
+                        recordFarmGame(GameType.jumpGame)
+                        recordFarmGame(GameType.flyGame)
+                        recordFarmGame(GameType.hitGame)
                         break
                     }
                 }
@@ -1049,7 +1049,6 @@ class AntFarm : ModelTask() {
                         val toolType = ToolType.valueOf(awardType)
 
                         val isFull = farmTools.any { it.toolType == toolType && it.toolCount == it.toolHoldLimit }
-
                         if (isFull) {
                             Log.record(TAG, "领取道具[${toolType.nickName()}]#已满，暂不领取")
                             continue
@@ -1347,7 +1346,7 @@ class AntFarm : ModelTask() {
                             if (jo.has("receiveFoodCount")) {
                                 award.append(";肥料*").append(jo.getString("receiveFoodCount"))
                             }
-                            Log.farm("庄园游戏🎮[" + gameType.gameName() + "]#" + award)
+                            Log.farm("庄园游戏🎮[" + gameType.nickName + "]#" + award)
                             if (jo.optInt("remainingGameCount", 0) > 0) {
                                 continue
                             }
@@ -2707,16 +2706,8 @@ class AntFarm : ModelTask() {
         }
     }
 
-    enum class GameType {
-        StarGame, JumpGame, FlyGame, HitGame;
-
-        fun gameName(): CharSequence? {
-            return gameNames[ordinal]
-        }
-
-        companion object {
-            val gameNames: Array<CharSequence?> = arrayOf<CharSequence?>("星星球", "登山赛", "飞行赛", "欢乐揍小鸡")
-        }
+    enum class GameType(val nickName: String) {
+        starGame("星星球"), jumpGame("登山赛"), flyGame("飞行赛"), hitGame("欢乐揍小鸡");
     }
 
 

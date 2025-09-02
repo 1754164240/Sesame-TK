@@ -64,19 +64,21 @@ data object AntFarmFamily {
      */
     fun enterFamily(familyOptions: SelectModelField, notInviteList: SelectModelField) {
         try {
-            val enterRes = JSONObject(AntFarmRpcCall.enterFamily());
+            val enterRes = JSONObject(AntFarmRpcCall.enterFamily())
             if (ResChecker.checkRes(TAG, enterRes)) {
                 groupId = enterRes.getString("groupId")
                 groupName = enterRes.getString("groupName")
                 val familyAwardNum: Int = enterRes.optInt("familyAwardNum", 0)//奖励数量
                 val familySignTips: Boolean = enterRes.optBoolean("familySignTips", false)//签到
                 val assignFamilyMemberInfo: JSONObject? = enterRes.optJSONObject("assignFamilyMemberInfo")//分配成员信息-顶梁柱
+                val feedFriendLimit: Boolean = enterRes.optBoolean("feedFriendLimit", false)//帮喂好友限制
                 familyAnimals = enterRes.getJSONArray("animals")//家庭动物列表
                 familyUserIds = (0..<familyAnimals.length())
                     .map { familyAnimals.getJSONObject(it).getString("userId") }
                     .toMutableList()
                 familyInteractActions = enterRes.getJSONArray("familyInteractActions")//互动功能列表
                 eatTogetherConfig = enterRes.getJSONObject("eatTogetherConfig")//美食配置对象
+
 
 
                 if (familyOptions.value.contains("familySign") && familySignTips) {
@@ -99,7 +101,7 @@ data object AntFarmFamily {
                     familyClaimRewardList()
                 }
 
-                if (familyOptions.value.contains("feedFamilyAnimal")) {
+                if (familyOptions.value.contains("feedFamilyAnimal") && !feedFriendLimit) {
                     familyFeedFriendAnimal(familyAnimals)
                 }
 

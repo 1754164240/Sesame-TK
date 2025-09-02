@@ -406,6 +406,7 @@ public class AntDodo extends ModelTask {
             case "COLLECT_TIMES_7_DAYS" -> usePropType || usePropCollectTimes7Days.getValue();
             case "COLLECT_HISTORY_ANIMAL_7_DAYS" -> usePropType || usePropCollectHistoryAnimal7Days.getValue();
             case "COLLECT_TO_FRIEND_TIMES_7_DAYS" -> usePropType || usePropCollectToFriendTimes7Days.getValue();
+            case "UNIVERSAL_CARD_7_DAYS" -> false; // 万能卡，需要指定动物ID，应手动执行，所以跳过
             default -> usePropType;
         };
         return usePropType;
@@ -534,7 +535,7 @@ public class AntDodo extends ModelTask {
                 JSONArray bookForUserList = jo.getJSONArray("bookForUserList");
                 for (int i = 0; i < bookForUserList.length(); i++) {
                     jo = bookForUserList.getJSONObject(i);
-                    if (!"已集齐".equals(
+                    if (!"CAN_GENERATE".equals(
                             jo.optString("medalGenerationStatus"))) {
                         continue; // 如果图鉴未集齐，跳过
                     }
