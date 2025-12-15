@@ -2,6 +2,7 @@
 
 package fansirsqi.xposed.sesame.task.antFarm
 
+import android.annotation.SuppressLint
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.fasterxml.jackson.core.type.TypeReference
@@ -67,7 +68,7 @@ class AntFarm : ModelTask() {
     private var ownerAnimal = Animal()
     private var rewardProductNum: String? = null
     private var rewardList: Array<RewardFriend>? = null
-
+    private var countdown: Long? = null
     /**
      * 慈善评分
      */
@@ -601,6 +602,9 @@ class AntFarm : ModelTask() {
                 return
             }
 
+            handleAutoFeedAnimal()
+            tc.countDebug("喂食")
+
             recallAnimal()
             tc.countDebug("召回小鸡")
 
@@ -686,8 +690,6 @@ class AntFarm : ModelTask() {
                 hireAnimal()
             }
 
-            handleAutoFeedAnimal()
-            tc.countDebug("喂食")
 
             // 到访小鸡送礼
             if (visitAnimal!!.value) {
@@ -1154,61 +1156,59 @@ class AntFarm : ModelTask() {
                 syncAnimalStatus(ownerFarmId)
             }
         }
-
-        // 5. 计算并安排下一次自动喂食任务（仅当小鸡不在睡觉时）
+// 5. 计算并安排下一次自动喂食任务（仅当小鸡不在睡觉时）
         if (AnimalFeedStatus.SLEEPY.name != ownerAnimal.animalFeedStatus) {
             try {
-                val startEatTime = ownerAnimal.startEatTime!!
-                var totalFoodHaveEatten = 0.0
-                var totalConsumeSpeed = 0.0
-                val nowSec = System.currentTimeMillis() / 1000
-                for (animal in animals!!) {
-                    totalFoodHaveEatten += animal.foodHaveEatten!!
-                    totalFoodHaveEatten += animal.consumeSpeed!! * (nowSec - animal.startEatTime!!.toDouble() / 1000)
-                    totalConsumeSpeed += animal.consumeSpeed!!
-                }
-                if (totalConsumeSpeed > 0) {
-                    val remainingSec = ((foodInTroughLimitCurrent - totalFoodHaveEatten) / totalConsumeSpeed)
-                        .coerceAtLeast(0.0)
-                    val nextFeedTime = if (AnimalFeedStatus.SLEEPY.name == ownerAnimal.animalFeedStatus) {
-                        // 如果为饥饿状态，则10s后执行
-                        System.currentTimeMillis() + (10 * 1000).toLong()
+                // 直接使用服务器计算的权威倒计时（单位：秒）
+                val remainingSec = countdown?.toDouble()?.coerceAtLeast(0.0)
+                // 如果倒计时为0，跳过任务创建
+                remainingSec?.let {
+                    if (it > 0) {
+                        // 计算下次执行时间（毫秒）
+                        val nextFeedTime = System.currentTimeMillis() + (remainingSec * 1000).toLong()
+                        // 调试日志：显示服务器倒计时详情
+                        Log.record(
+                            TAG, "服务器倒计时🕐[小鸡状态=" + toFeedStatusName(ownerAnimal.animalFeedStatus) +
+                                    ", 剩余=${remainingSec.toInt()}秒" +
+                                    ", 执行时间=" + TimeUtil.getCommonDate(nextFeedTime) + "]"
+                        )
+                        val taskId = "FA|$ownerFarmId"
+                        addChildTask(
+                            ChildModelTask(
+                                taskId,
+                                "FA",
+                                Runnable {
+                                    try {
+                                        Log.record(TAG, "🔔 蹲点投喂任务触发")
+                                        // 重新进入庄园，获取最新状态
+                                        enterFarm()
+                                        // 同步最新状态
+                                        syncAnimalStatus(ownerFarmId)
+                                        Log.record(TAG, "🔄 下一次蹲点任务已创建")
+                                    } catch (e: Exception) {
+                                        Log.error(TAG, "蹲点投喂任务执行失败: ${e.message}")
+                                        Log.printStackTrace(TAG, e)
+                                    }
+                                },
+                                nextFeedTime
+                            )
+                        )
+                        Log.record(
+                            TAG,
+                            "添加蹲点投喂🥣[" + UserMap.getCurrentMaskName() + "]在[" +
+                                    TimeUtil.getCommonDate(nextFeedTime) + "]执行"
+                        )
                     } else {
-                        System.currentTimeMillis() + (remainingSec * 1000).toLong()
-                    }
-                    // 调试日志：打印时间计算详情（动态上限 + 实时增量）
-                    Log.record(
-                        TAG, "蹲点时间计算🕐[小鸡状态=" + toFeedStatusName(ownerAnimal.animalFeedStatus) +
-                                ", 开始时间=" + TimeUtil.getCommonDate(startEatTime) +
-                                ", 已吃(含增量)=" + totalFoodHaveEatten + ", 速度总计=" + totalConsumeSpeed +
-                                ", 食槽上限=" + foodInTroughLimitCurrent + ", 计算时间=" + TimeUtil.getCommonDate(nextFeedTime) + "]"
-                    )
-
-                    val taskId = "FA|$ownerFarmId"
-                    addChildTask(ChildModelTask(taskId, "FA", Runnable {
-                        try {
-                            Log.record(TAG, "🔔 蹲点投喂任务触发")
-                            // 重新进入庄园，获取最新状态
-                            enterFarm()
-                            // 同步最新状态
+                        Log.record(TAG, "蹲点投喂🥣[倒计时为0，开始投喂]")
+                        if (feedAnimal(ownerFarmId)) {
+                            // 刷新状态
                             syncAnimalStatus(ownerFarmId)
-                            kotlinx.coroutines.runBlocking {
-                                handleAutoFeedAnimal()
-                            }
-                            Log.record(TAG, "🔄 下一次蹲点任务已创建")
-                        } catch (e: Exception) {
-                            Log.error(TAG, "蹲点投喂任务执行失败: ${e.message}")
-                            Log.printStackTrace(TAG, e)
                         }
-                    }, nextFeedTime))
-                    Log.record(
-                        TAG,
-                        "添加蹲点投喂🥣[" + UserMap.getCurrentMaskName() + "]在[" + TimeUtil.getCommonDate(
-                            nextFeedTime
-                        ) + "]执行"
-                    )
+                        handleAutoFeedAnimal()
+                    }
                 }
             } catch (e: Exception) {
+                Log.error(TAG, "创建蹲点任务失败: ${e.message}")
                 Log.printStackTrace(e)
             }
         } else {
@@ -1223,7 +1223,6 @@ class AntFarm : ModelTask() {
             listOrnaments()
         }
     }
-
     private fun animalSleepNow() {
         try {
             var s = AntFarmRpcCall.queryLoveCabin(UserMap.currentUid)
@@ -2456,7 +2455,8 @@ class AntFarm : ModelTask() {
 
 
             ownerFarmId = subFarmVO.getString("farmId")
-
+            //倒计时
+            countdown = subFarmVO.getLong("countdown")
             val farmProduce = subFarmVO.getJSONObject("farmProduce") //产物 -🥚
             benevolenceScore = farmProduce.getDouble("benevolenceScore") //慈善评分
 

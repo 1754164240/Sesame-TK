@@ -22,8 +22,8 @@ import fansirsqi.xposed.sesame.util.ResChecker;
 public class WhackMole {
     private static final String TAG = WhackMole.class.getSimpleName();
     
-    // 总游戏局数，同时开启3局游戏
-    private static final int TOTAL_ROUNDS = 3;
+    // 总游戏局数，同时开启10局游戏
+    private static final int TOTAL_ROUNDS = 10;
     
     // 单个游戏任务的超时时间（秒），防止任务卡住
     private static final long TASK_TIMEOUT_SECONDS = 30;
