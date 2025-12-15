@@ -2,13 +2,13 @@ name: 📦Auto Build for N
 run-name: 📦 ${{ github.actor }} @ Github Action
 
 on:
-   push:
-     branches: [ "n" ]
-   pull_request:
-     branches: [ "n" ]
+  push:
+    branches: [ "n" ]
+  pull_request:
+    branches: [ "n" ]
   release:
     types: [ published ]
- workflow_dispatch:
+  workflow_dispatch:
 
 jobs:
   build:
