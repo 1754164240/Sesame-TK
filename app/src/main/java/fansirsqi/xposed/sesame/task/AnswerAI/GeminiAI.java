@@ -7,9 +7,6 @@ import org.json.JSONObject;
 import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
-
-import fansirsqi.xposed.sesame.util.GlobalThreadPools;
 
 import fansirsqi.xposed.sesame.util.Log;
 import lombok.Getter;

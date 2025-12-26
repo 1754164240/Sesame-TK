@@ -10,7 +10,7 @@ import java.util.UUID;
 public class AntStallRpcCall {
     //0.1.2406171355.5
     //0.1.2312271038.27
-    private static final String VERSION = "0.1.2508141056.25";
+    private static final String VERSION = "0.1.2512051721.49";
     public static String home() {
         return RequestManager.requestString("com.alipay.antstall.self.home",
                 "[{\"arouseAppParams\":{},\"source\":\"search\",\"systemType\":\"android\",\"version\":\"" +

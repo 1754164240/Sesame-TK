@@ -1,6 +1,5 @@
 package fansirsqi.xposed.sesame.ui
 
-import android.content.Context
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.os.Bundle
@@ -87,11 +86,6 @@ open class BaseActivity : AppCompatActivity() {
         toolbar.setTitleTextColor(color)
     }
 
-    override fun attachBaseContext(newBase: Context) {
-        val configurationNew = Configuration(newBase.resources.configuration)
-        val context = newBase.createConfigurationContext(configurationNew)
-        super.attachBaseContext(context)
-    }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)

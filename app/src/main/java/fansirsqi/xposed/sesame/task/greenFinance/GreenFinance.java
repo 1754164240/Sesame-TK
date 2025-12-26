@@ -122,12 +122,12 @@ public class GreenFinance extends ModelTask {
             doTask("AP13159535", TAG, "绿色经营📊");
             GlobalThreadPools.sleepCompat(500);
         } catch (Throwable th) {
-            Log.runtime(TAG, "index err:");
-            Log.printStackTrace(TAG, th);
+            Log.printStackTrace(TAG, "index err:",th);
         }finally {
             Log.record(TAG,"执行结束-" + getName());
         }
     }
+
     /**
      * 公共做任务
      * 使用taskQuery查询任务，taskTrigger触发任务（根据taskProcessStatus状态，报名signup->完成send->领奖receive）
@@ -187,10 +187,10 @@ public class GreenFinance extends ModelTask {
                 Log.other(name + "[" + JsonUtil.getValueByPath(taskDetail, "taskExtProps.TASK_MORPHO_DETAIL.title") + "]任务完成");
             }
         } catch (Throwable th) {
-            Log.runtime(tag, "doTask err:");
-            Log.printStackTrace(tag, th);
+            Log.printStackTrace(tag, "doTask err:",th);
         }
     }
+
     /**
      * 批量收取
      *
@@ -207,10 +207,10 @@ public class GreenFinance extends ModelTask {
                 Log.runtime(TAG + ".batchSelfCollect", joSelfCollect.optString("resultDesc"));
             }
         } catch (Throwable th) {
-            Log.runtime(TAG, "batchSelfCollect err:");
-            Log.printStackTrace(TAG, th);
+            Log.printStackTrace(TAG, "batchSelfCollect err:",th);
         }
     }
+
     /**
      * 签到
      *
@@ -237,10 +237,10 @@ public class GreenFinance extends ModelTask {
                 Log.runtime(TAG + ".signIn.signInTrigger", jo.optString("resultDesc"));
             }
         } catch (Throwable th) {
-            Log.runtime(TAG, "signIn err:");
-            Log.printStackTrace(TAG, th);
+            Log.printStackTrace(TAG, "signIn err:",th);
         }
     }
+
     /**
      * 打卡
      */
@@ -266,6 +266,7 @@ public class GreenFinance extends ModelTask {
             doTick("wdxd");
         }
     }
+
     /**
      * 打卡绿色行为
      *
@@ -290,17 +291,17 @@ public class GreenFinance extends ModelTask {
                 JSONObject object = new JSONObject(str);
                 if (!object.optBoolean("success")
                         || !String.valueOf(true).equals(JsonUtil.getValueByPath(object, "result.result"))) {
-                    Log.other("绿色经营📊[" + jsonObject.getString("title") + "]打卡失败");
+                    Log.error("绿色经营📊[" + jsonObject.getString("title") + "]打卡失败");
                     break;
                 }
                 Log.other("绿色经营📊[" + jsonObject.getString("title") + "]打卡成功");
 //                ThreadUtil.sleep(executeIntervalInt);
             }
         } catch (Throwable th) {
-            Log.runtime(TAG, "doTick err:");
-            Log.printStackTrace(TAG, th);
+            Log.printStackTrace(TAG, "doTick err:",th);
         }
     }
+
     /**
      * 捐助
      */
@@ -365,10 +366,10 @@ public class GreenFinance extends ModelTask {
                 Log.other("绿色经营📊成功捐助[" + name + "]" + am + "金币");
             }
         } catch (Throwable th) {
-            Log.runtime(TAG, "donation err:");
-            Log.printStackTrace(TAG, th);
+            Log.printStackTrace(TAG, "donation err:",th);
         }
     }
+
     /**
      * 评级奖品
      */
@@ -409,10 +410,10 @@ public class GreenFinance extends ModelTask {
         }
         Log.other("绿色经营🍬评级奖品[" + object.getString("prizeName") + "]" + object.getString("price"));
     } catch (Throwable th) {
-        Log.runtime(TAG, "prizes err:");
-        Log.printStackTrace(TAG, th);
+        Log.printStackTrace(TAG,"prizes err:", th);
     }
 }
+
     /**
      * 收好友金币
      */
@@ -428,7 +429,7 @@ public class GreenFinance extends ModelTask {
                     GlobalThreadPools.sleepCompat(1500);
                     JSONObject jsonObject = new JSONObject(str);
                     if (!jsonObject.optBoolean("success")) {
-                        Log.other("绿色经营🙋，好友金币巡查失败");
+                        Log.error("绿色经营🙋，好友金币巡查失败");
                         break;
                     }
                     JSONObject result = jsonObject.getJSONObject("result");
@@ -485,10 +486,10 @@ public class GreenFinance extends ModelTask {
                 }
             }
         } catch (Throwable th) {
-            Log.runtime(TAG, "batchStealFriend err:");
-            Log.printStackTrace(TAG, th);
+            Log.printStackTrace(TAG,"batchStealFriend err:", th);
         }
     }
+
     /**
      * 计算次数和金额
      *

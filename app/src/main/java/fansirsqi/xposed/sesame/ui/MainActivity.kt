@@ -15,28 +15,32 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.lightColorScheme
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
 import androidx.core.content.ContextCompat
+import androidx.core.content.edit
 import androidx.core.graphics.toColorInt
 import androidx.core.net.toUri
 import androidx.core.util.Consumer
 import androidx.lifecycle.lifecycleScope
 import fansirsqi.xposed.sesame.BuildConfig
 import fansirsqi.xposed.sesame.R
-import fansirsqi.xposed.sesame.data.General
+import fansirsqi.xposed.sesame.SesameApplication.Companion.hasPermissions
+import fansirsqi.xposed.sesame.SesameApplication.Companion.preferencesKey
 import fansirsqi.xposed.sesame.data.RunType
 import fansirsqi.xposed.sesame.data.ServiceManager
 import fansirsqi.xposed.sesame.data.UIConfig
 import fansirsqi.xposed.sesame.data.ViewAppInfo
 import fansirsqi.xposed.sesame.data.ViewAppInfo.verifyId
-import fansirsqi.xposed.sesame.entity.FriendWatch
 import fansirsqi.xposed.sesame.entity.UserEntity
-import fansirsqi.xposed.sesame.model.SelectModelFieldFunc
 import fansirsqi.xposed.sesame.newui.DeviceInfoCard
 import fansirsqi.xposed.sesame.newui.DeviceInfoUtil
 import fansirsqi.xposed.sesame.newui.WatermarkView
-import fansirsqi.xposed.sesame.ui.widget.ListDialog
+import fansirsqi.xposed.sesame.newutil.DataStore
+import fansirsqi.xposed.sesame.newutil.IconManager
+import fansirsqi.xposed.sesame.ui.log.LogViewerComposeActivity
 import fansirsqi.xposed.sesame.util.AssetUtil
 import fansirsqi.xposed.sesame.util.Detector
 import fansirsqi.xposed.sesame.util.FansirsqiUtil
@@ -46,6 +50,8 @@ import fansirsqi.xposed.sesame.util.PermissionUtil
 import fansirsqi.xposed.sesame.util.ToastUtil
 import fansirsqi.xposed.sesame.util.maps.UserMap
 import kotlinx.coroutines.launch
+import rikka.shizuku.Shizuku
+import rikka.shizuku.ShizukuProvider
 import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -56,25 +62,52 @@ import java.util.concurrent.TimeUnit
 //   那我只能说你妈死了 就当开源项目给你妈烧纸钱了
 class MainActivity : BaseActivity() {
     private val TAG = "MainActivity"
-    private var hasPermissions = false
     private var userNameArray = arrayOf<String>()
+
     private var userEntityArray = arrayOf<UserEntity?>(null)
     private lateinit var oneWord: TextView
 
     private lateinit var v: WatermarkView
 
+    private val shizukuPermissionListener = Shizuku.OnRequestPermissionResultListener { requestCode, grantResult ->
+        if (requestCode == 1234) {
+            if (grantResult == PackageManager.PERMISSION_GRANTED) {
+                ToastUtil.showToast(this, "Shizuku 授权成功！")
+            } else {
+                ToastUtil.showToast(this, "Shizuku 授权被拒绝")
+            }
+        }
+    }
+
+
     @SuppressLint("SetTextI18n", "UnsafeDynamicallyLoadedCode")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        ToastUtil.init(this) // 初始化全局 Context
-
         hasPermissions = PermissionUtil.checkOrRequestFilePermissions(this)
         if (!hasPermissions) {
             Toast.makeText(this, "未获取文件读写权限", Toast.LENGTH_LONG).show()
             finish() // 如果权限未获取，终止当前 Activity
             return
         }
-        //clearLogsOnStart()
+
+
+
+        if (Shizuku.pingBinder()) {
+            // 🔥 修改点：去掉中间的点，变成 ShizukuProvider
+            if (checkSelfPermission(ShizukuProvider.PERMISSION) != PackageManager.PERMISSION_GRANTED) {
+                if (Shizuku.shouldShowRequestPermissionRationale()) {
+                    // 可以在这里弹个对话框解释为什么要权限
+                }
+                // 请求 Shizuku 权限
+                Shizuku.requestPermission(1234)
+            }
+        }
+
+        // 2. 注册监听器 (使用上面定义的变量)
+        Shizuku.addRequestPermissionResultListener(shizukuPermissionListener)
+
+
+
         setContentView(R.layout.activity_main)
         oneWord = findViewById(R.id.one_word)
         val deviceInfo: ComposeView = findViewById(R.id.device_info)
@@ -83,8 +116,14 @@ class MainActivity : BaseActivity() {
             val customColorScheme = lightColorScheme(
                 primary = Color(0xFF3F51B5), onPrimary = Color.White, background = Color(0xFFF5F5F5), onBackground = Color.Black
             )
+            var deviceInfoData by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<Map<String, String>?>(null) }
+
+            androidx.compose.runtime.LaunchedEffect(Unit) {
+                deviceInfoData = DeviceInfoUtil.showInfo(verifyId, this@MainActivity)
+            }
+
             MaterialTheme(colorScheme = customColorScheme) {
-                DeviceInfoCard(DeviceInfoUtil.showInfo(verifyId))
+                deviceInfoData?.let { DeviceInfoCard(it) }
             }
         }
         // 获取并设置一言句子
@@ -104,6 +143,14 @@ class MainActivity : BaseActivity() {
             val result = FansirsqiUtil.getOneWord()
             oneWord.text = result
         }
+
+        // 读取用户之前保存的设置
+        val prefs = getSharedPreferences(preferencesKey, MODE_PRIVATE)
+        // 默认为 false (不隐藏)
+        val isHidden = prefs.getBoolean("is_icon_hidden", false)
+        // 每次打开 App 都同步一次状态
+        IconManager.syncIconState(this, isHidden)
+
     }
 
     override fun onResume() {
@@ -117,22 +164,18 @@ class MainActivity : BaseActivity() {
             try {
                 val userNameList: MutableList<String> = ArrayList()
                 val userEntityList: MutableList<UserEntity?> = ArrayList()
-                val configFiles = Files.CONFIG_DIR.listFiles()
-                if (configFiles != null) {
-                    for (configDir in configFiles) {
-                        if (configDir.isDirectory) {
-                            val userId = configDir.name
-                            UserMap.loadSelf(userId)
-                            val userEntity = UserMap.get(userId)
-                            val userName = if (userEntity == null) {
-                                userId
-                            } else {
-                                userEntity.showName + ": " + userEntity.account
-                            }
-                            userNameList.add(userName)
-                            userEntityList.add(userEntity)
-                        }
+                val configFiles = FansirsqiUtil.getFolderList(Files.CONFIG_DIR.absolutePath)
+                for (userId in configFiles) {
+                    UserMap.loadSelf(userId)
+                    Log.runtime(TAG, "userId: $userId")
+                    val userEntity = UserMap.get(userId)
+                    val userName = if (userEntity == null) {
+                        userId
+                    } else {
+                        userEntity.showName + ": " + userEntity.account
                     }
+                    userNameList.add(userName)
+                    userEntityList.add(userEntity)
                 }
                 userNameArray = userNameList.toTypedArray()
                 userEntityArray = userEntityList.toTypedArray()
@@ -141,15 +184,22 @@ class MainActivity : BaseActivity() {
                 Log.printStackTrace(e)
             }
         }
-
         Log.runtime(TAG, "isModuleActivated: ${ServiceManager.isModuleActivated}")
+        val activedUser = DataStore.get("activedUser", UserEntity::class.java)
         if (ServiceManager.isModuleActivated) {
-            updateSubTitle(RunType.ACTIVE.nickName)
+            updateSubTitle(RunType.ACTIVE.nickName, activedUser)
         } else {
-            updateSubTitle(RunType.LOADED.nickName)
+            updateSubTitle(RunType.LOADED.nickName, activedUser)
         }
+
+
     }
 
+
+    override fun onDestroy() {
+        super.onDestroy()
+        Shizuku.removeRequestPermissionResultListener(shizukuPermissionListener) // 如果你把 listener 定义为变量的话
+    }
 
     // 比如在 Activity 的 onConfigurationChanged 中
     override fun onConfigurationChanged(newConfig: Configuration) {
@@ -202,23 +252,31 @@ class MainActivity : BaseActivity() {
         }
     }
 
+
     /**
-     * 打开日志文件查看器
+     * 打开高性能日志文件查看器 (Compose版)
      *
      * @param logFile 要打开的日志文件
-     *
-     * @details 使用HtmlViewerActivity打开指定的日志文件，
-     * 并启用清空功能和禁用自动换行
      */
     private fun openLogFile(logFile: File) {
-        val fileUri = "file://${logFile.absolutePath}".toUri()
-        val intent = Intent(this, HtmlViewerActivity::class.java).apply {
+        // 检查文件是否存在
+        if (!logFile.exists()) {
+            ToastUtil.showToast(this, "日志文件不存在: ${logFile.name}")
+            return
+        }
+
+        // 使用 Uri.fromFile 或者 toUri
+        val fileUri = logFile.toUri()
+
+        // 跳转到新的 LogViewerComposeActivity
+        val intent = Intent(this, LogViewerComposeActivity::class.java).apply {
             data = fileUri
-            putExtra("nextLine", false)
-            putExtra("canClear", true)
+            // Compose 页面不需要 "nextLine" 或 "canClear" 这种参数了
+            // 因为 Compose 页面自带逻辑，或者你可以在 ViewModel 里处理
         }
         startActivity(intent)
     }
+
 
     /**
      * 打开GitHub项目页面
@@ -251,22 +309,27 @@ class MainActivity : BaseActivity() {
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         try {
-            val aliasComponent = ComponentName(this, General.MODULE_PACKAGE_UI_ICON)
-            val state = packageManager.getComponentEnabledSetting(aliasComponent)
-            val isEnabled = state != PackageManager.COMPONENT_ENABLED_STATE_DISABLED
-            menu.add(0, 1, 1, R.string.hide_the_application_icon)
-                .setCheckable(true).isChecked = !isEnabled
+            val pm = packageManager
+            // 1. 检查默认图标状态
+            val defaultComp = ComponentName(this, IconManager.COMPONENT_DEFAULT)
+            val defaultState = pm.getComponentEnabledSetting(defaultComp)
+            val isDefaultEnabled = defaultState == PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+                    || defaultState == PackageManager.COMPONENT_ENABLED_STATE_DEFAULT
 
-            menu.add(0, 2, 2, R.string.friend_watch)
-            menu.add(0, 3, 3, R.string.other_log)
-            menu.add(0, 4, 4, R.string.view_error_log_file)
-            menu.add(0, 5, 5, R.string.view_all_log_file)
-            menu.add(0, 6, 6, R.string.view_runtim_log_file)
-            menu.add(0, 7, 7, R.string.view_capture)
-            menu.add(0, 8, 8, R.string.extend)
-            menu.add(0, 9, 9, R.string.settings)
+            // 2. 检查圣诞图标状态
+            val christmasComp = ComponentName(this, IconManager.COMPONENT_CHRISTMAS)
+            val christmasState = pm.getComponentEnabledSetting(christmasComp)
+            val isChristmasEnabled = christmasState == PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+
+            // 3. 只要有一个是开启的，就说明应用图标是显示的
+            val isIconVisible = isDefaultEnabled || isChristmasEnabled
+
+            menu.add(0, 1, 1, R.string.hide_the_application_icon).setCheckable(true).isChecked = !isIconVisible
+
+            menu.add(0, 2, 2, R.string.view_capture)
+            menu.add(0, 3, 3, R.string.extend)
             if (BuildConfig.DEBUG) {
-                menu.add(0, 10, 10, "清除配置")
+                menu.add(0, 4, 4, "清除配置")
             }
         } catch (e: Exception) {
             Log.printStackTrace(e)
@@ -281,97 +344,26 @@ class MainActivity : BaseActivity() {
             1 -> { // 隐藏应用图标
                 val shouldHide = !item.isChecked
                 item.isChecked = shouldHide
-                val aliasComponent = ComponentName(this, General.MODULE_PACKAGE_UI_ICON)
-                val newState = if (shouldHide) {
-                    PackageManager.COMPONENT_ENABLED_STATE_DISABLED
-                } else {
-                    PackageManager.COMPONENT_ENABLED_STATE_ENABLED
-                }
-                packageManager.setComponentEnabledSetting(
-                    aliasComponent,
-                    newState,
-                    PackageManager.DONT_KILL_APP
-                )
+                // 1. 保存用户的设置到 SP (建议操作，确保重启后状态正确)
+                val prefs = getSharedPreferences(preferencesKey, MODE_PRIVATE)
+                prefs.edit { putBoolean("is_icon_hidden", shouldHide) }
+                // 2. 调用统一管理器应用更改
+                IconManager.syncIconState(this, shouldHide)
                 Toast.makeText(this, "设置已保存，可能需要重启桌面才能生效", Toast.LENGTH_SHORT).show()
                 return true
             }
 
-            2 -> { // 好友关注列表
-                showSelectionDialog(
-                    "🤣 请选择有效账户[别选默认]",
-                    userNameArray,
-                    { index: Int -> this.goFriendWatch(index) },
-                    "😡 老子不选了，滚",
-                    {},
-                    false
-                )
-                return true
+            2 -> {
+                openLogFile(Files.getCaptureLogFile())
             }
 
-            3 -> { // 查看其他日志
-                val data = "file://" + Files.getOtherLogFile().absolutePath
-                val intent = Intent(this, HtmlViewerActivity::class.java)
-                intent.putExtra("nextLine", false)
-                intent.putExtra("canClear", true)
-                intent.data = data.toUri()
-                startActivity(intent)
-                return true
-            }
-
-            4 -> { // 查看错误日志文件（加密码验证）
-                showPasswordDialog {
-                    val errorData = "file://" + Files.getErrorLogFile().absolutePath
-                    val errorIt = Intent(this, HtmlViewerActivity::class.java)
-                    errorIt.putExtra("nextLine", false)
-                    errorIt.putExtra("canClear", true)
-                    errorIt.data = errorData.toUri()
-                    startActivity(errorIt)
-                }
-                return true
-            }
-
-
-            5 -> { // 查看全部日志文件
-                val recordData = "file://" + Files.getRecordLogFile().absolutePath
-                val otherIt = Intent(this, HtmlViewerActivity::class.java)
-                otherIt.putExtra("nextLine", false)
-                otherIt.putExtra("canClear", true)
-                otherIt.data = recordData.toUri()
-                startActivity(otherIt)
-                return true
-            }
-
-            6 -> { // 查看运行时日志文件
-                val runtimeData = "file://" + Files.getRuntimeLogFile().absolutePath
-                val allIt = Intent(this, HtmlViewerActivity::class.java)
-                allIt.putExtra("nextLine", false)
-                allIt.putExtra("canClear", true)
-                allIt.data = runtimeData.toUri()
-                startActivity(allIt)
-                return true
-            }
-
-            7 -> { // 查看截图
-                val captureData = "file://" + Files.getCaptureLogFile().absolutePath
-                val captureIt = Intent(this, HtmlViewerActivity::class.java)
-                captureIt.putExtra("nextLine", false)
-                captureIt.putExtra("canClear", true)
-                captureIt.data = captureData.toUri()
-                startActivity(captureIt)
-                return true
-            }
-
-            8 -> { // 扩展
+            3 -> { // 扩展
                 startActivity(Intent(this, ExtendActivity::class.java))
                 return true
             }
 
-            9 -> { // 设置
-                selectSettingUid()
-                return true
-            }
 
-            10 -> { // 清除配置
+            4 -> { // 清除配置
                 AlertDialog.Builder(this)
                     .setTitle("⚠️ 警告")
                     .setMessage("🤔 确认清除所有模块配置？")
@@ -451,21 +443,6 @@ class MainActivity : BaseActivity() {
         }
     }
 
-    private fun goFriendWatch(index: Int) {
-        val userEntity = userEntityArray[index]
-        if (userEntity != null) {
-            ListDialog.show(
-                this,
-                getString(R.string.friend_watch),
-                FriendWatch.getList(userEntity.userId),
-                SelectModelFieldFunc.newMapInstance(),
-                false,
-                ListDialog.ListType.SHOW
-            )
-        } else {
-            ToastUtil.makeText(this, "😡 别他妈选默认！！！！！！！！", Toast.LENGTH_LONG).show()
-        }
-    }
 
     private fun goSettingActivity(index: Int) {
         if (Detector.loadLibrary("checker")) {
@@ -487,8 +464,9 @@ class MainActivity : BaseActivity() {
     }
 
 
-    fun updateSubTitle(runType: String) {
+    fun updateSubTitle(runType: String = RunType.LOADED.nickName, currentUserEntity: UserEntity?) {
         baseTitle = ViewAppInfo.appTitle + "[" + runType + "]"
+        baseSubtitle = "当前载入: ${currentUserEntity?.showName ?: "未载入^o^ 重启支付宝看看👀"}"
         when (runType) {
             RunType.DISABLE.nickName -> setBaseTitleTextColor(ContextCompat.getColor(this, R.color.not_active_text))
             RunType.ACTIVE.nickName -> setBaseTitleTextColor(ContextCompat.getColor(this, R.color.active_text))
@@ -497,12 +475,12 @@ class MainActivity : BaseActivity() {
     }
 
     /**
-    * 执行需要验证的操作（带开关控制）
-    *
-    * @param action 需要执行的操作
-    *
-    * @details 根据 BuildConfig 配置决定是否需要密码验证
-    */
+     * 执行需要验证的操作（带开关控制）
+     *
+     * @param action 需要执行的操作
+     *
+     * @details 根据 BuildConfig 配置决定是否需要密码验证
+     */
     private fun executeWithVerification(action: () -> Unit) {
         if (BuildConfig.DEBUG) {
             action()// 不需要验证时直接执行
@@ -512,6 +490,7 @@ class MainActivity : BaseActivity() {
             showPasswordDialog(action)
         }
     }
+
     @SuppressLint("SetTextI18n")
     private fun showPasswordDialog(onSuccess: () -> Unit) {
         // 父布局

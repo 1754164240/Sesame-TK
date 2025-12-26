@@ -120,7 +120,10 @@ object HookUtil {
     fun hookOtherService(classLoader: ClassLoader) {
         try {
             //hook 服务不在后台
-            XposedHelpers.findAndHookMethod("com.alipay.mobile.common.fgbg.FgBgMonitorImpl", classLoader, "isInBackground", XC_MethodReplacement.returnConstant(false))
+            XposedHelpers.findAndHookMethod(
+                "com.alipay.mobile.common.fgbg.FgBgMonitorImpl",
+                classLoader, "isInBackground",
+                XC_MethodReplacement.returnConstant(false))
             XposedHelpers.findAndHookMethod(
                 "com.alipay.mobile.common.fgbg.FgBgMonitorImpl",
                 classLoader,
@@ -128,7 +131,10 @@ object HookUtil {
                 Boolean::class.javaPrimitiveType,
                 XC_MethodReplacement.returnConstant(false)
             )
-            XposedHelpers.findAndHookMethod("com.alipay.mobile.common.fgbg.FgBgMonitorImpl", classLoader, "isInBackgroundV2", XC_MethodReplacement.returnConstant(false))
+            XposedHelpers.findAndHookMethod(
+                "com.alipay.mobile.common.fgbg.FgBgMonitorImpl",
+                classLoader, "isInBackgroundV2",
+                XC_MethodReplacement.returnConstant(false))
             //hook 服务在前台
             XposedHelpers.findAndHookMethod(
                 "com.alipay.mobile.common.transport.utils.MiscUtils",
@@ -149,20 +155,16 @@ object HookUtil {
         try {
             val className = "com.alibaba.ariver.engine.common.bridge.internal.DefaultBridgeCallback"
             val jsonClassName = General.JSON_OBJECT_NAME
-
-            val jsonClass = Class.forName(jsonClassName, false,classLoader)
-
+            val jsonClass = Class.forName(jsonClassName, false, classLoader)
             XposedHelpers.findAndHookMethod(className, classLoader, "sendJSONResponse", jsonClass, object : XC_MethodHook() {
                 override fun beforeHookedMethod(param: MethodHookParam) {
                     val callback = param.thisObject
                     val recordArray = rpcHookMap[callback]
-
                     if (recordArray != null && param.args.isNotEmpty()) {
                         recordArray[3] = param.args[0].toString()
                     }
                 }
             })
-
             Log.runtime(TAG, "Hook DefaultBridgeCallback#sendJSONResponse 成功")
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "Hook DefaultBridgeCallback#sendJSONResponse 失败", t)
@@ -171,7 +173,7 @@ object HookUtil {
 
     /**
      * 突破支付宝最大可登录账号数量限制
-     * @param lpparam 加载包参数
+     * @param classLoader 类加载器
      */
     fun fuckAccounLimit(classLoader: ClassLoader) {
         Log.runtime(TAG, "Hook AccountManagerListAdapter#getCount")
@@ -204,10 +206,8 @@ object HookUtil {
     }
 
 
-
     fun getMicroApplicationContext(classLoader: ClassLoader): Any? {
         if (microContextCache != null) return microContextCache
-
         return runCatching {
             val appClass = XposedHelpers.findClass(
                 "com.alipay.mobile.framework.AlipayApplication", classLoader
@@ -249,6 +249,7 @@ object HookUtil {
             UserMap.unload()
             val selfId = getUserId(classLoader)
             UserMap.setCurrentUserId(selfId) //有些地方要用到 要set一下
+
             val clsUserIndependentCache = classLoader.loadClass("com.alipay.mobile.socialcommonsdk.bizdata.UserIndependentCache")
             val clsAliAccountDaoOp = classLoader.loadClass("com.alipay.mobile.socialcommonsdk.bizdata.contact.data.AliAccountDaoOp")
             val aliAccountDaoOp = XposedHelpers.callStaticMethod(clsUserIndependentCache, "getCacheObj", clsAliAccountDaoOp)

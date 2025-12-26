@@ -34,6 +34,12 @@ object DataStore {
         startWatcherNio()
     }
 
+    private var onChangeListener: (() -> Unit)? = null
+
+    fun setOnChangeListener(listener: () -> Unit) {
+        onChangeListener = listener
+    }
+
     inline fun <reified T : Any> DataStore.getOrCreate(key: String) = getOrCreate(key, object : TypeReference<T>() {})
 
     private fun checkInit() {
@@ -62,8 +68,7 @@ object DataStore {
     @Suppress("UNCHECKED_CAST")
     private fun <T> createDefault(typeRef: TypeReference<T>): T {
         mapper.typeFactory.constructType(typeRef)
-        val raw = mapper.typeFactory.constructType(typeRef).rawClass
-        return when (raw) {
+        return when (val raw = mapper.typeFactory.constructType(typeRef).rawClass) {
             java.util.List::class.java -> mutableListOf<Any>() as T
             java.util.Set::class.java -> mutableSetOf<Any>() as T
             java.util.Map::class.java -> mutableMapOf<String, Any>() as T
@@ -85,6 +90,10 @@ object DataStore {
                 // 忽略，可能是文件正在写入导致的格式错误
             } catch (_: java.io.FileNotFoundException) {
                 // 忽略，可能是文件在检查后、读取前被删除（竞态条件）
+            } catch (_: java.io.IOException) {
+                // 忽略其他IO异常，如文件被其他进程占用或删除
+            } catch (_: Exception) {
+                // 忽略其他所有异常，防止文件监视线程崩溃
             }
         }
     }
@@ -114,19 +123,32 @@ object DataStore {
     }
 
     fun startWatcherNio() = thread(isDaemon = true) {
-        val path = storageFile.toPath().parent
-        val watch = path.fileSystem.newWatchService()
-        path.register(watch, StandardWatchEventKinds.ENTRY_MODIFY)
-        while (true) {
-            val key = watch.take()
-            key.pollEvents().forEach {
-                val fileName = it.context().toString()
-                // 只处理目标文件的修改事件，忽略临时文件
-                if (fileName == storageFile.name && !fileName.endsWith(".tmp")) {
-                    loadFromDisk()
+        try {
+            val path = storageFile.toPath().parent
+            val watch = path.fileSystem.newWatchService()
+            path.register(watch, StandardWatchEventKinds.ENTRY_MODIFY)
+            while (true) {
+                try {
+                    val key = watch.take()
+                    key.pollEvents().forEach {
+                        val fileName = it.context().toString()
+                        // 只处理目标文件的修改事件，忽略临时文件
+                        if (fileName == storageFile.name && !fileName.endsWith(".tmp")) {
+                            loadFromDisk()
+                        }
+                    }
+                    key.reset()
+                } catch (e: Exception) {
+                    // 忽略监听过程中的异常，继续循环
+                    try {
+                        Thread.sleep(1000) // 短暂等待后继续
+                    } catch (_: InterruptedException) {
+                        break // 线程被中断，退出循环
+                    }
                 }
             }
-            key.reset()
+        } catch (e: Exception) {
+            // 监视服务创建失败，记录日志但不崩溃
         }
     }
 

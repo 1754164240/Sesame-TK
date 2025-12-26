@@ -11,6 +11,7 @@ import fansirsqi.xposed.sesame.util.StringUtil
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -168,7 +169,7 @@ abstract class ModelTask : Model() {
                     Log.runtime("子任务协程被取消: $taskName-$childId - ${e.message}")
                     // 协程取消是正常现象，不需要打印堆栈
                 } else {
-                    Log.printStackTrace("子任务执行异常1: $taskName-$childId", e)
+                    Log.printStackTrace("addChildTaskSuspend 子任务执行异常1: $taskName-$childId", e)
                 }
             } finally {
                 childTaskMap.remove(childId)
@@ -180,17 +181,27 @@ abstract class ModelTask : Model() {
     }
 
     /**
-     * 添加子任务
-     * 此方法专为Java代码调用设计，自动处理协程上下文
-     * @param childTask 要添加的子任务
-     * @return 是否添加成功，始终返回true
+     * 添加子任务（Java/Kotlin通用入口）
+     * 
+     * **示例用法：**
+     * ```kotlin
+     * // Kotlin挂起函数
+     * addChildTask(ChildModelTask("task1", "GROUP") {
+     *     delay(1000)
+     *     Log.record("执行成功")
+     * }, execTime = System.currentTimeMillis() + 5000)
+     * 
+     * // Java Runnable
+     * addChildTask(new ChildModelTask("task2", "GROUP", () -> {
+     *     Log.record("Java任务");
+     * }, System.currentTimeMillis() + 3000))
+     * ```
+     * 
+     * @return 始终返回true
      */
     fun addChildTask(childTask: ChildModelTask): Boolean {
-        // 确保任务作用域已初始化
         ensureTaskScope()
-        // 优化：使用 UNDISPATCHED 启动模式减少协程调度开销
-        // UNDISPATCHED 会立即在当前线程开始执行，直到第一个挂起点
-        taskScope!!.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
+        taskScope!!.launch(start = CoroutineStart.UNDISPATCHED) {
             addChildTaskSuspend(childTask)
         }
         return true
@@ -230,7 +241,7 @@ abstract class ModelTask : Model() {
                     // 协程取消属于正常控制流程（如停止任务/切换用户），不视为错误
                     Log.runtime(TAG, "任务被取消: ${getName()}")
                 } catch (e: Exception) {
-                    Log.printStackTrace("任务执行异常: ${getName()}", e)
+                    Log.printStackTrace("startTask err: ${getName()}", e)
                 } finally {
                     isRunning = false
                     updateNextExecText(-1)
@@ -286,7 +297,6 @@ abstract class ModelTask : Model() {
         }
     }
 
-
     /**
      * 停止任务（协程版本）
      * 注意：此方法是非阻塞的，会异步取消任务
@@ -308,16 +318,15 @@ abstract class ModelTask : Model() {
                     try {
                         childTask.cancel()
                     } catch (e: Exception) {
-                        Log.printStackTrace("取消子任务异常", e)
+                        Log.printStackTrace("stopTask err", e)
                     }
                 }
                 childTaskMap.clear()
             } catch (e: Exception) {
-                Log.printStackTrace("清理子任务映射异常", e)
+                Log.printStackTrace("stopTask err", e)
             }
         }
     }
-
 
     /**
      * 任务执行模式（仅支持顺序执行）
@@ -452,7 +461,7 @@ abstract class ModelTask : Model() {
                     // 协程取消是正常现象，不需要打印堆栈
                     return
                 } else {
-                    Log.printStackTrace("子任务执行异常2: $parentTaskName-$id", e)
+                    Log.printStackTrace("run err: $parentTaskName-$id", e)
                     throw e
                 }
             }

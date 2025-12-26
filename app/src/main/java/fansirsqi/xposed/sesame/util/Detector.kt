@@ -12,6 +12,10 @@ object Detector {
     external fun tips(context: Context, message: String?)
     external fun isEmbeddedNative(context: Context): Boolean
     external fun dangerous(context: Context)
+
+    /**
+     * 生成wua
+     */
     external fun genWua(): String
     external fun loadLibraryWithContextNative(context: Context, libraryName: String): Boolean
     external fun getApiUrlWithKey(key: Int): String

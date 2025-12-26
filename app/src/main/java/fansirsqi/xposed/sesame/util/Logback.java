@@ -1,5 +1,7 @@
 package fansirsqi.xposed.sesame.util;
 
+import android.content.Context;
+
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
@@ -12,6 +14,7 @@ import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.rolling.RollingFileAppender;
 import ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy;
 import ch.qos.logback.core.util.FileSize;
+
 public class Logback {
     private static String LOG_DIR;
 
@@ -20,13 +23,24 @@ public class Logback {
             "runtime", "system", "record", "debug", "forest",
             "farm", "other", "error", "capture");
 
-    public static void configureLogbackDirectly() {
-        new File(LOG_DIR + "bak").mkdirs();
-        // 延迟初始化 LOG_DIR
+    public static void configureLogbackDirectly(Context context) {
         if (LOG_DIR == null) {
-            assert Files.LOG_DIR != null;
             LOG_DIR = Files.LOG_DIR.getPath() + File.separator;
         }
+        File testDir = new File(LOG_DIR);
+        if (!testDir.exists() || !testDir.canWrite()) {
+            // 如果 Files 类定义的路径不可用（例如没权限），回退到 Android 内部私有目录
+            // getExternalFilesDir 不需要权限即可读写
+            File fallbackDir = context.getExternalFilesDir("logs");
+            if (fallbackDir != null) {
+                LOG_DIR = fallbackDir.getAbsolutePath() + File.separator;
+            } else {
+                LOG_DIR = context.getFilesDir().getAbsolutePath() + File.separator + "logs" + File.separator;
+            }
+        }
+        // 确保目录存在（先有路径再创建）
+        new File(LOG_DIR + "bak").mkdirs();
+
 
         LoggerContext lc = (LoggerContext) LoggerFactory.getILoggerFactory();
         lc.stop();

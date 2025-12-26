@@ -35,22 +35,23 @@ public class ResChecker {
             // 特殊情况：如果是"人数过多"或"小鸡睡觉"等系统状态，我们认为这不是一个需要记录的"失败"
             String resultDesc = jo.optString("resultDesc", "");
             String memo = jo.optString("memo", "");
+            String desc = jo.optString("desc", "");
             String resultCode = jo.optString("resultCode", "");
             
             // 需要忽略的关键词列表（同时检查 resultDesc 和 memo）
             String[] ignoreKeywords = {
                 "当前参与人数过多", "请稍后再试", "手速太快", "频繁", "操作过于频繁",
                 "我的小鸡在睡觉中", "小鸡在睡觉", "无法操作", "有人抢在你",
-                "饲料槽已满", "当日达到上限", "适可而止", "不支持rpc完成的任务",
+                "饲料槽已满", "当日达到上限", "适可而止", "不支持rpc完成的任务","不支持rpc调用","任务全局配置不存在",
                 "庄园的小鸡太多了","同一好友新村，只能摆一个小摊哦","今日助力次数已用完","收摊成功",
             };
             for (String keyword : ignoreKeywords) {
-                if (resultDesc.contains(keyword) || memo.contains(keyword)) {
+                if (resultDesc.contains(keyword) || memo.contains(keyword) || desc.contains(keyword)) {
                     return false; // 返回false，但不打印错误日志
                 }
             }
             // 特殊的 resultCode 检查
-            if ("I07".equals(resultCode)) {
+            if ("I07".equals(resultCode) || "ILLEGAL_ARGUMENT".equals(resultCode) || "I09".equals(resultCode)) {
                 return false; // 返回false，但不打印错误日志
             }
             // 获取调用栈信息以确定错误来源

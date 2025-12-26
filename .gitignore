@@ -94,3 +94,6 @@ serve-debug/webhook.db
 /serve-debug/web
 webui_debug*
 ai.py
+.kotlin/sessions/*
+/serve-debug/whackmole.py
+/serve-debug/user.py

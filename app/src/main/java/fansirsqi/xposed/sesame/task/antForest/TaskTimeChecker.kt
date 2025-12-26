@@ -1,5 +1,6 @@
 package fansirsqi.xposed.sesame.task.antForest
 
+import android.annotation.SuppressLint
 import fansirsqi.xposed.sesame.util.Log
 import java.util.Calendar
 
@@ -30,7 +31,7 @@ object TaskTimeChecker {
                 return true // 验证失败，使用默认行为（执行）
             }
             
-            val setHour = cleanTime.substring(0, 2).toInt()
+            val setHour = cleanTime.take(2).toInt()
             val setMinute = if (cleanTime.length >= 4) {
                 cleanTime.substring(2, 4).toInt()
             } else {
@@ -75,14 +76,14 @@ object TaskTimeChecker {
             cleaned = cleaned.filter { it.isDigit() }
             
             // 验证长度
-            if (cleaned.length < 2 || cleaned.length > 4) {
+            if (cleaned.length !in 2..4) {
                 Log.record(TAG, "⚠️ 时间格式错误（长度${cleaned.length}），使用默认时间: $defaultTime")
                 return defaultTime.filter { it.isDigit() }
             }
             
             // 补齐到4位
             if (cleaned.length == 2) {
-                cleaned = cleaned + "00"
+                cleaned += "00"
             } else if (cleaned.length == 3) {
                 cleaned = "0$cleaned"
             }
@@ -134,9 +135,9 @@ object TaskTimeChecker {
         return try {
             val cleanTime = timeStr?.replace(":", "")?.trim() ?: "0800"
             if (cleanTime.length >= 4) {
-                "${cleanTime.substring(0, 2)}:${cleanTime.substring(2, 4)}"
+                "${cleanTime.take(2)}:${cleanTime.substring(2, 4)}"
             } else if (cleanTime.length >= 2) {
-                "${cleanTime.substring(0, 2)}:00"
+                "${cleanTime.take(2)}:00"
             } else {
                 "08:00"
             }
@@ -150,6 +151,7 @@ object TaskTimeChecker {
      * 
      * @return 当前时间（格式：HHmm）
      */
+    @SuppressLint("DefaultLocale")
     fun getCurrentTime(): String {
         val calendar = Calendar.getInstance()
         val hour = calendar.get(Calendar.HOUR_OF_DAY)

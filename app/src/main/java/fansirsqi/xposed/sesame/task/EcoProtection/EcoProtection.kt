@@ -61,8 +61,7 @@ class EcoProtection : ModelTask() {
             Log.record(TAG, "开始执行$name")
             ancientTree(ancientTreeCityCodeList!!.value)
         } catch (t: Throwable) {
-            Log.runtime(TAG, "start.run err:")
-            Log.printStackTrace(TAG, t)
+            Log.printStackTrace(TAG, "start.run err:",t)
         } finally {
             Log.record(TAG, "结束执行$name")
         }
@@ -78,8 +77,7 @@ class EcoProtection : ModelTask() {
                     sleepCompat(1000L)
                 }
             } catch (th: Throwable) {
-                Log.runtime(TAG, "ancientTree err:")
-                Log.printStackTrace(TAG, th)
+                Log.printStackTrace(TAG, "ancientTree err:",th)
             }
         }
 
@@ -104,8 +102,7 @@ class EcoProtection : ModelTask() {
                     ancientTreeToday(cityCode)
                 }
             } catch (th: Throwable) {
-                Log.runtime(TAG, "ancientTreeProtect err:")
-                Log.printStackTrace(TAG, th)
+                Log.printStackTrace(TAG,"ancientTreeProtect err:", th)
             }
         }
 
@@ -164,8 +161,7 @@ class EcoProtection : ModelTask() {
                     }
                 }
             } catch (th: Throwable) {
-                Log.runtime(TAG, "districtDetail err:")
-                Log.printStackTrace(TAG, th)
+                Log.printStackTrace(TAG, "districtDetail err:",th)
             }
         }
     }

@@ -77,8 +77,7 @@ object PermissionUtil {
      */
     @JvmStatic
     fun checkAlarmPermissions(): Boolean {
-        val context: Context? = contextSafely
-        if (context == null) return false
+        val context: Context = contextSafely ?: return false
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             // Android 12及以上版本，检查是否可以设置精确闹钟
             val systemService = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager?

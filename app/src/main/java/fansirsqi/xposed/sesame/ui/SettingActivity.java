@@ -196,9 +196,9 @@ public class SettingActivity extends BaseActivity {
                                 userConfigDirectoryFile = Files.getUserConfigDir(this.userId);
                             }
                             if (Files.delFile(userConfigDirectoryFile)) {
-                                ToastUtil.makeText(this, "配置删除成功", Toast.LENGTH_SHORT).show();
+                                ToastUtil.INSTANCE.makeText(this, "配置删除成功", Toast.LENGTH_SHORT).show();
                             } else {
-                                ToastUtil.makeText(this, "配置删除失败", Toast.LENGTH_SHORT).show();
+                                ToastUtil.INSTANCE.makeText(this, "配置删除失败", Toast.LENGTH_SHORT).show();
                             }
                             finish();
                         })
@@ -218,7 +218,7 @@ public class SettingActivity extends BaseActivity {
                     finish();
                     startActivity(intent);
                 } else {
-                    ToastUtil.makeText(this, "切换失败", Toast.LENGTH_SHORT).show();
+                    ToastUtil.INSTANCE.makeText(this, "切换失败", Toast.LENGTH_SHORT).show();
                 }
                 break;
             case 6:
@@ -229,7 +229,7 @@ public class SettingActivity extends BaseActivity {
                 android.content.ClipboardManager cm = (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
                 ClipData clipData = ClipData.newPlainText("userId", this.userId);
                 cm.setPrimaryClip(clipData);
-                ToastUtil.showToastWithDelay(this, "复制成功！", 100);
+                ToastUtil.INSTANCE.showToastWithDelay(this, "复制成功！", 100);
                 break;
         }
         return super.onOptionsItemSelected(item);
@@ -241,7 +241,7 @@ public class SettingActivity extends BaseActivity {
 //                ToastUtil.showToastWithDelay(this, "非内测用户！", 100);
 //            }
             if (Config.isModify(this.userId) && Config.save(this.userId, false)) {
-                ToastUtil.showToastWithDelay(this, "保存成功！", 100);
+                ToastUtil.INSTANCE.showToastWithDelay(this, "保存成功！", 100);
                 if (!StringUtil.isEmpty(this.userId)) {
                     Intent intent = new Intent("com.eg.android.AlipayGphone.sesame.restart");
                     intent.putExtra("userId", this.userId);

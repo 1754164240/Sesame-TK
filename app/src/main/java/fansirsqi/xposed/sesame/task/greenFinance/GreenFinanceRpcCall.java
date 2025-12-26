@@ -50,7 +50,7 @@ public class GreenFinanceRpcCall {
   public static String batchSelfCollect(JSONArray bsnIds) {
     return RequestManager.requestString(
         "com.alipay.mcaplatformunit.common.mobile.service.GreenFinancePointCollectService.batchSelfCollect",
-        "[{\"bsnIds\":" + bsnIds + ",\"clientVersion\":\"VERSION2\",\"custType\":\"MERCHANT\",\"uid\":\"" + UserMap.getCurrentUid() + "\"}]");
+        "[{\"bsnIds\":" + bsnIds + ",\"clientVersion\":\"VERSION2\",\"custType\":\"MERCHANT\",\"uid\":\"" + UserMap.INSTANCE.getCurrentUid() + "\"}]");
   }
   /**
    * 签到查询
@@ -71,7 +71,7 @@ public class GreenFinanceRpcCall {
   public static String queryUserTickItem(String firstBehaviorType) {
     return RequestManager.requestString(
         "com.alipay.mcaplatformunit.common.mobile.newservice.GreenFinanceTickService.queryUserTickItem",
-        "[{\"custType\":\"MERCHANT\",\"firstBehaviorType\":\"" + firstBehaviorType + "\",\"uid\":\"" + UserMap.getCurrentUid() + "\"}]");
+        "[{\"custType\":\"MERCHANT\",\"firstBehaviorType\":\"" + firstBehaviorType + "\",\"uid\":\"" + UserMap.INSTANCE.getCurrentUid() + "\"}]");
   }
   /**
    * 提交打卡
@@ -86,7 +86,7 @@ public class GreenFinanceRpcCall {
         "[{\"custType\":\"MERCHANT\",\"firstBehaviorType\":\""
             + firstBehaviorType
             + "\",\"uid\":\""
-            + UserMap.getCurrentUid()
+            + UserMap.INSTANCE.getCurrentUid()
             + "\",\"behaviorCode\":\""
             + behaviorCode
             + "\"}]");
@@ -103,7 +103,7 @@ public class GreenFinanceRpcCall {
     return RequestManager.requestString(
         "com.alipay.mcaplatformunit.common.mobile.newservice.GreenFinancePageQueryService.queryExpireMcaPoint",
         "[{\"custType\":\"MERCHANT\",\"profitType\":\"MYBK_LOAN_DISCOUNT\",\"uid\":\""
-            + UserMap.getCurrentUid()
+            + UserMap.INSTANCE.getCurrentUid()
             + "\",\"expireDate\":\""
             + (System.currentTimeMillis() + day * 24 * 60 * 60 * 1000)
             + "\"}]");
@@ -116,7 +116,7 @@ public class GreenFinanceRpcCall {
   public static String queryAllDonationProjectNew() {
     return RequestManager.requestString(
         "com.alipay.mcaplatformunit.common.mobile.newservice.GreenFinanceDonationService.queryAllDonationProjectNew",
-        "[{\"custType\":\"MERCHANT\",\"subjectType\":\"ALL_DONATION\",\"uid\":\"" + UserMap.getCurrentUid() + "\"}]");
+        "[{\"custType\":\"MERCHANT\",\"subjectType\":\"ALL_DONATION\",\"uid\":\"" + UserMap.INSTANCE.getCurrentUid() + "\"}]");
   }
   /**
    * 捐助
@@ -132,7 +132,7 @@ public class GreenFinanceRpcCall {
         "[{\"custType\":\"MERCHANT\",\"donationGold\":\""
             + amount
             + "\",\"uid\":\""
-            + UserMap.getCurrentUid()
+            + UserMap.INSTANCE.getCurrentUid()
             + "\",\"outbizNo\":\""
             + System.currentTimeMillis()
             + "\",\"projectId\":\""
@@ -147,7 +147,7 @@ public class GreenFinanceRpcCall {
   public static String consultProveTaskList() {
     return RequestManager.requestString(
         "com.alipay.mcaplatformunit.common.mobile.newservice.GreenFinanceProveTaskService.consultProveTaskList",
-        "[{\"custType\":\"MERCHANT\",\"uid\":\"" + UserMap.getCurrentUid() + "\"}]");
+        "[{\"custType\":\"MERCHANT\",\"uid\":\"" + UserMap.INSTANCE.getCurrentUid() + "\"}]");
   }
   /**
    * 查询绿色特权奖品
@@ -177,7 +177,7 @@ public class GreenFinanceRpcCall {
   public static String proveTask(String bizType, String imageUrl) {
     return RequestManager.requestString(
         "com.alipay.mcaplatformunit.common.mobile.newservice.GreenFinanceProveTaskService.proveTask",
-        "[{\"bizType\":\"" + bizType + "\",\"custType\":\"MERCHANT\",\"imageUrl\":\"" + imageUrl + "\",\"uid\":\"" + UserMap.getCurrentUid() + "\"}]");
+        "[{\"bizType\":\"" + bizType + "\",\"custType\":\"MERCHANT\",\"imageUrl\":\"" + imageUrl + "\",\"uid\":\"" + UserMap.INSTANCE.getCurrentUid() + "\"}]");
   }
   /**
    * 绿色评级
@@ -188,7 +188,7 @@ public class GreenFinanceRpcCall {
   public static String queryProveTaskStatus(String taskId) {
     return RequestManager.requestString(
         "com.alipay.mcaplatformunit.common.mobile.newservice.GreenFinanceProveTaskService.queryProveTaskStatus",
-        "[{\"taskId\":\"" + taskId + "\",\"custType\":\"MERCHANT\",\"uid\":\"" + UserMap.getCurrentUid() + "\"}]");
+        "[{\"taskId\":\"" + taskId + "\",\"custType\":\"MERCHANT\",\"uid\":\"" + UserMap.INSTANCE.getCurrentUid() + "\"}]");
   }
   /**
    * 查询好友列表
@@ -203,7 +203,7 @@ public class GreenFinanceRpcCall {
             + "\"rankingType\":\"OVERALL\",\"startIndex\":"
             + startIndex
             + ",\"uid\":\""
-            + UserMap.getCurrentUid()
+            + UserMap.INSTANCE.getCurrentUid()
             + "\"}]");
   }
   /**
@@ -217,7 +217,7 @@ public class GreenFinanceRpcCall {
         "[{\"clientVersion\":\"VERSION2\",\"custType\":\"MERCHANT\",\"guestCustType\":\"MERCHANT\",\"guestUid\":\""
             + guestId
             + "\",\"uid\":\""
-            + UserMap.getCurrentUid()
+            + UserMap.INSTANCE.getCurrentUid()
             + "\"}]");
   }
   public static String batchSteal(JSONArray bsnIds, String collectedUid) {
@@ -229,7 +229,7 @@ public class GreenFinanceRpcCall {
             + "\"collectedUid\":\""
             + collectedUid
             + "\",\"custType\":\"MERCHANT\",\"uid\":\""
-            + UserMap.getCurrentUid()
+            + UserMap.INSTANCE.getCurrentUid()
             + "\"}]");
   }
 }

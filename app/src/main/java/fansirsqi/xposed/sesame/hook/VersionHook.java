@@ -8,6 +8,7 @@ import de.robv.android.xposed.XposedHelpers;
 import fansirsqi.xposed.sesame.data.General;
 import fansirsqi.xposed.sesame.entity.AlipayVersion;
 import fansirsqi.xposed.sesame.util.Log;
+import lombok.Getter;
 
 /**
  * 版本号 Hook 工具类
@@ -16,7 +17,13 @@ import fansirsqi.xposed.sesame.util.Log;
 public class VersionHook {
     private static final String TAG = "VersionHook";
 
+    /**
+     * -- GETTER --
+     *  获取已捕获的版本信息
+     *
+     */
     // 缓存捕获的版本信息
+    @Getter
     private static volatile AlipayVersion capturedVersion = null;
     private static volatile boolean hookInstalled = false;
 
@@ -76,15 +83,6 @@ public class VersionHook {
             Log.runtime(TAG, "❌ 安装版本号 Hook 失败");
             Log.printStackTrace(TAG, t);
         }
-    }
-
-    /**
-     * 获取已捕获的版本信息
-     *
-     * @return AlipayVersion 对象,如果未捕获则返回 null
-     */
-    public static AlipayVersion getCapturedVersion() {
-        return capturedVersion;
     }
 
     /**

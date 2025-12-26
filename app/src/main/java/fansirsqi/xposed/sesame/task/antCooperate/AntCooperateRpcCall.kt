@@ -31,7 +31,7 @@ object AntCooperateRpcCall {
     }
 
     @JvmStatic
-    fun cooperateWater(uid: String, coopId: String, count: Int): String {
+    fun cooperateWater(uid: String?, coopId: String, count: Int): String {
         val args = "[{\"bizNo\":\"" + uid + "_" + coopId + "_" + System.currentTimeMillis() +
                 "\",\"cooperationId\":\"" + coopId + "\",\"energyCount\":" + count +
                 ",\"source\":\"\",\"version\":\"" + VERSION + "\"}]"
@@ -54,6 +54,43 @@ object AntCooperateRpcCall {
             "[{\"bizType\":\"$bizType\",\"cooperationId\":\"$coopId\",\"source\":\"ch_appcenter__chsub_9patch\"}]"
         )
     }
+
+    /**
+     * 更新用户配置（是否处于队伍中）
+     *
+     * 示例请求体：
+     * [
+     *   {
+     *     "configMap": {
+     *       "inTeam": "Y"
+     *     },
+     *     "source": "chInfo_ch_appcenter__chsub_9patch"
+     *   }
+     * ]
+     *
+     * 说明：
+     * - inTeam = "Y" 表示用户在队伍中
+     * - inTeam = "N" 表示用户不在队伍中
+     *
+     * @param inTeam 是否在队伍中（true = Y，false = N）
+     * @return 返回 RPC 响应字符串
+     */
+
+
+    @JvmStatic
+    fun updateUserConfig(inTeam: Boolean): String {
+        val inTeamValue = if (inTeam) "Y" else "N"
+        val args = "[{" +
+                "\"configMap\":{\"inTeam\":\"$inTeamValue\"}," +
+                "\"source\":\"chInfo_ch_appcenter__chsub_9patch\"" +
+                "}]"
+
+        return RequestManager.requestString(
+            "alipay.antforest.forest.h5.updateUserConfig",
+            args
+        )
+    }
+
 
     @JvmStatic
     @Throws(JSONException::class)

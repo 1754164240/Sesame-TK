@@ -1,5 +1,7 @@
 package fansirsqi.xposed.sesame.entity;
 import lombok.Getter;
+import org.jetbrains.annotations.NotNull;
+
 /**
  * 表示支付宝版本的实体类，可进行版本比较。
  */
@@ -50,7 +52,7 @@ public class AlipayVersion implements Comparable<AlipayVersion> {
     }
 
     @Override
-    public String toString() {
+    public @NotNull String toString() {
         return getVersionString();
     }
 }

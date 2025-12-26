@@ -54,28 +54,18 @@ object AntOrchardRpcCall {
         )
     }
 
-    /*/**
-     * 施肥
-     */
-    fun orchardSpreadManure(wua: String): String {
-        return RequestManager.requestString(
-            "com.alipay.antfarm.orchardSpreadManure",
-            "[{\"plantScene\":\"main\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"ch_appcenter__chsub_9patch\",\"useBatchSpread\":false,\"version\":$VERSION,\"wua\":\"$wua\"}]"
-        )
-    }*/
     /**
      * 施肥
      * @param wua 用户标识
      * @param source 来源标识，可自定义
+     * @param useBatchSpread 一键5次
      */
-    @JvmStatic  // 重点：让 Java 能直接用类名调用
-    fun orchardSpreadManure(wua: String, source: String): String {
+    fun orchardSpreadManure(wua: String, source: String,useBatchSpread : Boolean=false): String {
         return RequestManager.requestString(
             "com.alipay.antfarm.orchardSpreadManure",
-            "[{\"plantScene\":\"main\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"$source\",\"useBatchSpread\":false,\"version\":$VERSION,\"wua\":\"$wua\"}]"
+            "[{\"plantScene\":\"main\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"$source\",\"useBatchSpread\":$useBatchSpread,\"version\":$VERSION,\"wua\":\"$wua\"}]"
         )
     }
-
 
     fun receiveTaskAward(sceneCode: String, taskType: String): String {
         return RequestManager.requestString(
@@ -111,6 +101,7 @@ object AntOrchardRpcCall {
             "[{\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"ch_appcenter__chsub_9patch\",\"taskId\":\"$taskId\",\"taskPlantType\":\"$taskPlantType\",\"version\":\"$VERSION\"}]"
         )
     }
+
     //砸蛋
     fun smashedGoldenEgg(count: Int): String {
         val jsonArgs = """
@@ -131,11 +122,35 @@ object AntOrchardRpcCall {
         )
     }
 
-    //收取回访奖励 小组件的
+   /* //收取回访奖励 小组件的
     fun receiveOrchardVisitAward(): String {
         return RequestManager.requestString(
             "com.alipay.antorchard.receiveOrchardVisitAward",
             "[{\"diversionSource\":\"widget\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"widget_shoufei\",\"version\":\"$VERSION\"}]"
+        )
+    }*/
+
+    /**
+     * 收取果园回访奖励
+     * @param diversionSource 引流来源（如：widget、tmall）
+     * @param source 具体来源（如：widget_shoufei、upgrade_tmall_exchange_task）
+     * @return 请求结果字符串
+     */
+    fun receiveOrchardVisitAward(
+        diversionSource: String,
+        source: String
+    ): String {
+        val requestParams = """
+        [{"diversionSource":"$diversionSource",
+          "requestType":"NORMAL",
+          "sceneCode":"ORCHARD",
+          "source":"$source",
+          "version":"$VERSION"}]
+    """.trimIndent()
+
+        return RequestManager.requestString(
+            "com.alipay.antorchard.receiveOrchardVisitAward",
+            requestParams
         )
     }
 
@@ -176,11 +191,6 @@ object AntOrchardRpcCall {
         )
     }
 
-    /* 助力好友 */
-    //  fun shareP2P(): String {
-    //        return ApplicationHook.requestString("com.alipay.antiep.shareP2P",
-    //                "[{\"requestType\":\"NORMAL\",\"sceneCode\":\"ANTFARM_ORCHARD_SHARE_P2P\",\"source\":\"ch_appcenter__chsub_9patch\",\"version\":\"$VERSION\"}]")
-    //    }
     fun achieveBeShareP2P(shareId: String): String {
         return RequestManager.requestString(
             "com.alipay.antiep.achieveBeShareP2P",

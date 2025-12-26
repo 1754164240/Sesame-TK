@@ -20,7 +20,7 @@ import fansirsqi.xposed.sesame.model.modelFieldExt.SelectModelField;
 import fansirsqi.xposed.sesame.newutil.DataStore;
 import fansirsqi.xposed.sesame.task.ModelTask;
 import fansirsqi.xposed.sesame.task.TaskCommon;
-import fansirsqi.xposed.sesame.task.TaskStatus;
+import fansirsqi.xposed.sesame.task.antFarm.TaskStatus;
 import fansirsqi.xposed.sesame.util.GlobalThreadPools;
 import fansirsqi.xposed.sesame.util.Log;
 import fansirsqi.xposed.sesame.util.maps.UserMap;
@@ -44,10 +44,11 @@ public class AntDodo extends ModelTask {
     private ChoiceModelField collectToFriendType;
     private SelectModelField collectToFriendList;
     private SelectModelField sendFriendCard;
-    private BooleanModelField useProp;
-    private BooleanModelField usePropCollectTimes7Days;
-    private BooleanModelField usePropCollectHistoryAnimal7Days;
-    private BooleanModelField usePropCollectToFriendTimes7Days;
+
+    private BooleanModelField usePropUNIVERSAL_CARD;            //万能卡
+
+    private ChoiceModelField usePropUNIVERSALCARDType;         //万能卡使用类型
+    private BooleanModelField usePropaddCOLLECTTOFRIENDLIMIT;           //抽好友道具卡
     private BooleanModelField autoGenerateBook;
     @Override
     public ModelFields getFields() {
@@ -56,10 +57,9 @@ public class AntDodo extends ModelTask {
         modelFields.addField(collectToFriendType = new ChoiceModelField("collectToFriendType", "帮抽卡 | 动作", CollectToFriendType.COLLECT, CollectToFriendType.nickNames));
         modelFields.addField(collectToFriendList = new SelectModelField("collectToFriendList", "帮抽卡 | 好友列表", new LinkedHashSet<>(), AlipayUser::getList));
         modelFields.addField(sendFriendCard = new SelectModelField("sendFriendCard", "送卡片好友列表(当前图鉴所有卡片)", new LinkedHashSet<>(), AlipayUser::getList));
-        modelFields.addField(useProp = new BooleanModelField("useProp", "使用道具 | 所有", false));
-        modelFields.addField(usePropCollectTimes7Days = new BooleanModelField("usePropCollectTimes7Days", "使用道具 | 抽卡道具", false));
-        modelFields.addField(usePropCollectHistoryAnimal7Days = new BooleanModelField("usePropCollectHistoryAnimal7Days", "使用道具 | 抽历史卡道具", false));
-        modelFields.addField(usePropCollectToFriendTimes7Days = new BooleanModelField("usePropCollectToFriendTimes7Days", "使用道具 | 抽好友卡道具", false));
+        modelFields.addField(usePropUNIVERSAL_CARD = new BooleanModelField("usePropUNIVERSAL_CARD", "使用道具 | 万能卡", false));
+        modelFields.addField(usePropUNIVERSALCARDType = new ChoiceModelField("usePropUNIVERSALCARDType", "万能卡 | 使用方式", UniversalCardUseType.EXCLUDE_CURRENT, UniversalCardUseType.nickNames));
+        modelFields.addField(usePropaddCOLLECTTOFRIENDLIMIT = new BooleanModelField("usePropaddCOLLECTTOFRIENDLIMIT", "使用道具 | 抽好友卡道具", false));
         modelFields.addField(autoGenerateBook = new BooleanModelField("autoGenerateBook", "自动合成图鉴", false));
         return modelFields;
     }
@@ -89,8 +89,7 @@ public class AntDodo extends ModelTask {
                 autoGenerateBook();//自动 兑换
             }
         } catch (Throwable t) {
-            Log.runtime(TAG, "start.run err:");
-            Log.printStackTrace(TAG, t);
+            Log.printStackTrace(TAG,"start Dodo.run err:", t);
         }finally {
             Log.record(TAG,"执行结束-" + getName());
         }
@@ -119,11 +118,10 @@ public class AntDodo extends ModelTask {
                     collectAnimalCard();
                 }
             } else {
-                Log.runtime(TAG, jo.getString("resultDesc"));
+                Log.record(TAG, "collect错误"+jo.getString("resultDesc"));
             }
         } catch (Throwable t) {
-            Log.runtime(TAG, "AntDodo Collect err:");
-            Log.printStackTrace(TAG, t);
+            Log.printStackTrace(TAG, "AntDodo Collect err:",t);
         }
     }
     private void collectAnimalCard() {
@@ -159,7 +157,7 @@ public class AntDodo extends ModelTask {
                             Log.forest("神奇物种🦕[" + ecosystem + "]#" + name);
                             if (!set.isEmpty()) {
                                 for (String userId : set) {
-                                    if (!UserMap.getCurrentUid().equals(userId)) {
+                                    if (!UserMap.INSTANCE.getCurrentUid().equals(userId)) {
                                         int fantasticStarQuantity = animal.optInt("fantasticStarQuantity", 0);
                                         if (fantasticStarQuantity == 3) {
                                             sendCard(animal, userId);
@@ -169,24 +167,23 @@ public class AntDodo extends ModelTask {
                                 }
                             }
                         } else {
-                            Log.runtime(TAG, jo.getString("resultDesc"));
+                            Log.record(TAG,"collectAnimalCard错误"+ jo.getString("resultDesc"));
                         }
                     }
                 }
                 if (!set.isEmpty()) {
                     for (String userId : set) {
-                        if (!UserMap.getCurrentUid().equals(userId)) {
+                        if (!UserMap.INSTANCE.getCurrentUid().equals(userId)) {
                             sendAntDodoCard(bookId, userId);
                             break;
                         }
                     }
                 }
             } else {
-                Log.runtime(TAG, jo.getString("resultDesc"));
+                Log.record(TAG, "collectAnimalCard错误2 "+ jo.getString("resultDesc"));
             }
         } catch (Throwable t) {
-            Log.runtime(TAG, "AntDodo CollectAnimalCard err:");
-            Log.printStackTrace(TAG, t);
+            Log.printStackTrace(TAG,"AntDodo CollectAnimalCard err:",t);
         }
     }
     /**
@@ -209,7 +206,6 @@ public class AntDodo extends ModelTask {
                 // 检查响应结果码是否成功
                 if (!ResChecker.checkRes(TAG, jsonResponse)) {
                     Log.record(TAG, "查询任务列表失败：" + jsonResponse.getString("resultDesc"));
-                    Log.runtime(response);
                     break;
                 }
                 // 获取任务组信息列表
@@ -239,7 +235,7 @@ public class AntDodo extends ModelTask {
                             } else {
                                 Log.record(TAG,"领取失败，" + response); // 记录领取失败信息
                             }
-                            Log.runtime(joAward.toString()); // 打印奖励响应
+                            Log.record(TAG,joAward.toString()); // 打印奖励响应
                         }
                         // 如果任务待完成，处理特定类型的任务
                         else if (TaskStatus.TODO.name().equals(taskStatus)) {
@@ -264,87 +260,75 @@ public class AntDodo extends ModelTask {
                 if (!doubleCheck) break;
             }
         } catch (JSONException e) {
-            Log.error(TAG, "神奇物种 JSON解析错误: " + e.getMessage());
-            Log.printStackTrace(TAG, e);
+            Log.printStackTrace(TAG,"神奇物种 JSON解析错误: " + e.getMessage(),e);
         } catch (Throwable t) {
-            Log.runtime(TAG, "AntDodo ReceiveTaskAward 错误:");
-            Log.printStackTrace(TAG, t); // 打印异常栈
+            Log.printStackTrace(TAG, "AntDodo ReceiveTaskAward 错误:",t); // 打印异常栈
         }
     }
-    private void propList() {
+    public void propList() {
         try {
-            th:
-            do {
-                JSONObject jo = new JSONObject(AntDodoRpcCall.propList());
-                if (ResChecker.checkRes(TAG,jo)) {
-                    JSONArray propList = jo.getJSONObject("data").optJSONArray("propList");
-                    if (propList == null) {
-                        return;
-                    }
-                    for (int i = 0; i < propList.length(); i++) {
-                        JSONObject prop = propList.getJSONObject(i);
-                        String propType = prop.getString("propType");
-                        boolean usePropType = isUsePropType(propType);
-                        if (!usePropType) {
-                            continue;
-                        }
-                        JSONArray propIdList = prop.getJSONArray("propIdList");
-                        String propId = propIdList.getString(0);
-                        String propName = prop.getJSONObject("propConfig").getString("propName");
-                        int holdsNum = prop.optInt("holdsNum", 0);
-                        jo = new JSONObject(AntDodoRpcCall.consumeProp(propId, propType));
-                        if (!ResChecker.checkRes(TAG,jo)) {
-                            Log.record(jo.getString("resultDesc"));
-                            Log.runtime(jo.toString());
-                            continue;
-                        }
-                        if ("COLLECT_TIMES_7_DAYS".equals(propType)) {
-                            JSONObject useResult = jo.getJSONObject("data").getJSONObject("useResult");
-                            JSONObject animal = useResult.getJSONObject("animal");
-                            String ecosystem = animal.getString("ecosystem");
-                            String name = animal.getString("name");
-                            Log.forest("使用道具🎭[" + propName + "]#" + ecosystem + "-" + name);
-                            Set<String> map = sendFriendCard.getValue();
-                            for (String userId : map) {
-                                if (!UserMap.getCurrentUid().equals(userId)) {
-                                    int fantasticStarQuantity = animal.optInt("fantasticStarQuantity", 0);
-                                    if (fantasticStarQuantity == 3) {
-                                        sendCard(animal, userId);
-                                    }
-                                    break;
+            String s = AntDodoRpcCall.propList();
+            JSONObject jo = new JSONObject(s);
+            if (ResChecker.checkRes(TAG, jo)) {
+                JSONArray propList = jo.getJSONObject("data").getJSONArray("propList");
+                for (int i = 0; i < propList.length(); i++) {
+                    JSONObject prop = propList.getJSONObject(i);
+
+                    // 注意：JSON 里的 propType 有多种（例如 UNIVERSAL_CARD_7_DAYS）
+                    // 我们通过 propConfig 里的 propGroup 来分类更稳妥
+                    JSONObject config = prop.optJSONObject("propConfig");
+                    String propGroup = config != null ? config.optString("propGroup") : "";
+                    String propType = prop.getString("propType");
+
+                    // 拿到该类道具的所有 ID 列表
+                    JSONArray propIdList = prop.getJSONArray("propIdList");
+                    int holdsNum = prop.getInt("holdsNum");
+
+                    if (holdsNum <= 0) continue;
+
+                    // --- 逻辑分支开始 ---
+
+                    // 1. 万能卡逻辑
+                    if ("UNIVERSAL_CARD".equals(propGroup)) {
+                        for (int j = 0; j < propIdList.length(); j++) {
+                            String pId = propIdList.getString(j);
+                            // 寻找缺失的动物 ID
+                            String animalId = getTargetAnimalIdForUniversalCard();
+                            if (!animalId.isEmpty()) {
+                                // 调用带 animalId 的消耗方法
+                                String res = AntDodoRpcCall.consumeProp(pId, propType, animalId);
+                                if (ResChecker.checkRes(TAG, res)) {
+                                    Log.forest( "万能卡使用成功，补全动物ID: " + animalId);
                                 }
+                                GlobalThreadPools.sleepCompat(2*1000L);
                             }
-                        } else {
-                            Log.forest("使用道具🎭[" + propName + "]");
-                        }
-                        GlobalThreadPools.sleepCompat(300);
-                        if (holdsNum > 1) {
-                            continue th;
                         }
                     }
+
+                    // 2. 抽好友卡道具逻辑 (判断 UI 开关)
+                    else if ("ADD_COLLECT_TO_FRIEND_LIMIT".equals(propGroup)) {
+                        if (usePropaddCOLLECTTOFRIENDLIMIT.getValue()) {
+                            for (int j = 0; j < propIdList.length(); j++) {
+                                String pId = propIdList.getString(j);
+                                // 调用不带 animalId 的专门方法
+                                String res = AntDodoRpcCall.consumePropForFriend(pId, propType);
+                                if (ResChecker.checkRes(TAG, new JSONObject(res))) {
+                                    Log.record(TAG, "成功使用 [抽好友卡道具]");
+                                }
+                                GlobalThreadPools.sleepCompat(2*1000L);
+                            }
+                        }
+                    }
+
+                    // 3. 其他基础道具 (按需扩展)
+
                 }
-                break;
-            } while (true);
-        } catch (Throwable th) {
-            Log.runtime(TAG, "AntDodo PropList err:");
-            Log.printStackTrace(TAG, th);
+            }
+        } catch (Throwable t) {
+            Log.printStackTrace(TAG, "propList 处理异常", t);
         }
     }
-    /**
-     * 判断是否存在使用道具类型
-     * @param propType 道具类型
-     * @return 是否使用
-     */
-    private boolean isUsePropType(String propType) {
-        boolean usePropType = useProp.getValue();
-        usePropType = switch (propType) {
-            case "COLLECT_TIMES_7_DAYS" -> usePropType || usePropCollectTimes7Days.getValue();
-            case "COLLECT_HISTORY_ANIMAL_7_DAYS" -> usePropType || usePropCollectHistoryAnimal7Days.getValue();
-            case "COLLECT_TO_FRIEND_TIMES_7_DAYS" -> usePropType || usePropCollectToFriendTimes7Days.getValue();
-            default -> usePropType;
-        };
-        return usePropType;
-    }
+
     /**
      * 发送神奇物种卡片
      * @param bookId 卡片图鉴ID
@@ -368,8 +352,7 @@ public class AntDodo extends ModelTask {
                 }
             }
         } catch (Throwable th) {
-            Log.runtime(TAG, "AntDodo SendAntDodoCard err:");
-            Log.printStackTrace(TAG, th);
+            Log.printStackTrace(TAG, "AntDodo SendAntDodoCard err:",th);
         }
     }
     private void sendCard(JSONObject animal, String targetUser) {
@@ -381,18 +364,17 @@ public class AntDodo extends ModelTask {
             if (ResChecker.checkRes(TAG,jo)) {
                 Log.forest("赠送卡片🦕[" + UserMap.getMaskName(targetUser) + "]#" + ecosystem + "-" + name);
             } else {
-                Log.runtime(TAG, jo.getString("resultDesc"));
+                Log.record(TAG, "sendCard错误"+jo.getString("resultDesc"));
             }
         } catch (Throwable th) {
-            Log.runtime(TAG, "AntDodo SendCard err:");
-            Log.printStackTrace(TAG, th);
+            Log.printStackTrace(TAG, "AntDodo SendCard err:",th);
         }
     }
     private void collectToFriend() {
         try {
             JSONObject jo = new JSONObject(AntDodoRpcCall.queryFriend());
             if (!ResChecker.checkRes(TAG, jo)) {
-                Log.runtime(TAG, "神奇物种帮好友抽卡失败："+jo.getString("resultDesc"));
+                Log.error(TAG, "神奇物种帮好友抽卡失败："+jo.getString("resultDesc"));
                 return;
             }
 
@@ -446,57 +428,295 @@ public class AntDodo extends ModelTask {
                     Log.forest("神奇物种🦕帮好友[" + userName + "]抽卡[" + ecosystem + "]#" + name);
                     count--;
                 } else {
-                    Log.runtime(TAG, jo.getString("resultDesc"));
+                    Log.record(TAG, "collecttarget错误"+jo.getString("resultDesc"));
                 }
             }
         } catch (Throwable t) {
-            Log.runtime(TAG, "AntDodo CollectHelpFriend err:");
-            Log.printStackTrace(TAG, t);
+            Log.printStackTrace(TAG, "AntDodo CollectHelpFriend err:",t);
         }
     }
+
+
     /**
-     * 自动合成图鉴
+     * 辅助逻辑：获取万能卡要兑换的精准动物ID
      */
+    private String getTargetAnimalIdForUniversalCard() {
+        try {
+            JSONArray allBooks = getAllBookList();
+            if (allBooks == null || allBooks.length() == 0) {
+                Log.record(TAG, "万能卡：未获取到任何图鉴数据");
+                return "";
+            }
+
+            String targetBookId = "";
+            int strategy = usePropUNIVERSALCARDType.getValue();
+
+            String currentDoingBookId = "";
+            String bestOtherBookId = "";
+            double maxOtherRate = -1.0;
+
+            String bestOverallBookId = "";
+            double maxOverallRate = -1.0;
+
+            for (int i = 0; i < allBooks.length(); i++) {
+                JSONObject book = allBooks.optJSONObject(i); // 使用 opt 防止 null
+                if (book == null || isBookFinished(book)) continue;
+
+                JSONObject result = book.optJSONObject("animalBookResult");
+                if (result == null) continue;
+
+                String bookId = result.optString("bookId");
+                String status = book.optString("bookStatus");
+
+                // --- 进度解析与计算 ---
+                String prog = book.optString("collectProgress", "0/0");
+                double rate = 0;
+                try {
+                    String[] p = prog.split("/");
+                    if (p.length == 2) {
+                        double current = Double.parseDouble(p[0]);
+                        double total = Double.parseDouble(p[1]);
+                        if (total > 0) {
+                            rate = current / total;
+                        }
+                    }
+                } catch (Exception ignored) {}
+
+                // --- 策略分类收集 ---
+                // 1. 识别当前正在进行的 (DOING)
+                if ("DOING".equals(status)) {
+                    currentDoingBookId = bookId;
+                } else {
+                    // 2. 识别非当前图鉴中进度最高的
+                    if (rate > maxOtherRate) {
+                        maxOtherRate = rate;
+                        bestOtherBookId = bookId;
+                    }
+                }
+
+                // 3. 识别全局进度最高的
+                if (rate > maxOverallRate) {
+                    maxOverallRate = rate;
+                    bestOverallBookId = bookId;
+                }
+            }
+
+            // --- 逻辑分支匹配 ---
+            if (strategy == UniversalCardUseType.EXCLUDE_CURRENT) {
+                targetBookId = bestOtherBookId;
+                Log.record(TAG, "万能卡策略 [排除当前]: 选中非DOING最高进度图鉴 " + targetBookId);
+            }
+            else if (strategy == UniversalCardUseType.PRIORITY_MAX_PROGRESS) {
+                targetBookId = bestOverallBookId;
+                Log.record(TAG, "万能卡策略 [进度优先]: 选中全局最高进度图鉴 " + targetBookId);
+            }
+            else {
+                // 模式：所有。优先进行中，进行中已满则选最高进度
+                targetBookId = !currentDoingBookId.isEmpty() ? currentDoingBookId : bestOverallBookId;
+                Log.record(TAG, "万能卡策略 [全部]: 优先进行中图鉴 " + targetBookId);
+            }
+
+            if (targetBookId.isEmpty()) return "";
+
+            // --- 查询具体缺失卡片 ---
+            String detailJson = AntDodoRpcCall.queryBookInfo(targetBookId);
+            JSONObject detailObj = new JSONObject(detailJson);
+
+            // 增加对 detail 接口返回结果的校验
+            if (detailObj.optBoolean("success", false) || "SUCCESS".equals(detailObj.optString("resultCode"))) {
+                JSONObject data = detailObj.optJSONObject("data");
+                JSONArray animals = (data != null) ? data.optJSONArray("animalForUserList") : null;
+
+                if (animals != null) {
+                    for (int i = 0; i < animals.length(); i++) {
+                        JSONObject item = animals.optJSONObject(i);
+                        if (item == null) continue;
+
+                        JSONObject collectDetail = item.optJSONObject("collectDetail");
+                        // 只有 collect 为 false 才说明是缺的
+                        if (collectDetail != null && !collectDetail.optBoolean("collect", false)) {
+                            JSONObject animalInfo = item.optJSONObject("animal");
+                            if (animalInfo != null) {
+                                String animalId = animalInfo.optString("animalId");
+                                String name = animalInfo.optString("name");
+                                Log.record(TAG, "万能卡目标锁定: " + name + " (" + animalId + ")");
+                                return animalId;
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            Log.record(TAG, "万能卡逻辑执行失败: " + e.getMessage());
+        }
+        return "";
+    }
+
+
+    /**
+     * 判断某个图鉴是否已经“完成” (不需要再投入万能卡)
+     */
+    private static boolean isBookFinished(JSONObject book) {
+        if (book == null) return true;
+
+        // 1. 优先判断合成状态：如果已经可以合成或者已经合成，则认为该图鉴已完成
+        String medalStatus = book.optString("medalGenerationStatus");
+        if ("CAN_GENERATE".equals(medalStatus) || "GENERATED".equals(medalStatus)) {
+            return true;
+        }
+
+        // 2. 判断数字进度：例如 "10/10"
+        String progress = book.optString("collectProgress", "");
+        if (progress.contains("/")) {
+            try {
+                String[] parts = progress.split("/");
+                if (parts.length == 2) {
+                    int current = Integer.parseInt(parts[0].trim());
+                    int total = Integer.parseInt(parts[1].trim());
+                    return current >= total; // 只要现有的不小于总数，就不需要万能卡
+                }
+            } catch (Exception e) {
+                return false;
+            }
+        }
+
+        return false;
+    }
+
+
+    /* 获取所有图鉴列表*/
+    /**
+     * 获取完整的图鉴数组 (自动处理翻页合并)
+     * @return 包含所有图鉴对象的 JSONArray
+     *
+     * [
+     *   {
+     *     "animalBookResult": {
+     *       "bookId": "dxmlyBook",
+     *       "ecosystem": "东喜马拉雅高山森林生态系统",
+     *       "name": "东喜马拉雅高山森林生态系统",
+     *       "totalCount": 10,
+     *       "magicCount": 1,
+     *       "rareCount": 2,
+     *       "commonCount": 7
+     *       // ..
+     *     },
+     *     "bookStatus": "END",
+     *     "bookCollectedStatus": "NOT_COMPLETED",
+     *     "collectProgress": "1/10",
+     *     "hasRedDot": false
+     *   },
+     *   {
+     *     "animalBookResult": {
+     *       "bookId": "zhbhtbhxcr202503",
+     *       "name": "当前正在进行的某个图鉴",
+     *       "totalCount": 10
+     *       // ...
+     *     },
+     *     "bookStatus": "GOING",
+     *     "bookCollectedStatus": "NOT_COMPLETED",
+     *     "collectProgress": "5/10",
+     *     "hasRedDot": true
+     *   }
+     *   // ...
+     * ]
+     */
+
+    public static JSONArray getAllBookList() {
+        JSONArray allBooks = new JSONArray();
+        String pageStart = null; // 首页传 null
+        boolean hasMore = true;
+
+        try {
+            while (hasMore) {
+                // 调用上面修改后的接口
+                String res = AntDodoRpcCall.queryBookList(64, pageStart);
+                JSONObject jo = new JSONObject(res);
+
+                if (!ResChecker.checkRes(TAG,jo)) {
+                    Log.error(TAG, "queryBookList 失败: " + jo.optString("resultDesc"));
+                    break;
+                }
+
+                JSONObject data = jo.optJSONObject("data");
+                if (data == null) break;
+
+                // 1. 提取并合并数据
+                JSONArray currentList = data.optJSONArray("bookForUserList");
+                if (currentList != null) {
+                    for (int i = 0; i < currentList.length(); i++) {
+                        allBooks.put(currentList.get(i));
+                    }
+                }
+
+                // 2. 判断翻页逻辑
+                hasMore = data.optBoolean("hasMore", false);
+                pageStart = data.optString("nextPageStart", null);
+
+                // 如果没有更多了，或者 nextPageStart 为空，直接跳出
+                if (!hasMore || pageStart == null || pageStart.isEmpty()) {
+                    break;
+                }
+
+                // 稍微控制一下频率
+                GlobalThreadPools.sleepCompat(300);
+            }
+        } catch (Throwable th) {
+            Log.printStackTrace(TAG, "获取全量图鉴异常", th);
+        }
+        return allBooks;
+    }
+
+
+
+
+
     /**
      * 自动合成图鉴
      */
     private void autoGenerateBook() {
         try {
-            boolean hasMore;
-            int pageSize = 18; // 固定每页请求数量
-            int pageStart = 0; // 初始起始页
-            do {
-                // 调用接口，传入 pageSize 和 pageStart
-                JSONObject jo = new JSONObject(AntDodoRpcCall.queryBookList(pageSize, String.valueOf(pageStart)));
-                if (!ResChecker.checkRes(TAG, jo)) {
-                    break;
+            // 1. 直接获取所有页合并后的完整图鉴数组
+            JSONArray allBooks = getAllBookList();
+
+            if (allBooks.length() == 0) {
+                return;
+            }
+
+            // 2. 遍历全量数组
+            for (int i = 0; i < allBooks.length(); i++) {
+                JSONObject bookItem = allBooks.getJSONObject(i);
+
+                // 判断是否可以合成勋章
+                if (!"CAN_GENERATE".equals(bookItem.optString("medalGenerationStatus"))) {
+                    continue;
                 }
-                jo = jo.getJSONObject("data");
-                hasMore = jo.getBoolean("hasMore"); // 是否有下一页
-                JSONArray bookForUserList = jo.getJSONArray("bookForUserList");
 
-                for (int i = 0; i < bookForUserList.length(); i++) {
-                    JSONObject bookItem = bookForUserList.getJSONObject(i);
-                    if (!"CAN_GENERATE".equals(bookItem.optString("medalGenerationStatus"))) {
-                        continue;
-                    }
-                    JSONObject animalBookResult = bookItem.getJSONObject("animalBookResult");
-                    String bookId = animalBookResult.getString("bookId");
-                    String ecosystem = animalBookResult.getString("ecosystem");
+                JSONObject animalBookResult = bookItem.optJSONObject("animalBookResult");
+                if (animalBookResult == null) {
+                    Log.record(TAG,"animalBookResult为空，停止合成");
+                    continue;
 
-                    JSONObject genResp = new JSONObject(AntDodoRpcCall.generateBookMedal(bookId));
-                    if (!ResChecker.checkRes(TAG, genResp)) {
-                        Log.error(TAG, "合成勋章失败: " + bookId);
-                        continue; // 失败就跳过当前书籍
-                    }
+                }
+
+                String bookId = animalBookResult.optString("bookId");
+                String ecosystem = animalBookResult.optString("ecosystem");
+
+                // 3. 调用合成接口
+                String res = AntDodoRpcCall.generateBookMedal(bookId);
+                JSONObject genResp = new JSONObject(res);
+
+                if (ResChecker.checkRes(TAG, genResp)) {
                     Log.forest("神奇物种🦕合成勋章[" + ecosystem + "]");
+                } else {
+                    Log.record(TAG, "合成勋章失败[" + ecosystem + "]: " + genResp.optString("resultDesc"));
                 }
 
-                pageStart += pageSize; // 更新下一页起始
-            } while (hasMore);
+                // 合成操作建议稍微加一点点延迟，保护接口
+                GlobalThreadPools.sleepCompat(300);
+            }
         } catch (Throwable t) {
-            Log.runtime(TAG, "generateBookMedal err:");
-            Log.printStackTrace(TAG, t);
+            Log.printStackTrace(TAG, "autoGenerateBook err:", t);
         }
     }
 
@@ -505,4 +725,26 @@ public class AntDodo extends ModelTask {
         int DONT_COLLECT = 1;
         String[] nickNames = {"选中帮抽卡", "选中不帮抽卡"};
     }
+
+
+    //万能卡使用方法
+    public interface UniversalCardUseType {
+
+        /** 所有图鉴都可使用 */
+        int ALL_COLLECTION = 0;
+
+        /** 排除当前图鉴 */
+        int EXCLUDE_CURRENT = 1;
+
+        /** 优先合成进度最高的图鉴 */
+        int PRIORITY_MAX_PROGRESS = 2;
+
+        String[] nickNames = {
+                "所有图鉴",
+                "除当前图鉴",
+                "优先合成进度最高"
+        };
+    }
+
+
 }

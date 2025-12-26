@@ -48,14 +48,13 @@ public class ReadingDada {
                     Log.record(TAG, "答题完成");
                     return true;
                 } else {
-                    Log.record(TAG, "答题失败");
+                    Log.error(TAG, "答题失败");
                 }
             } else {
-                Log.record(TAG, "获取问题失败");
+                Log.error(TAG, "获取问题失败");
             }
         } catch (Throwable e) {
-            Log.runtime(TAG, "answerQuestion err:");
-            Log.printStackTrace(TAG, e);
+            Log.printStackTrace(TAG, "answerQuestion err:",e);
         }
         return false;
     }

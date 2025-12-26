@@ -1,6 +1,5 @@
 package fansirsqi.xposed.sesame.util;
 
-import fansirsqi.xposed.sesame.util.CoroutineUtils;
 import android.annotation.SuppressLint;
 import android.os.Environment;
 
@@ -40,30 +39,33 @@ public class Files {
      */
     public static final File LOG_DIR = getLogDir();
 
+
     /**
      * 确保指定的目录存在且不是一个文件。
-     * 如果目录是一个文件，则将其删除并创建新的目录。
-     * 如果目录不存在，则创建该目录。
      *
-     * @param directory 要确保的目录对应的File对象。
+     * @param directory 目录
      */
     public static void ensureDir(File directory) {
         try {
             if (directory == null) {
-                Log.error(TAG, "Directory cannot be null");
+                // 🔥 修改点 1：使用原生 Log，避免依赖循环
+                android.util.Log.e(TAG, "Directory cannot be null");
                 return;
             }
             if (!directory.exists()) {
                 if (!directory.mkdirs()) {
-                    Log.error(TAG, "Failed to create directory: " + directory.getAbsolutePath());
+                    // 🔥 修改点 2：使用原生 Log
+                    android.util.Log.e(TAG, "Failed to create directory: " + directory.getAbsolutePath());
                 }
             } else if (directory.isFile()) {
                 if (!directory.delete() || !directory.mkdirs()) {
-                    Log.error(TAG, "Failed to replace file with directory: " + directory.getAbsolutePath());
+                    // 🔥 修改点 3：使用原生 Log
+                    android.util.Log.e(TAG, "Failed to replace file with directory: " + directory.getAbsolutePath());
                 }
             }
         } catch (Exception e) {
-            Log.printStackTrace(TAG + " ensureDir error", e);
+            // 🔥 修改点 4：使用原生 Log
+            android.util.Log.e(TAG, "ensureDir error", e);
         }
     }
 
@@ -89,7 +91,7 @@ public class Files {
     private static File getLogDir() {
         File logDir = new File(MAIN_DIR, "log");
         ensureDir(logDir);
-        return logDir.exists() ? logDir : null;
+        return logDir;
     }
 
     /**
@@ -171,7 +173,7 @@ public class Files {
         // 先确保用户目录存在
         File userDir = new File(CONFIG_DIR, userId);
         ensureDir(userDir);
-        
+
         File targetFile = new File(userDir, fullTargetFileName);
         // 如果文件不存在且不是目录，尝试创建
         if (!targetFile.exists()) {
@@ -207,7 +209,7 @@ public class Files {
     public static synchronized File getTargetFileofDir(File dir, String fullTargetFileName) {
         // 先确保目录存在
         ensureDir(dir);
-        
+
         // 创建目标文件对象
         File targetFile = new File(dir, fullTargetFileName);
 
@@ -280,30 +282,13 @@ public class Files {
      *
      * @return 导出的统计文件
      */
-    public static File getExportedStatisticsFile() {
-        try {
-            String storageDirStr = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS) + File.separator + CONFIG_DIR_NAME;
-            File storageDir = new File(storageDirStr);
-            if (!storageDir.exists()) {
-                if (storageDir.mkdirs()) {
-                    Log.system(TAG, "create downloads's " + CONFIG_DIR_NAME + " directory success");
-                } else {
-                    Log.error(TAG, "create downloads's " + CONFIG_DIR_NAME + " directory failed");
-                }
-            }
-            return getTargetFileofDir(storageDir, "statistics.json");
-        } catch (Exception e) {
-            Log.printStackTrace(TAG + "export statistics file error", e);
-            return null;
-        }
-    }
 
     public static File getFriendWatchFile(String userId) {
         return getTargetFileofUser(userId, "friendWatch.json");
     }
 
-    public static File getWuaFile() {
-        return getTargetFileofDir(MAIN_DIR, "wua.list");
+    public static File getappConfigFile() {
+        return getTargetFileofDir(CONFIG_DIR, "appConfig.json");
     }
 
     /**
@@ -461,7 +446,7 @@ public class Files {
         // 检查文件是否可读
         if (!f.canRead()) {
             //      Toast.show(f.getName() + "没有读取权限！", true);
-            ToastUtil.showToast(f.getName() + "没有读取权限！");
+            ToastUtil.INSTANCE.showToast(f.getName() + "没有读取权限！");
             return "";
         }
         StringBuilder result = new StringBuilder();
@@ -489,19 +474,19 @@ public class Files {
         // 检查文件权限和目录结构
         if (f.exists()) {
             if (!f.canWrite()) {
-                ToastUtil.showToast(f.getAbsoluteFile() + "没有写入权限！");
+                ToastUtil.INSTANCE.showToast(f.getAbsoluteFile() + "没有写入权限！");
                 return true;
             }
             if (f.isDirectory()) {
                 // 删除目录并重新创建文件
                 if (!f.delete()) {
-                    ToastUtil.showToast(f.getAbsoluteFile() + "无法删除目录！");
+                    ToastUtil.INSTANCE.showToast(f.getAbsoluteFile() + "无法删除目录！");
                     return true;
                 }
             }
         } else {
             if (!Objects.requireNonNull(f.getParentFile()).mkdirs() && !f.getParentFile().exists()) {
-                ToastUtil.showToast(f.getAbsoluteFile() + "无法创建目录！");
+                ToastUtil.INSTANCE.showToast(f.getAbsoluteFile() + "无法创建目录！");
                 return true;
             }
         }
@@ -650,10 +635,8 @@ public class Files {
         if (!file.exists()) {
             return false; // 如果文件不存在，则返回 false
         }
-        
-        FileWriter fileWriter = null;
-        try {
-            fileWriter = new FileWriter(file);
+
+        try (FileWriter fileWriter = new FileWriter(file)) {
             // 使用 FileWriter 清空文件内容
             fileWriter.write(""); // 写入空字符串，清空文件内容
             fileWriter.flush(); // 刷新缓存，确保内容写入文件
@@ -661,18 +644,10 @@ public class Files {
         } catch (IOException e) {
             Log.printStackTrace(e);
             return false;
-        } finally {
-            // 安全关闭流，忽略 close 时的权限异常
-            if (fileWriter != null) {
-                try {
-                    fileWriter.close();
-                } catch (IOException e) {
-                    // 捕获 close 时的异常（包括 EPERM）
-                    // 数据已经 flush，close 失败不影响清空结果
-                    Log.debug(TAG, "文件关闭异常（数据已清空）: " + e.getMessage());
-                }
-            }
         }
+        // 安全关闭流，忽略 close 时的权限异常
+        // 捕获 close 时的异常（包括 EPERM）
+        // 数据已经 flush，close 失败不影响清空结果
     }
 
     /**
@@ -683,7 +658,7 @@ public class Files {
      */
     public static boolean delFile(File file) {
         if (!file.exists()) {
-            ToastUtil.showToast(file.getAbsoluteFile() + "不存在！别勾把删了");
+            ToastUtil.INSTANCE.showToast(file.getAbsoluteFile() + "不存在！别勾把删了");
             Log.record(TAG, "delFile: " + file.getAbsoluteFile() + "不存在！,无须删除");
             return false;
         }

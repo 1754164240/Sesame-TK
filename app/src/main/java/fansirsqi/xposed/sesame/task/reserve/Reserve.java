@@ -68,8 +68,7 @@ public class Reserve extends ModelTask {
             initReserve();
             animalReserve();
         } catch (Throwable t) {
-            Log.runtime(TAG, "start.run err:");
-            Log.printStackTrace(TAG, t);
+            Log.printStackTrace(TAG, "start.run err:",t);
         } finally {
             Log.record(TAG, "保护地任务");
         }
@@ -106,17 +105,15 @@ public class Reserve extends ModelTask {
                 IdMapManager.getInstance(ReserveaMap.class).save();
             } else {
                 // 若 resultCode 不为 SUCCESS，记录错误描述
-                Log.runtime(jsonResponse.optString("resultDesc", "未知错误"));
+                Log.error(jsonResponse.optString("resultDesc", "未知错误"));
             }
         } catch (JSONException e) {
             // 捕获 JSON 解析错误并记录日志
-            Log.runtime(TAG, "JSON 解析错误：" + e.getMessage());
-            Log.printStackTrace(e);
+            Log.printStackTrace(TAG, "JSON 解析错误：" + e.getMessage(),e);
             IdMapManager.getInstance(ReserveaMap.class).load(); // 若出现异常则加载保存的 ReserveIdMapUtil 备份
         } catch (Exception e) {
             // 捕获所有其他异常并记录
-            Log.runtime(TAG, "初始化保护地任务时出错：" + e.getMessage());
-            Log.printStackTrace(e);
+            Log.printStackTrace(TAG, "初始化保护地任务时出错：" + e.getMessage(),e);
             IdMapManager.getInstance(ReserveaMap.class).load(); // 加载备份的 ReserveIdMapUtil
         }
     }
@@ -160,8 +157,7 @@ public class Reserve extends ModelTask {
                 Log.runtime(TAG, jo.getString("resultDesc"));
             }
         } catch (Throwable t) {
-            Log.runtime(TAG, "animalReserve err:");
-            Log.printStackTrace(TAG, t);
+            Log.printStackTrace(TAG, "animalReserve err:",t);
         } finally {
             Log.record(TAG, "结束执行-" + getName());
         }
@@ -191,8 +187,7 @@ public class Reserve extends ModelTask {
                 Log.runtime(s);
             }
         } catch (Throwable t) {
-            Log.runtime(TAG, "queryTreeForExchange err:");
-            Log.printStackTrace(TAG, t);
+            Log.printStackTrace(TAG, "queryTreeForExchange err:",t);
         }
         return false;
     }
@@ -216,9 +211,9 @@ public class Reserve extends ModelTask {
                     Log.forest(str);
                     Status.reserveToday(projectId, 1);
                 } else {
-                    Log.record(jo.getString("resultDesc"));
-                    Log.runtime(jo.toString());
-                    Log.forest("领保护地🏕️[" + itemName + "]#发生未知错误，停止申请");
+                    //Log.record(jo.getString("resultDesc"));
+                    //Log.runtime(jo.toString());
+                    Log.error("领保护地🏕️[" + itemName + "]#发生未知错误，停止申请");
                     // Statistics.reserveToday(projectId, count);
                     break;
                 }
@@ -234,8 +229,7 @@ public class Reserve extends ModelTask {
                     break;
             }
         } catch (Throwable t) {
-            Log.runtime(TAG, "exchangeTree err:");
-            Log.printStackTrace(TAG, t);
+            Log.printStackTrace(TAG, "exchangeTree err:",t);
         }
     }
 }

@@ -32,7 +32,7 @@ public class RuntimeInfo {
      * @return 返回 RuntimeInfo 的单例实例
      */
     public static RuntimeInfo getInstance() {
-        if (instance == null || !Objects.equals(instance.userId, UserMap.getCurrentUid())) {
+        if (instance == null || !Objects.equals(instance.userId, UserMap.INSTANCE.getCurrentUid())) {
             instance = new RuntimeInfo();
         }
         return instance;
@@ -42,7 +42,7 @@ public class RuntimeInfo {
      * 从文件中读取运行时数据，并初始化相关的 JSON 对象。
      */
     private RuntimeInfo() {
-        userId = UserMap.getCurrentUid();
+        userId = UserMap.INSTANCE.getCurrentUid();
         String content = Files.readFromFile(Files.runtimeInfoFile(userId));
         // 如果文件读取成功，则解析 JSON 数据，否则初始化为空的 JSON 对象
         try {

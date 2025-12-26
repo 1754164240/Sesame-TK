@@ -8,7 +8,9 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
-    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+    <uses-permission
+        android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+        tools:ignore="AllFilesAccessPolicy,ScopedStorage" />
     <!-- 添加精确闹钟权限 -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <!-- 添加唤醒锁权限（用于定期唤醒设备） -->
@@ -22,6 +24,7 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
 
+        <!-- 原有的元数据保持不变 -->
         <meta-data
             android:name="xposedmodule"
             android:value="true" />
@@ -35,6 +38,7 @@
             android:name="xposedscope"
             android:resource="@array/xposed_scopes" />
 
+        <!-- 主 Activity (隐藏的，不负责显示图标) -->
         <activity
             android:name="fansirsqi.xposed.sesame.ui.MainActivity"
             android:exported="true">
@@ -44,6 +48,20 @@
             </intent-filter>
         </activity>
 
+        <!-- 其他 Activity 保持不变 -->
+        <activity android:name="fansirsqi.xposed.sesame.ui.ExtendActivity" />
+        <activity android:name="fansirsqi.xposed.sesame.ui.WebSettingsActivity" />
+        <activity android:name="fansirsqi.xposed.sesame.ui.SettingActivity" />
+        <activity android:name="fansirsqi.xposed.sesame.ui.HtmlViewerActivity" />
+        <!-- 高性能日志查看器 (Compose) -->
+        <!-- theme 必须设置为 NoActionBar，因为 Compose 自带了 TopAppBar -->
+        <activity
+            android:name=".ui.log.LogViewerComposeActivity"
+            android:exported="false"
+            android:theme="@style/Theme.AppCompat.NoActionBar" />
+
+
+        <!-- for-hide-icon -->
         <activity-alias
             android:name=".ui.MainActivityAlias"
             android:enabled="true"
@@ -55,11 +73,39 @@
             </intent-filter>
         </activity-alias>
 
+        <!-- 圣诞图标 -->
+        <activity-alias
+            android:name=".ui.MainActivityAliasChristmas"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@drawable/ic_launcher_christmas"
+            android:label="@string/app_name"
+            android:targetActivity="fansirsqi.xposed.sesame.ui.MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
 
-        <activity android:name="fansirsqi.xposed.sesame.ui.ExtendActivity" />
-        <activity android:name="fansirsqi.xposed.sesame.ui.WebSettingsActivity" />
-        <activity android:name="fansirsqi.xposed.sesame.ui.SettingActivity" />
-        <activity android:name="fansirsqi.xposed.sesame.ui.HtmlViewerActivity" />
+        <!-- CommandService 用于执行 root 命令 -->
+        <service
+            android:name="fansirsqi.xposed.sesame.service.CommandService"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="fansirsqi.xposed.sesame.action.BIND_COMMAND_SERVICE" />
+            </intent-filter>
+        </service>
+
+        <!-- 手动声明 Shizuku Provider，解决 provider is null 报错 -->
+        <provider
+            android:name="rikka.shizuku.ShizukuProvider"
+            android:authorities="${applicationId}.shizuku"
+            android:enabled="true"
+            android:exported="true"
+            android:multiprocess="false"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
+
 
     </application>
 </manifest>

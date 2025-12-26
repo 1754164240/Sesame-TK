@@ -9,6 +9,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.UUID;
 
 import fansirsqi.xposed.sesame.hook.RequestManager;
+import fansirsqi.xposed.sesame.util.Log;
 import fansirsqi.xposed.sesame.util.RandomUtil;
 
 public class AntFarmRpcCall {
@@ -100,8 +101,6 @@ public class AntFarmRpcCall {
         String args1 = "[{\"requestType\":\"RPC\",\"sceneCode\":\"ANTFARM\",\"source\":\"LOVECABIN\",\"version\":\"unknown\"}]";
         return RequestManager.requestString("com.alipay.antfarm.wakeUp", args1);
     }
-
-
 
     public static String rewardFriend(String consistencyKey, String friendId, String productNum, String time) {
         String args1 = "[{\"canMock\":true,\"consistencyKey\":\"" + consistencyKey
@@ -607,7 +606,6 @@ public class AntFarmRpcCall {
         return RequestManager.requestString("com.alipay.antfarm.OpenPrivatePolicy", params);
     }
 
-
     public static String deliverContentExpand(
             String ariverRpcTraceId,
             String eventId,
@@ -739,7 +737,7 @@ public class AntFarmRpcCall {
         return RequestManager.requestString("com.alipay.charitygamecenter.getMallItemDetail", data);
     }
 
-    public static String exchangeBenefit(String spuId, String skuId) {
+    public static String buyMallItem(String spuId, String skuId) {
         String data = "[{\"bizType\":\"ANTFARM_GAME_CENTER\",\"ignoreHoldLimit\":false,\"itemId\":\"" + spuId + "\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ANTFARM\",\"source\":\"H5\",\"subItemId\":\"" + skuId + "\"}]";
         return RequestManager.requestString("com.alipay.charitygamecenter.buyMallItem", data);
     }
@@ -755,8 +753,6 @@ public class AntFarmRpcCall {
         String data = "[{\"foodType\":\"" + foodType + "\",\"giftIndex\":" + giftIndex + ",\"requestType\":\"NORMAL\",\"sceneCode\":\"ANTFARM\",\"source\":\"ANTFOREST\",\"version\":\"" + VERSION + "\"}]";
         return RequestManager.requestString("com.alipay.antfarm.clickForGiftV2", data);
     }
-
-
 
     /**
      * 查询抽抽乐活动信息
@@ -856,7 +852,6 @@ public class AntFarmRpcCall {
                         + "\"source\":\"icon\"}]"
         );
     }
-
 
     /**
      * 执行抽奖（IP抽抽乐）
@@ -973,4 +968,90 @@ public class AntFarmRpcCall {
         String params = "[" + args + "]";
         return RequestManager.requestString("com.alipay.antiep.finishTask", params);
     }
+
+    /**
+     * 查询家庭装修信息
+     *
+     * @return 返回结果JSON字符串
+     */
+    public static String queryFamilyDecoration() {
+        return RequestManager.requestString("com.alipay.antfarm.queryFamilyDecoration",
+                "[{\"requestType\":\"NORMAL\",\"sceneCode\":\"ANTFARM\",\"source\":\"H5\"}]");
+    }
+
+
+
+    /**
+     * 查询物品列表（蚂蚁庄园装修商城）
+     *
+     * @param labelType  标签类型（如 recentlyAdded）
+     * @param pageSize   每页数量
+     * @param startIndex 起始索引
+     * @return 返回结果JSON字符串
+     */
+    public static String getItemList(String labelType, int pageSize, int startIndex) {
+        String data="[{\"activityId\":\"20250808\"," +
+                "\"labelType\":\"" + labelType + "\"," +
+                "\"pageSize\":" + pageSize + "," +
+                "\"requestType\":\"NORMAL\"," +
+                "\"sceneCode\":\"ANTFARM_FITMENT_MALL\"," +
+                "\"source\":\"antfarm\"," +
+                "\"startIndex\":" + startIndex + "}]";
+        return RequestManager.requestString("com.alipay.antiep.itemList",data);
+
+    }
+
+
+    /**
+     * 查询道具详情
+     *
+     * @param spuId 标准产品单元ID
+     * @return 返回结果JSON字符串
+     */
+    public static String getItemDetail(String spuId) {
+        return RequestManager.requestString("com.alipay.antiep.itemDetail",
+                "[{\"requestType\":\"NORMAL\"," +
+                        "\"sceneCode\":\"ANTFARM_FITMENT_MALL\"," +
+                        "\"source\":\"antfarm\"," +
+                        "\"spuId\":\"" + spuId + "\"}]");
+    }
+
+    /**
+     * 兑换装扮或利益点
+     *
+     * @param spuId 标准产品单元ID
+     * @param skuId 库存保持单位ID
+     * @return 返回结果JSON字符串
+     */
+    public static String exchangeBenefit(String spuId, String skuId) {
+        String requestId = generateRequestId();
+        return RequestManager.requestString("com.alipay.antcommonweal.exchange.h5.exchangeBenefit",
+                "[{" +
+                        "\"context\":{\"activityId\":\"20250808\"}," +
+                        "\"requestId\":\"" + requestId + "\"," +
+                        "\"requestType\":\"NORMAL\"," +
+                        "\"sceneCode\":\"ANTFARM_FITMENT_MALL\"," +
+                        "\"skuId\":\"" + skuId + "\"," +
+                        "\"source\":\"H5\"," +
+                        "\"spuId\":\"" + spuId + "\"" +
+                        "}]");
+    }
+
+    /**
+     * 生成RequestId: 时间戳 + _ + 16位随机数
+     */
+    private static String generateRequestId() {
+        long timestamp = System.currentTimeMillis();
+        // 生成16位随机长整型数字（正数）
+        long randomNum = (long) ((Math.random() * 9 + 1) * Math.pow(10, 15));
+        return timestamp + "_" + randomNum;
+    }
+
+
+
+
+
+
+
+
 }

@@ -17,7 +17,7 @@ import fansirsqi.xposed.sesame.util.maps.UserMap;
 public class PortUtil {
     public static void handleExport(Context context, Uri uri, String userId) {
         if (uri == null) {
-            ToastUtil.makeText("未选择目标位置", Toast.LENGTH_SHORT).show();
+            ToastUtil.INSTANCE.makeText("未选择目标位置", Toast.LENGTH_SHORT).show();
             return;
         }
         try {
@@ -26,18 +26,18 @@ public class PortUtil {
                     Files.getConfigV2File(userId);
             FileInputStream inputStream = new FileInputStream(configV2File);
             if (Files.streamTo(inputStream, context.getContentResolver().openOutputStream(uri))) {
-                ToastUtil.makeText("导出成功！", Toast.LENGTH_SHORT).show();
+                ToastUtil.INSTANCE.makeText("导出成功！", Toast.LENGTH_SHORT).show();
             } else {
-                ToastUtil.makeText("导出失败！", Toast.LENGTH_SHORT).show();
+                ToastUtil.INSTANCE.makeText("导出失败！", Toast.LENGTH_SHORT).show();
             }
         } catch (IOException e) {
             Log.printStackTrace(e);
-            ToastUtil.makeText("导出失败：发生异常", Toast.LENGTH_SHORT).show();
+            ToastUtil.INSTANCE.makeText("导出失败：发生异常", Toast.LENGTH_SHORT).show();
         }
     }
     public static void handleImport(Context context, Uri uri, String userId) {
         if (uri == null) {
-            ToastUtil.makeText("导入失败：未选择文件", Toast.LENGTH_SHORT).show();
+            ToastUtil.INSTANCE.makeText("导入失败：未选择文件", Toast.LENGTH_SHORT).show();
             return;
         }
         try {
@@ -46,7 +46,7 @@ public class PortUtil {
                     Files.getConfigV2File(userId);
             FileOutputStream outputStream = new FileOutputStream(configV2File);
             if (Files.streamTo(Objects.requireNonNull(context.getContentResolver().openInputStream(uri)), outputStream)) {
-                ToastUtil.makeText("导入成功！", Toast.LENGTH_SHORT).show();
+                ToastUtil.INSTANCE.makeText("导入成功！", Toast.LENGTH_SHORT).show();
                 if (!StringUtil.isEmpty(userId)) {
                     try {
                         Intent intent = new Intent("com.eg.android.AlipayGphone.sesame.restart");
@@ -60,17 +60,17 @@ public class PortUtil {
                 ((android.app.Activity) context).finish();
                 context.startActivity(intent);
             } else {
-                ToastUtil.makeText("导入失败！", Toast.LENGTH_SHORT).show();
+                ToastUtil.INSTANCE.makeText("导入失败！", Toast.LENGTH_SHORT).show();
             }
         } catch (IOException e) {
             Log.printStackTrace(e);
-            ToastUtil.makeText("导入失败：发生异常", Toast.LENGTH_SHORT).show();
+            ToastUtil.INSTANCE.makeText("导入失败：发生异常", Toast.LENGTH_SHORT).show();
         }
     }
     public static void save(Context context, String userId) {
         try {
             if (Config.isModify(userId) && Config.save(userId, false)) {
-                ToastUtil.showToastWithDelay("保存成功！", 100);
+                ToastUtil.INSTANCE.showToastWithDelay("保存成功！", 100);
                 if (!StringUtil.isEmpty(userId)) {
                     Intent intent = new Intent("com.eg.android.AlipayGphone.sesame.restart");
                     intent.putExtra("userId", userId);

@@ -90,7 +90,7 @@ public class Vitality {
                 skuInfo.put(skuId, skuModel);
                 IdMapManager.getInstance(VitalityRewardsMap.class).add(skuId, oderInfo);
             }
-            IdMapManager.getInstance(VitalityRewardsMap.class).save(UserMap.getCurrentUid());
+            IdMapManager.getInstance(VitalityRewardsMap.class).save(UserMap.INSTANCE.getCurrentUid());
         } catch (Throwable th) {
             Log.runtime(TAG, "handleVitalityItem err");
             Log.printStackTrace(TAG, th);
@@ -111,7 +111,7 @@ public class Vitality {
                 skuInfo.put(skuId, skuModel);
                 IdMapManager.getInstance(VitalityRewardsMap.class).add(skuId, skuName);
             }
-            IdMapManager.getInstance(VitalityRewardsMap.class).save(UserMap.getCurrentUid());
+            IdMapManager.getInstance(VitalityRewardsMap.class).save(UserMap.INSTANCE.getCurrentUid());
         } catch (Throwable th) {
             Log.runtime(TAG, "handleItemDetail err:");
             Log.printStackTrace(TAG, th);

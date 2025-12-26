@@ -5,6 +5,7 @@ import android.content.Context
 import android.util.Log
 import fansirsqi.xposed.sesame.BuildConfig
 import fansirsqi.xposed.sesame.R
+import fansirsqi.xposed.sesame.newutil.DataStore.init
 import fansirsqi.xposed.sesame.util.FansirsqiUtil.getFolderList
 import fansirsqi.xposed.sesame.util.Files
 import io.github.libxposed.service.XposedService
@@ -52,6 +53,7 @@ object ViewAppInfo {
      */
     @SuppressLint("HardwareIds")
     fun init(context: Context) {
+        init(Files.CONFIG_DIR)
         Log.d(TAG, "app data init")
         if (ViewAppInfo.context == null) {
             ViewAppInfo.context = context

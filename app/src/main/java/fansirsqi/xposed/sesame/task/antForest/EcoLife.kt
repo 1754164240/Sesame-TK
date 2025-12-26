@@ -79,10 +79,9 @@ object EcoLife {
      */
     @Throws(JSONException::class)
     fun openEcoLife(): Boolean {
-        GlobalThreadPools.sleepCompat(300)
         val jsonObject = JSONObject(AntForestRpcCall.ecolifeOpenEcolife())
         if (!jsonObject.optBoolean("success")) {
-            Log.runtime(TAG + ".ecoLife.openEcolife", jsonObject.optString("resultDesc"))
+            Log.runtime("$TAG.ecoLife.openEcolife", jsonObject.optString("resultDesc"))
             return false
         }
         val opResult = JsonUtil.getValueByPath(jsonObject, "data.opResult")
@@ -90,7 +89,6 @@ object EcoLife {
             return false
         }
         Log.forest("绿色任务🍀报告大人，开通成功(～￣▽￣)～可以愉快的玩耍了")
-        GlobalThreadPools.sleepCompat(300)
         return true
     }
 
@@ -119,16 +117,14 @@ object EcoLife {
                     val actionId = actionItem.getString("actionId")
                     val actionName = actionItem.getString("actionName")
                     if ("photoguangpan" == actionId) continue
-                    GlobalThreadPools.sleepCompat(300)
                     val jo = JSONObject(AntForestRpcCall.ecolifeTick(actionId, dayPoint, source))
                     if (ResChecker.checkRes(TAG, jo)) {
-                        Log.forest("绿色打卡🍀[" + actionName + "]") // 成功打卡日志
+                        Log.forest("绿色打卡🍀[$actionName]") // 成功打卡日志
                     } else {
                         // 记录失败原因
                         Log.error(TAG + jo.getString("resultDesc"))
                         Log.error(TAG + jo)
                     }
-                    GlobalThreadPools.sleepCompat(300)
                 }
             }
         } catch (th: Throwable) {
@@ -156,8 +152,7 @@ object EcoLife {
             val typeRef: TypeReference<MutableList<MutableMap<String?, String?>>> =
                 object : TypeReference<MutableList<MutableMap<String?, String?>>>() {
                 }
-            val allPhotos: MutableList<MutableMap<String?, String?>> =
-                DataStore.getOrCreate("plate", typeRef)
+            val allPhotos: MutableList<MutableMap<String?, String?>> = DataStore.getOrCreate("plate", typeRef)
             Log.runtime("$TAG [DEBUG] guangPanPhoto 数据内容: $allPhotos")
             // 查询今日任务状态
             var str = AntForestRpcCall.ecolifeQueryDish(source, dayPoint)
@@ -181,11 +176,11 @@ object EcoLife {
                     val pattern = Pattern.compile("img/(.*)/original")
                     val beforeMatcher = pattern.matcher(beforeMealsImageUrl)
                     if (beforeMatcher.find()) {
-                        photo!!.put("before", beforeMatcher.group(1))
+                        photo!!["before"] = beforeMatcher.group(1)
                     }
                     val afterMatcher = pattern.matcher(afterMealsImageUrl)
                     if (afterMatcher.find()) {
-                        photo!!.put("after", afterMatcher.group(1))
+                        photo!!["after"] = afterMatcher.group(1)
                     }
                     // 避免重复添加相同的照片信息
                     var exists = false
@@ -233,7 +228,6 @@ object EcoLife {
             if (!ResChecker.checkRes(TAG, jo)) {
                 return
             }
-            GlobalThreadPools.sleepCompat(3000)
             str = AntForestRpcCall.ecolifeUploadDishImage(
                 "AFTER_MEALS",
                 photo["after"],

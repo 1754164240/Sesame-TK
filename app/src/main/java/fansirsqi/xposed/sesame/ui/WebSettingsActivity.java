@@ -497,7 +497,7 @@ public class WebSettingsActivity extends BaseActivity {
                 android.content.ClipboardManager cm = (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
                 ClipData clipData = ClipData.newPlainText("userId", this.userId);
                 cm.setPrimaryClip(clipData);
-                ToastUtil.showToastWithDelay(this, "复制成功！", 100);
+                ToastUtil.INSTANCE.showToastWithDelay(this, "复制成功！", 100);
                 break;
         }
         return super.onOptionsItemSelected(item);

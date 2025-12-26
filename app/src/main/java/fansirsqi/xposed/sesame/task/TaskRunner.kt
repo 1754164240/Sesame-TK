@@ -6,7 +6,6 @@ import fansirsqi.xposed.sesame.model.BaseModel
 import fansirsqi.xposed.sesame.model.Model
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.TimeUtil
-import fansirsqi.xposed.sesame.util.WakeLockManager
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
@@ -116,7 +115,7 @@ class CoroutineTaskRunner(allModels: List<Model>) {
             try {
                 executeTasksWithMode(rounds)
             } catch (e: Exception) {
-                Log.printStackTrace(TAG, "任务执行异常", e)
+                Log.printStackTrace(TAG, "run err", e)
             } finally {
                 val endTime = System.currentTimeMillis()
                 printExecutionSummary(startTime, endTime)
@@ -128,8 +127,7 @@ class CoroutineTaskRunner(allModels: List<Model>) {
                     ApplicationHook.scheduleNextExecution()
                     Log.record(TAG, "✅ 已调度下次执行")
                 } catch (e: Exception) {
-                    Log.error(TAG, "调度下次执行失败: ${e.message}")
-                    Log.printStackTrace(TAG, e)
+                    Log.printStackTrace(TAG, "run err: ${e.message}",e)
                 }
             }
         }
@@ -172,7 +170,6 @@ class CoroutineTaskRunner(allModels: List<Model>) {
             Log.record(TAG, "✅ 第${round}/${rounds}轮任务完成，耗时: ${roundTime}ms")
         }
     }
-
 
     /**
      * 执行单个任务（带智能超时控制和自动恢复机制）
@@ -280,20 +277,17 @@ class CoroutineTaskRunner(allModels: List<Model>) {
 
                             else -> {
                                 // 任务因错误而结束
-                                Log.error(TAG, "任务[$taskId]恢复过程中出错: ${cause.message}")
-                                Log.printStackTrace(cause)
+                                Log.printStackTrace(TAG, "任务[$taskId]恢复过程中出错: ${cause.message}",cause)
                             }
                         }
                     }
                     
                     // 不阻塞当前协程，让恢复任务在后台继续执行
                 } catch (e: Exception) {
-                    Log.error(TAG, "监控恢复任务时出错: ${e.message}")
-                    Log.printStackTrace(e)
+                    Log.printStackTrace(TAG, "监控恢复任务时出错: ${e.message}",e)
                 }
             } catch (e2: Exception) {
-                Log.error(TAG, "任务[$taskId]自动恢复失败: ${e2.message}")
-                Log.printStackTrace(e2)
+                Log.printStackTrace(TAG, "任务[$taskId]自动恢复失败: ${e2.message}",e2)
             }
         }
     }
@@ -379,9 +373,7 @@ class CoroutineTaskRunner(allModels: List<Model>) {
         
         try {
             task.addRunCents()
-            
 
-            
             Log.record(TAG, "🎯 启动模块[${taskName}]第${round}轮执行...")
             logRecordCount.incrementAndGet() // 性能监控：记录日志调用次数
             
@@ -436,11 +428,9 @@ class CoroutineTaskRunner(allModels: List<Model>) {
         } catch (e: Exception) {
             val executionTime = System.currentTimeMillis() - taskStartTime
             failureCount.incrementAndGet()
-            Log.error(TAG, "❌ 执行任务[${taskName}]第${round}轮时发生错误(耗时: ${executionTime}ms): ${e.message}")
-            Log.printStackTrace(e)
+            Log.printStackTrace(TAG, "❌ 执行任务[${taskName}]第${round}轮时发生错误(耗时: ${executionTime}ms): ${e.message}",e)
         }
     }
-
 
     /**
      * 记录任务状态信息

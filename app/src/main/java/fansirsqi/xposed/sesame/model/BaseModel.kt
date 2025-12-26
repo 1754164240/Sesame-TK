@@ -2,6 +2,7 @@ package fansirsqi.xposed.sesame.model
 
 import fansirsqi.xposed.sesame.BuildConfig
 import fansirsqi.xposed.sesame.hook.CaptchaHook.updateHooks
+import fansirsqi.xposed.sesame.hook.Toast
 import fansirsqi.xposed.sesame.model.modelFieldExt.BooleanModelField
 import fansirsqi.xposed.sesame.model.modelFieldExt.ChoiceModelField
 import fansirsqi.xposed.sesame.model.modelFieldExt.IntegerModelField
@@ -10,10 +11,10 @@ import fansirsqi.xposed.sesame.model.modelFieldExt.ListModelField.ListJoinCommaT
 import fansirsqi.xposed.sesame.model.modelFieldExt.StringModelField
 import fansirsqi.xposed.sesame.util.ListUtil
 import fansirsqi.xposed.sesame.util.Log
+import fansirsqi.xposed.sesame.util.ToastUtil
 import fansirsqi.xposed.sesame.util.maps.BeachMap
 import fansirsqi.xposed.sesame.util.maps.IdMapManager
 import lombok.Getter
-
 
 /**
  * 基础配置模块
@@ -36,15 +37,22 @@ class BaseModel : Model() {
     }
 
     override fun boot(classLoader: ClassLoader?) {
+        // 如果滑块验证开启，自动关闭VPN弹窗拦截
+        if (enableSlide.value) {
+            if (enableCaptchaUIHook.value) {
+                enableCaptchaUIHook.value = false
+                Log.record(TAG, "⚠️ 滑块验证已开启，请关闭VPN弹窗拦截")
+                Toast.show("⚠️ 滑块验证已开启，请关闭VPN弹窗拦截")
+            }
+        }
         // 配置已加载，更新验证码Hook状态
         try {
             updateHooks(
                 enableCaptchaUIHook.value
             )
-            Log.runtime(TAG, "✅ 验证码Hook配置已同步")
+            Log.record(TAG, "✅ 验证码Hook配置已同步")
         } catch (t: Throwable) {
-            Log.error(TAG, "❌ 验证码Hook配置同步失败")
-            Log.printStackTrace(TAG, t)
+            Log.printStackTrace(TAG, "❌ 验证码Hook配置同步失败", t)
         }
     }
 
@@ -73,15 +81,16 @@ class BaseModel : Model() {
 
         modelFields.addField(batteryPerm) //是否申请支付宝的后台运行权限
         modelFields.addField(enableCaptchaUIHook) //验证码UI层拦截
+        modelFields.addField(enableSlide) //是否启用滑块验证
         modelFields.addField(recordLog) //是否记录record日志
         modelFields.addField(runtimeLog) //是否记录runtime日志
         modelFields.addField(showToast) //是否显示气泡提示
         modelFields.addField(enableOnGoing) //是否开启状态栏禁删
         modelFields.addField(languageSimplifiedChinese) //是否只显示中文并设置时区
         modelFields.addField(toastOffsetY) //气泡提示的纵向偏移量
+        modelFields.addField(toastPerfix)//气泡提示的前缀
         return modelFields
     }
-
 
     interface TimedTaskModel {
         companion object {
@@ -104,7 +113,7 @@ class BaseModel : Model() {
          * //手动触发是否自动安排下次执行
          */
         @Getter
-        val manualTriggerAutoSchedule: BooleanModelField = BooleanModelField("manualTriggerAutoSchedule", "手动触发支付宝运行", false)
+        val manualTriggerAutoSchedule: BooleanModelField = BooleanModelField("manualTriggerAutoSchedule", "手动触发支付宝运行", false) //一般人不开这个
 
         /**
          * 执行间隔时间（分钟）
@@ -116,7 +125,7 @@ class BaseModel : Model() {
          * 任务执行轮数配置
          */
         @Getter
-        val taskExecutionRounds: IntegerModelField = IntegerModelField("taskExecutionRounds", "任务执行轮数", 2, 1, 99)
+        val taskExecutionRounds: IntegerModelField = IntegerModelField("taskExecutionRounds", "任务执行轮数", 1, 1, 99) //1轮就好，没必要2轮
 
         /**
          * 定时执行的时间点列表
@@ -202,6 +211,11 @@ class BaseModel : Model() {
         @Getter
         val enableCaptchaUIHook: BooleanModelField = BooleanModelField("enableCaptchaUIHook", "🛡️拒绝访问VPN弹窗拦截", false)
 
+        /**
+         * 是否启用滑块验证（优先使用 Shizuku，无 Shizuku 时发送广播）
+         */
+        @Getter
+        val enableSlide: BooleanModelField = BooleanModelField("enableSlide", "支付宝10.6.58.8000 滑块验证(Shizuku/ShortX广播)", false)
 
         /**
          * 是否记录record日志
@@ -220,6 +234,9 @@ class BaseModel : Model() {
          */
         @Getter
         val showToast: BooleanModelField = BooleanModelField("showToast", "气泡提示", true)
+
+        @Getter
+        val toastPerfix: StringModelField = StringModelField("toastPerfix", "气泡前缀", null)
 
         /**
          * 气泡提示的纵向偏移量

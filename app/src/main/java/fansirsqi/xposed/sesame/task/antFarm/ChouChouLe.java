@@ -49,7 +49,7 @@ public class ChouChouLe {
      */
     void chouchoule() {
         try {
-            String response = AntFarmRpcCall.queryLoveCabin(UserMap.getCurrentUid());
+            String response = AntFarmRpcCall.queryLoveCabin(UserMap.INSTANCE.getCurrentUid());
             JSONObject jo = new JSONObject(response);
             if (!ResChecker.checkRes(TAG, jo)) {
                 return;
@@ -104,7 +104,7 @@ public class ChouChouLe {
                             continue;
                         }
                         if (receiveTaskAward(drawType, task.taskId)) {
-                            GlobalThreadPools.sleepCompat(5 * 1000L);
+                            GlobalThreadPools.sleepCompat(300L);
                             doubleCheck = true;
                         }
                     } else if (TaskStatus.TODO.name().equals(task.taskStatus)) {
@@ -169,9 +169,9 @@ public class ChouChouLe {
             if (ResChecker.checkRes(TAG, jo)) {
                 Log.farm(taskName + "🧾️[任务: " + task.title + "]");
                 if(task.title.equals("消耗饲料换机会")) {
-                    GlobalThreadPools.sleepCompat(1000L);
+                    GlobalThreadPools.sleepCompat(300L);
                 } else {
-                    GlobalThreadPools.sleepCompat(5 * 1000L);
+                    GlobalThreadPools.sleepCompat(1000L);
                 }
                 return true;
             }
@@ -223,7 +223,7 @@ public class ChouChouLe {
             if (jo.optBoolean("success", false)) {
                 Log.farm((drawType.equals("ipDraw") ? "IP抽抽乐" : "抽抽乐") +
                         "🧾️[任务: " + task.title + "]");
-                GlobalThreadPools.sleepCompat(3 * 1000L);
+                GlobalThreadPools.sleepCompat(3000L);
                 return true;
             }
             return false;
@@ -278,7 +278,7 @@ public class ChouChouLe {
                                 jo.getJSONObject("resData").optBoolean("success", false)) {
                             Log.farm((drawType.equals("ipDraw") ? "IP抽抽乐" : "抽抽乐") +
                                     "🧾️[猜价格任务完成: " + task.title + ", 猜中价格: " + correctPrice + "]");
-                            GlobalThreadPools.sleepCompat(3 * 1000L);
+                            GlobalThreadPools.sleepCompat(300L);
                             return true;
                         }
                     }
@@ -328,7 +328,7 @@ public class ChouChouLe {
             int drawTimes = jo.optInt("drawTimes", 0);
             for (int i = 0; i < drawTimes; i++) {
                 drawPrize("IP抽抽乐", AntFarmRpcCall.drawMachineIP());
-                GlobalThreadPools.sleepCompat(5 * 1000L);
+                GlobalThreadPools.sleepCompat(300L);
             }
 
         } catch (Throwable t) {
@@ -359,7 +359,7 @@ public class ChouChouLe {
 
             for (int i = 0; i < drawTimes; i++) {
                 drawPrize("日常抽抽乐", AntFarmRpcCall.drawMachineDaily(activityId));
-                GlobalThreadPools.sleepCompat(5 * 1000L);
+                GlobalThreadPools.sleepCompat(300L);
             }
 
         } catch (Throwable t) {

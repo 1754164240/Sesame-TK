@@ -14,6 +14,7 @@ import androidx.annotation.NonNull;
 
 import fansirsqi.xposed.sesame.hook.keepalive.SmartSchedulerManager;
 import fansirsqi.xposed.sesame.hook.server.ModuleHttpServerManager;
+import fansirsqi.xposed.sesame.hook.simple.SimplePageManager;
 import kotlin.Unit;
 import lombok.Setter;
 
@@ -462,6 +463,7 @@ public class ApplicationHook {
 
     @SuppressLint("PrivateApi")
     private void handleHookLogic(ClassLoader classLoader, String packageName, String apkPath, Object rawParam) {
+        DataStore.INSTANCE.init(Files.CONFIG_DIR);
         XposedBridge.log(TAG + "|handleHookLogic " + packageName + " scuess!");
         if (hooked) return;
         hooked = true;
@@ -489,6 +491,8 @@ public class ApplicationHook {
         } catch (Throwable t) {
             Log.printStackTrace(TAG, "验证码Hook初始化失败", t);
         }
+
+
         try {
             // 在Hook Application.attach 之前，先 deoptimize LoadedApk.makeApplicationInner
             try {
@@ -508,6 +512,13 @@ public class ApplicationHook {
                         registerBroadcastReceiver(appContext);
                     }
 
+                    // SecurityBodyHelper初始化
+                    SecurityBodyHelper.INSTANCE.init(classLoader);
+
+                    //LOG日志的初始化
+                    Log.init(appContext);
+
+
                     // ✅ 优先使用 Hook 捕获的版本号
                     if (VersionHook.hasVersion()) {
                         alipayVersion = VersionHook.getCapturedVersion();
@@ -521,10 +532,6 @@ public class ApplicationHook {
                                 alipayVersion = new AlipayVersion(pInfo.versionName);
                                 Log.runtime(TAG, "📦 支付宝版本(回退): " + pInfo.versionName);
 
-                                // 特殊版本处理
-                                if (pInfo.versionName.equals("10.7.26.8100")) {
-                                    HookUtil.INSTANCE.fuckAccounLimit(classLoader);
-                                }
                             } else {
                                 Log.runtime(TAG, "⚠️ 无法获取版本信息");
                                 alipayVersion = new AlipayVersion(""); // 空版本
@@ -544,6 +551,30 @@ public class ApplicationHook {
                         HookUtil.INSTANCE.fuckAccounLimit(classLoader);
                         Log.runtime(TAG, "✅ 已对版本 10.7.26.8100 进行特殊处理");
                     }
+
+if (VersionHook.hasVersion() && alipayVersion.getVersionString() != null) {
+    String version = alipayVersion.getVersionString();
+    
+    // 正则表达式匹配：
+    // 1. 主版本小于10的所有版本: [0-9]\.[0-9]+\.[0-9]+\.[0-9]+
+    // 2. 10.0.x.x 到 10.5.x.x: 10\.[0-5]\.[0-9]+\.[0-9]+
+    // 3. 10.6.0.x 到 10.6.58.x: 10\.6\.([0-9]|[0-4][0-9]|5[0-8])\.[0-9]+
+    if (version.matches("^([0-9]\\.[0-9]+\\.[0-9]+\\.[0-9]+|10\\.[0-5]\\.[0-9]+\\.[0-9]+|10\\.6\\.([0-9]|[0-4][0-9]|5[0-8])\\.[0-9]+)$")) {
+        // 启用SimplePageManager窗口监控
+        SimplePageManager.INSTANCE.enableWindowMonitoring(classLoader);
+        
+        // 初始化CaptchaHandler
+        Log.runtime(TAG, "✅ 开始初始化CaptchaHandler，版本: " + version);
+        SimplePageManager.INSTANCE.addHandler(
+                "com.alipay.mobile.nebulax.xriver.activity.XRiverActivity",
+                new Captcha1Handler());
+        SimplePageManager.INSTANCE.addHandler(
+                "com.eg.android.AlipayGphone.AlipayLogin",
+                new Captcha2Handler());
+    } else {
+        Log.debug(TAG, "当前支付宝版本 " + version + " 不支持自动滑块Hook");
+    }
+}
 
                     if (BuildConfig.DEBUG) {
                         try {
@@ -577,7 +608,7 @@ public class ApplicationHook {
                             Log.runtime(TAG, "onResume targetUid: " + targetUid);
                             if (targetUid == null) {
                                 Log.record(TAG, "onResume:用户未登录");
-                                Toast.show("用户未登录");
+                                Toast.INSTANCE.show("用户未登录");
                                 return;
                             }
                             if (!init) {
@@ -587,14 +618,14 @@ public class ApplicationHook {
                                 Log.runtime(TAG, "initHandler success");
                                 return;
                             }
-                            String currentUid = UserMap.getCurrentUid();
+                            String currentUid = UserMap.INSTANCE.getCurrentUid();
                             Log.runtime(TAG, "onResume currentUid: " + currentUid);
                             if (!targetUid.equals(currentUid)) {
                                 if (currentUid != null) {
                                     initHandler(true);  // 重新初始化
                                     lastExecTime = 0;   // 重置执行时间，防止被间隔逻辑拦截
                                     Log.record(TAG, "用户已切换");
-                                    Toast.show("用户已切换");
+                                    Toast.INSTANCE.show("用户已切换");
                                     return;
                                 }
                                 HookUtil.INSTANCE.hookUser(classLoader);
@@ -623,6 +654,8 @@ public class ApplicationHook {
                             if (!General.CURRENT_USING_SERVICE.equals(appService.getClass().getCanonicalName())) {
                                 return;
                             }
+
+
 
                             Log.runtime(TAG, "Service onCreate");
                             appContext = appService.getApplicationContext();
@@ -682,7 +715,7 @@ public class ApplicationHook {
                                         SchedulerAdapter.scheduleDelayedExecution(BaseModel.Companion.getCheckInterval().getValue());
                                         return;
                                     }
-                                    String currentUid = UserMap.getCurrentUid();
+                                    String currentUid = UserMap.INSTANCE.getCurrentUid();
                                     String targetUid = HookUtil.INSTANCE.getUserId(classLoader);
                                     if (targetUid == null || !targetUid.equals(currentUid)) {
                                         Log.record(TAG, "用户切换或为空，重新登录");
@@ -850,7 +883,7 @@ public class ApplicationHook {
                 String userId = HookUtil.INSTANCE.getUserId(classLoader);
                 if (userId == null) {
                     Log.record(TAG, "initHandler: 用户未登录");
-                    Toast.show("用户未登录");
+                    Toast.INSTANCE.show("用户未登录");
                     return false;
                 }
 
@@ -864,7 +897,7 @@ public class ApplicationHook {
                 Config.load(userId); // 加载配置
                 if (!Config.isLoaded()) {
                     Log.record(TAG, "用户模块配置加载失败");
-                    Toast.show("用户模块配置加载失败");
+                    Toast.INSTANCE.show("用户模块配置加载失败");
                     return false;
                 }
 
@@ -892,58 +925,54 @@ public class ApplicationHook {
                 }
 
                 // 注册 VIPHook handler，用于抓取蚂蚁庄园广告 referToken
-                VIPHook.INSTANCE.registerRpcHandler("com.alipay.adexchange.ad.facade.xlightPlugin", new kotlin.jvm.functions.Function1<JSONObject, Unit>() {
-                    @Override
-                    public Unit invoke(JSONObject paramsJson) {
-                        try {
-
-                            // paramsJson 就是完整 RPC 数据
-                            // 找 positionRequest → referInfo → referToken
-                            JSONObject positionRequest = paramsJson.optJSONObject("positionRequest");
-                            if (positionRequest == null) {
-                                Log.error("VIPHook", "未找到 positionRequest");
-                                return Unit.INSTANCE;
-                            }
-
-                            JSONObject referInfo = positionRequest.optJSONObject("referInfo");
-                            if (referInfo == null) {
-                                Log.error("VIPHook", "未找到 referInfo");
-                                return Unit.INSTANCE;
-                            }
-
-                            String token = referInfo.optString("referToken", "");
-                            if (token.isEmpty()) {
-                                Log.error("VIPHook", "referToken 为空");
-                                return Unit.INSTANCE;
-                            }
-
-                            // 取得当前用户 UID
-                            String userId = UserMap.getCurrentUid();
-                            if (userId == null || userId.isEmpty()) {
-                                Log.error("VIPHook", "无法保存 referToken：当前用户ID为空");
-                                return Unit.INSTANCE;
-                            }
-
-                            // --- 与你的 fishpond riskToken 完全一样的保存逻辑 ---
-                            VipDataIdMap vipData = IdMapManager.getInstance(VipDataIdMap.class);
-                            vipData.load(userId);
-
-                            // 存储键名：AntFarmReferToken
-                            vipData.add("AntFarmReferToken", token);
-
-                            boolean saved = vipData.save(userId);
-                            if (saved) {
-                                Log.other("VIPHook", "捕获到蚂蚁庄园 referToken 并已保存到 vipdata.json, uid=" + userId);
-                            } else {
-                                Log.error("VIPHook", "保存 vipdata.json 失败, uid=" + userId);
-                            }
-
-                        } catch (Exception e) {
-                            Log.error("VIPHook", "解析 referToken 失败: " + e.getMessage());
+                VIPHook.INSTANCE.registerRpcHandler("com.alipay.adexchange.ad.facade.xlightPlugin", paramsJson -> {
+                    try {
+                        // paramsJson 就是完整 RPC 数据
+                        // 找 positionRequest → referInfo → referToken
+                        JSONObject positionRequest = paramsJson.optJSONObject("positionRequest");
+                        if (positionRequest == null) {
+                            Log.error("VIPHook", "未找到 positionRequest");
+                            return Unit.INSTANCE;
                         }
 
-                        return Unit.INSTANCE;
+                        JSONObject referInfo = positionRequest.optJSONObject("referInfo");
+                        if (referInfo == null) {
+                            Log.error("VIPHook", "未找到 referInfo");
+                            return Unit.INSTANCE;
+                        }
+
+                        String token = referInfo.optString("referToken", "");
+                        if (token.isEmpty()) {
+                            Log.error("VIPHook", "referToken 为空");
+                            return Unit.INSTANCE;
+                        }
+
+                        // 取得当前用户 UID
+                        String userId1 = UserMap.INSTANCE.getCurrentUid();
+                        if (userId1 == null || userId1.isEmpty()) {
+                            Log.error("VIPHook", "无法保存 referToken：当前用户ID为空");
+                            return Unit.INSTANCE;
+                        }
+
+                        // --- 与你的 fishpond riskToken 完全一样的保存逻辑 ---
+                        VipDataIdMap vipData = IdMapManager.getInstance(VipDataIdMap.class);
+                        vipData.load(userId1);
+
+                        // 存储键名：AntFarmReferToken
+                        vipData.add("AntFarmReferToken", token);
+
+                        boolean saved = vipData.save(userId1);
+                        if (saved) {
+                            Log.other("VIPHook", "捕获到蚂蚁庄园 referToken 并已保存到 vipdata.json, uid=" + userId1);
+                        } else {
+                            Log.error("VIPHook", "保存 vipdata.json 失败, uid=" + userId1);
+                        }
+
+                    } catch (Exception e) {
+                        Log.error("VIPHook", "解析 referToken 失败: " + e.getMessage());
                     }
+
+                    return Unit.INSTANCE;
                 });
 
                 // 后台运行权限检查!!
@@ -953,7 +982,7 @@ public class ApplicationHook {
                         mainHandler.postDelayed(
                                 () -> {
                                     if (!PermissionUtil.checkOrRequestBatteryPermissions(appContext)) {
-                                        Toast.show("请授予支付宝始终在后台运行权限");
+                                        Toast.INSTANCE.show("请授予支付宝始终在后台运行权限");
                                     }
                                 },
                                 2000);
@@ -963,11 +992,11 @@ public class ApplicationHook {
 
                 Model.bootAllModel(classLoader);
                 Status.load(userId);
-                DataStore.INSTANCE.init(Files.CONFIG_DIR);
+
                 updateDay();
                 String successMsg = "芝麻粒-TK 加载成功✨";
                 Log.record(successMsg);
-                Toast.show(successMsg);
+                Toast.INSTANCE.show(successMsg);
             }
             offline = false;
             init = true;
@@ -976,7 +1005,7 @@ public class ApplicationHook {
             return true;
         } catch (Throwable th) {
             Log.printStackTrace(TAG, "startHandler", th);
-            Toast.show("芝麻粒加载失败 🎃");
+            Toast.INSTANCE.show("芝麻粒加载失败 🎃");
             return false;
         }
     }
@@ -1087,7 +1116,7 @@ public class ApplicationHook {
      * @param action   广播动作
      * @param errorMsg 错误日志消息
      */
-    private static void sendBroadcast(String action, String errorMsg) {
+    public static void sendBroadcast(String action, String errorMsg) {
         try {
             appContext.sendBroadcast(new Intent(action));
         } catch (Throwable th) {
@@ -1095,7 +1124,15 @@ public class ApplicationHook {
             Log.printStackTrace(TAG, th);
         }
     }
-
+    /**
+     * 发送广播到其他应用（显式广播）
+     * @param message 要发送的字符串消息
+     */
+    public static void sendBroadcastShell(String API,String message) {
+        Intent intent = new Intent("fansirsqi.xposed.sesame.SHELL");
+        intent.putExtra(API, message);
+        appContext.sendBroadcast(intent,null);
+    }
     /**
      * 通过广播发送重新登录的指令
      */
@@ -1359,6 +1396,8 @@ public class ApplicationHook {
         intentFilter.addAction(BroadcastActions.RPC_TEST); // 调试RPC的动作
         return intentFilter;
     }
+
+
 
 }
 

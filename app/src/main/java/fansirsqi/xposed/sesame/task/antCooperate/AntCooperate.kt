@@ -64,10 +64,7 @@ class AntCooperate : ModelTask() {
     private val cooperateSendCooperateBeckon = BooleanModelField("cooperateSendCooperateBeckon", "合种 | 召唤队友浇水| 仅队长 ", false)
     private val loveCooperateWater = BooleanModelField("loveCooperateWater", "真爱合种 | 浇水", false)
     private val loveCooperateWaterNum = IntegerModelField("loveCooperateWaterNum", "真爱合种 | 浇水克数(默认20g)", 20)
-
     private val teamCooperateWaterNum = IntegerModelField("teamCooperateWaterNum", "组队合种 | 浇水克数(0为关闭，10-5000)", 0)
-
-
     override fun getFields(): ModelFields {
         val modelFields = ModelFields()
         modelFields.addField(cooperateWater)
@@ -183,7 +180,7 @@ class AntCooperate : ModelTask() {
 
                             val remainingQuota = configTotalLimit - totalWatered
                             if (remainingQuota <= 0) {
-                                Log.forest(TAG, "$name 累计浇水已达标($totalWatered/$configTotalLimit)，跳过")
+                                Log.forest( "$name 累计浇水已达标($totalWatered/$configTotalLimit)，跳过")
                                 continue
                             }
 
@@ -249,7 +246,7 @@ class AntCooperate : ModelTask() {
                 myWatered = todayWaterMap?.optInt(currentUid, 0)
                 if (myWatered != null) {
                     if (myWatered > 0) {
-                        Log.forest(TAG, "真爱合种今日已浇水(" + myWatered + "g)")
+                        Log.forest("真爱合种今日已浇水(" + myWatered + "g)")
                     }
                 } else {
                     Log.error(TAG, "真爱合不知道什么勾八错误")
@@ -315,6 +312,20 @@ class AntCooperate : ModelTask() {
                 return
             }
 
+            var needReturn = false //判断是否要返回个人
+            if(!isTeam(homeJo)){
+
+                val updateUserConfigStr = AntCooperateRpcCall.updateUserConfig(true)
+                val UserConfigJo =  JSONObject(updateUserConfigStr)
+                if (!ResChecker.checkRes(TAG, UserConfigJo)) {
+                    Log.record(TAG, "updateUserConfig 返回异常")
+                    return
+                }
+                needReturn = true
+                Log.record(TAG, "不在队伍模式,已为您切换至组队浇水")
+
+            }
+
             // --- 3. 获取服务端限制 (剩余可浇水量) ---
             val miscInfoStr = AntCooperateRpcCall.queryMiscInfo("teamCanWaterCount", teamId)
             val miscJo = JSONObject(miscInfoStr)
@@ -328,7 +339,7 @@ class AntCooperate : ModelTask() {
                 ?.optJSONObject("teamCanWaterCount")
                 ?.optInt("waterCount", 0) ?: 0
 
-            Log.record(TAG, "状态检查: 目标剩余${userRemainingQuota}g | 官方剩余${serverRemaining}g | 背包能量${currentEnergy}g")
+            Log.record(TAG, "组队状态检查: 目标剩余${userRemainingQuota}g | 官方剩余${serverRemaining}g | 背包能量${currentEnergy}g")
 
             if (serverRemaining < 10) {
                 Log.record(TAG, "官方限制今日无可浇水额度，跳过")
@@ -358,6 +369,18 @@ class AntCooperate : ModelTask() {
                 Status.setIntFlagToday(StatusFlags.FLAG_TEAM_WATER_DAILY_COUNT, newTotal)
                 Log.record(TAG, "今日累计: ${newTotal}g / ${userDailyTarget}g")
             }
+            //如果从个人来的就回到个人
+            if(needReturn){
+
+                val updateUserConfigStr = AntCooperateRpcCall.updateUserConfig(false)
+                val UserConfigJo =  JSONObject(updateUserConfigStr)
+                if (!ResChecker.checkRes(TAG, UserConfigJo)) {
+                    Log.record(TAG, "updateUserConfig 返回异常")
+                    return
+                }
+                Log.record(TAG, "已返回个人模式")
+
+            }
 
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "teamCooperateWater 异常:", t)
@@ -366,6 +389,17 @@ class AntCooperate : ModelTask() {
 
     companion object {
         private val TAG: String = AntCooperate::class.java.getSimpleName()
+
+
+        /**
+         * 判断是否为团队
+         *
+         * @param homeObj 用户主页的JSON对象
+         * @return 是否为团队
+         */
+        private fun isTeam(homeObj: JSONObject): Boolean {
+            return homeObj.optString("nextAction", "") == "Team"
+        }
 
         /**
          * 合种浇水

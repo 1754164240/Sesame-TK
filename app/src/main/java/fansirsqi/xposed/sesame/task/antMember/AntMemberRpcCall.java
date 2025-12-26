@@ -4,6 +4,9 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.util.List;
+import java.util.UUID;
+
 import fansirsqi.xposed.sesame.hook.ApplicationHook;
 import fansirsqi.xposed.sesame.hook.RequestManager;
 import fansirsqi.xposed.sesame.util.RandomUtil;
@@ -321,21 +324,125 @@ public class AntMemberRpcCall {
         return RequestManager.requestString("com.alipay.alipaymember.biz.rpc.config.h5.queryShandieEntityList", data);
     }
 
-    /**
-     * 会员积分兑换道具
-     *
-     * @param benefitId benefitId
-     * @param itemId    itemId
-     * @return 结果
-     */
-    public static String exchangeBenefit(String benefitId, String itemId) {
-        String requestId = "requestId" + System.currentTimeMillis();
-        String alipayClientVersion = ApplicationHook.getAlipayVersion().getVersionString();
-        String data = "[{\"benefitId\":\"" + benefitId + "\",\"cityCode\":\"\",\"exchangeType\":\"POINT_PAY\",\"itemId\":\"" + itemId + "\",\"miniAppId\":\"\",\"orderSource\":\"\",\"requestId\":\"" + requestId + "\",\"requestSourceInfo\":\"\",\"sourcePassMap\":{\"alipayClientVersion\":\"" + alipayClientVersion + "\",\"innerSource\":\"\",\"mobileOsType\":\"Android\",\"source\":\"\",\"unid\":\"\"},\"userOutAccount\":\"\"}]";
-        return RequestManager.requestString("com.alipay.alipaymember.biz.rpc.exchange.h5.exchangeBenefit", data);
+
+
+
+    public static String queryDeliveryZoneDetail(List<String> deliveryIdList, int pageNum, int pageSize) {
+        // 1. 处理 uniqueId 的拼接逻辑
+        // 固定前缀：17665547901390and99999999INTELLIGENT_SORT92524974
+        String idsJoined = String.join(",", deliveryIdList);
+        String uniqueId = "17665547901390and99999999INTELLIGENT_SORT92524974" + idsJoined;
+
+        // 2. 将 deliveryIdList 转换为 JSON 数组字符串格式
+        // 这里为了简单直观使用 String.format，如果项目中有 Fastjson/Gson 建议使用序列化
+        StringBuilder deliveryIdListJson = new StringBuilder("[");
+        for (int i = 0; i < deliveryIdList.size(); i++) {
+            deliveryIdListJson.append("\"").append(deliveryIdList.get(i)).append("\"");
+            if (i < deliveryIdList.size() - 1) {
+                deliveryIdListJson.append(",");
+            }
+        }
+        deliveryIdListJson.append("]");
+
+        // 3. 构造完整的请求 Data 字符串
+        String data = "[{" +
+                "\"deliveryIdList\":" + deliveryIdListJson.toString() + "," +
+                "\"lowerPoint\":0," +
+                "\"pageNum\":" + pageNum + "," +
+                "\"pageSize\":" + pageSize + "," +
+                "\"queryNoReserve\":true," +
+                "\"resourceCardChannel\":\"ZERO_EXCHANGE_CHANNEL\"," +
+                "\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"\",\"unid\":\"\"}," +
+                "\"startPageFirstQuery\":false," +
+                "\"topIdList\":[\"202412231259661040\"]," +
+                "\"uniqueId\":\"" + uniqueId + "\"," +
+                "\"upperPoint\":99999999," +
+                "\"withPointRange\":false" +
+                "}]";
+
+        return RequestManager.requestString("com.alipay.alipaymember.biz.rpc.config.h5.queryDeliveryZoneDetail", data);
     }
 
 
+    /**
+     * 会员积分兑换道具（适配新请求结构）
+     *
+     * @param benefitId benefitId（兑换权益ID）
+     * @param userId    userId（用户ID，格式如）
+     * @return 接口请求结果
+     */
+    /*
+    public static String exchangeBenefit(String benefitId, String userId) {
+        // 1. 生成请求ID（前缀+当前毫秒时间戳）
+        String requestId = "requestId" + System.currentTimeMillis();
+        // 2. 生成唯一unid（UUID随机生成，也可使用时间戳，此处UUID更规范）
+        String unid = UUID.randomUUID().toString();
+        // 3. 拼接requestSourceInfo（用户ID+|0+当前毫秒时间戳）
+        String requestSourceInfo = String.format("SID:%s%s|0", userId, System.currentTimeMillis());
+        // 4. 构建符合新结构的请求体（移除废弃字段，新增sceneId等必填字段）
+        String data = String.format("[{\"benefitId\":\"%s\",\"exchangeType\":\"POINT_PAY\",\"requestId\":\"%s\",\"requestSourceInfo\":\"%s\",\"sceneId\":\"1209\",\"sourcePassMap\":{\"bid\":\"\",\"feedsIndex\":\"0\",\"innerSource\":\"a169.b52659\",\"isCpc\":\"\",\"source\":\"\",\"unid\":\"%s\",\"uniqueId\":\"%s%s\"}]",
+                benefitId,
+                requestId,
+                requestSourceInfo,
+                unid,
+                userId,
+                System.currentTimeMillis());
+        // 5. 发起接口请求并返回结果
+        return RequestManager.requestString("com.alipay.alipaymember.biz.rpc.exchange.h5.exchangeBenefit", data);
+    }*/
+
+    public static String exchangeBenefit(String benefitId, String itemId, String userId) {
+        long now = System.currentTimeMillis();
+
+        // 1. 生成请求ID
+        String requestId = "requestId" + now;
+
+        // 2. 生成唯一unid (UUID)
+        String unid = UUID.randomUUID().toString();
+
+        // 3. 生成 uniqueId (通常是 userId + 时间戳，或者直接是 userId)
+        // 根据你提供的 JSON，这里似乎直接是 userId 拼接了一个标记或时间戳
+        String uniqueId = userId + now;
+
+        // 4. 拼接 requestSourceInfo
+        String requestSourceInfo = String.format("SID:%s|0", uniqueId);
+
+        // 5. 构建符合最新结构的 JSON 数据
+        // 注意：增加了 itemId, cityCode, miniAppId 等字段
+        String data = String.format("[" +
+                        "{" +
+                        "\"benefitId\":\"%s\"," +
+                        "\"cityCode\":\"\"," +
+                        "\"exchangeType\":\"POINT_PAY\"," +
+                        "\"itemId\":\"%s\"," +
+                        "\"miniAppId\":\"\"," +
+                        "\"orderSource\":\"\"," +
+                        "\"requestId\":\"%s\"," +
+                        "\"requestSourceInfo\":\"%s\"," +
+                        "\"sourcePassMap\":{" +
+                        "\"alipayClientVersion\":\"10.7.80.8000\"," +
+                        "\"bid\":\"\"," +
+                        "\"feedsIndex\":\"0\"," +
+                        "\"innerSource\":\"a159.b52659\"," +
+                        "\"isCpc\":\"\"," +
+                        "\"mobileOsType\":\"Android\"," +
+                        "\"source\":\"\"," +
+                        "\"unid\":\"%s\"," +
+                        "\"uniqueId\":\"%s\"" +
+                        "}," +
+                        "\"userOutAccount\":\"\"" +
+                        "}" +
+                        "]",
+                benefitId,
+                itemId,
+                requestId,
+                requestSourceInfo,
+                unid,
+                uniqueId);
+
+        // 6. 发起接口请求
+        return RequestManager.requestString("com.alipay.alipaymember.biz.rpc.exchange.h5.exchangeBenefit", data);
+    }
 
     // ================= 年度回顾（任务中心） =================
     public static final String ANNUAL_REVIEW_OPERATION_IDENTIFY =
@@ -869,7 +976,7 @@ public class AntMemberRpcCall {
                 args.put("ballIdList", ballIdList); // 直接用 JSONArray
 
                 return RequestManager.requestString(
-                        "com.antgroup.zmxy.zmcustprod.biz.rpc.growthbehavior.api.GrowthBehaviorRpcManager.collectProgressBall",
+                        "com.antgroup.zmxy.zmcustprod.biz.rpc.growthbehavior.apiGrowthBehaviorRpcManager.collectProgressBall",
                         new JSONArray().put(args).toString()
                 );
             } catch (Exception e) {
