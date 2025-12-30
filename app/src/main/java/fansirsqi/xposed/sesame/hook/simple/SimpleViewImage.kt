@@ -7,25 +7,17 @@ import android.widget.TextView
 /**
  * 精简版 ViewImage - 仅保留坐标获取和 XPath 查找功能
  */
-class SimpleViewImage(private val originView: View) {
-    
+class SimpleViewImage(val originView: View) {
+
     private var parent: SimpleViewImage? = null
     private var indexOfParent: Int = -1
     private var children: Array<SimpleViewImage?>? = null
-    
+
     companion object {
         const val TEXT = "text"
         const val CONTENT_DESCRIPTION = "contentDescription"
     }
-    
-    init {
-        if (originView == null) {
-            throw NullPointerException("SimpleViewImage->Constructor originView is Null")
-        }
-    }
-    
-    fun getOriginView(): View = originView
-    
+
     /**
      * 获取文本内容
      */
@@ -36,7 +28,7 @@ class SimpleViewImage(private val originView: View) {
             originView.contentDescription?.toString()
         }
     }
-    
+
     /**
      * 获取屏幕坐标
      */
@@ -45,17 +37,17 @@ class SimpleViewImage(private val originView: View) {
         originView.getLocationOnScreen(location)
         return location
     }
-    
+
     /**
      * 获取X坐标
      */
     fun X(): Int = locationOnScreen()[0]
-    
+
     /**
      * 获取Y坐标
      */
     fun Y(): Int = locationOnScreen()[1]
-    
+
     /**
      * 获取子节点数量
      */
@@ -65,7 +57,7 @@ class SimpleViewImage(private val originView: View) {
         }
         return originView.childCount
     }
-    
+
     /**
      * 获取指定索引的子节点
      */
@@ -87,12 +79,12 @@ class SimpleViewImage(private val originView: View) {
         children!![index] = viewImage
         return viewImage
     }
-    
+
     /**
      * 获取父节点
      */
     fun parentNode(): SimpleViewImage? = parent
-    
+
     /**
      * 获取指定层级的父节点
      */
@@ -102,7 +94,7 @@ class SimpleViewImage(private val originView: View) {
         }
         return parentNode()?.parentNode(n - 1)
     }
-    
+
     /**
      * 获取所有子节点
      */
@@ -116,7 +108,7 @@ class SimpleViewImage(private val originView: View) {
         }
         return ret
     }
-    
+
     /**
      * 根据XPath查找单个元素
      */
@@ -127,12 +119,12 @@ class SimpleViewImage(private val originView: View) {
         }
         return SimplePageManager.tryGetTopView(xpath)
     }
-    
+
     /**
      * 获取视图类型
      */
     fun getType(): String = originView.javaClass.simpleName
-    
+
     /**
      * 获取属性值
      */

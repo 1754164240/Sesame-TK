@@ -9,6 +9,7 @@ import android.os.Looper
 import android.util.Log
 import android.view.View
 import de.robv.android.xposed.XC_MethodHook
+import de.robv.android.xposed.XposedHelpers
 import fansirsqi.xposed.sesame.hook.simple.xpcompat.CompatHelpers
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -18,108 +19,98 @@ import java.lang.ref.WeakReference
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * 精简版 PageManager - 仅保留 Activity 监控和 Dialog 跟踪功能
+ * A simplified PageManager - only keeps Activity monitoring and Dialog tracking.
  */
 @SuppressLint("StaticFieldLeak")
 object SimplePageManager {
-    
+
     private const val TAG = "SimplePageManager"
-    
+
     private var mContextRef: WeakReference<Context>? = null
     private var mClassLoader: ClassLoader? = null
     private var topActivity: Activity? = null
-    
+
     private val activityFocusHandlerMap = ConcurrentHashMap<String, ActivityFocusHandler>()
-    
+
     val handler = Handler(Looper.getMainLooper())
-    
-    private var taskDuration = 200
+
+    private var taskDuration = 500
     private var hasPendingActivityTask = false
     private var disable = false
-    
+
     private val dialogs = ArrayList<WeakReference<android.app.Dialog>>()
     private var windowMonitorEnabled = false
-    
+
     interface ActivityFocusHandler {
         suspend fun handleActivity(activity: Activity, root: SimpleViewImage): Boolean
     }
-    
+
     init {
         enablePageMonitor()
     }
-    
+
     fun getContext(): Context? = mContextRef?.get()
-    
+
     fun getClassLoader(): ClassLoader? = mClassLoader
-    
+
     fun getTopActivity(): Activity? = topActivity
-    
+
     fun setTaskDuration(duration: Int) {
         taskDuration = duration
     }
-    
+
     fun setDisable(disabled: Boolean) {
         disable = disabled
     }
-    
+
     fun addHandler(activityClassName: String, handler: ActivityFocusHandler) {
         activityFocusHandlerMap[activityClassName] = handler
     }
-    
+
     fun removeHandler(activityClassName: String) {
         activityFocusHandlerMap.remove(activityClassName)
     }
-    
+
     fun getDialogs(): ArrayList<WeakReference<android.app.Dialog>> = dialogs
-    
+
     fun enableWindowMonitoring(classLoader: ClassLoader? = null) {
         if (classLoader != null) {
             mClassLoader = classLoader
         }
-        Log.i(TAG, "enableWindowMonitoring called, windowMonitorEnabled: $windowMonitorEnabled, classLoader: ${mClassLoader?.javaClass?.name}")
+        Log.i(
+            TAG,
+            "启用窗口监控被调用，窗口监控已启用: $windowMonitorEnabled, 类加载器: ${mClassLoader?.javaClass?.name}"
+        )
         if (!windowMonitorEnabled) {
             enableWindowMonitor()
             windowMonitorEnabled = true
-            Log.i(TAG, "窗口监控已启用")
-        } else {
-            Log.i(TAG, "窗口监控已经启用，跳过")
         }
     }
-    
+
     /**
-     * 尝试在 Dialog 中查找视图
+     * 尝试在对话框中查找视图
      */
     @SuppressLint("UseKtx")
     fun tryGetTopView(xpath: String): SimpleViewImage? {
-        Log.d(TAG, "tryGetTopView searching for xpath: $xpath")
-        Log.d(TAG, "  Dialogs: ${dialogs.size}")
-        
+        // Log.d(TAG, "tryGetTopView 搜索 xpath: $xpath, 对话框数量: ${dialogs.size}")
+        dialogs.removeIf { it.get() == null }
         for (dialogWeakReference in dialogs) {
-            val dialog = dialogWeakReference.get()
-            if (dialog == null) {
-                dialogs.remove(dialogWeakReference)
-                continue
-            }
+            val dialog = dialogWeakReference.get() ?: continue
             if (!dialog.isShowing) {
                 continue
             }
             val decorView = dialog.window?.decorView ?: continue
-            Log.d(TAG, "  Dialog: ${dialog.javaClass.name}, showing: ${dialog.isShowing}")
-            
+            Log.d(TAG, "  - 对话框: ${dialog.javaClass.name}, 正在显示: ${dialog.isShowing}")
             debugPrintAllTextViews(decorView, 0)
-            
             val viewImage = SimpleViewImage(decorView)
             val results = SimpleXpathParser.evaluate(viewImage, xpath)
             if (results.isNotEmpty()) {
-                Log.d(TAG, "  Found in Dialog!")
                 return results[0]
             }
         }
-        
-        Log.d(TAG, "  Not found in any dialog")
         return null
     }
-    
+
     /**
      * 打印所有 TextView 的文本内容（用于调试）
      */
@@ -129,7 +120,10 @@ object SimplePageManager {
             val text = view.text?.toString() ?: ""
             val contentDesc = view.contentDescription?.toString() ?: ""
             if (text.isNotEmpty() || contentDesc.isNotEmpty()) {
-                Log.d(TAG, "${indent}TextView[${view.javaClass.simpleName}] text='$text' contentDesc='$contentDesc'")
+                Log.d(
+                    TAG,
+                    "${indent}文本视图[${view.javaClass.simpleName}] 文本='$text' 内容描述='$contentDesc'"
+                )
             }
         }
         if (view is android.view.ViewGroup) {
@@ -138,7 +132,7 @@ object SimplePageManager {
             }
         }
     }
-    
+
     /**
      * 启用 Activity 监控
      */
@@ -160,78 +154,63 @@ object SimplePageManager {
                 }
             )
         } catch (e: Throwable) {
-            Log.e(TAG, "Hook Activity->dispatchActivityResumed error: ${e.message}")
+            Log.e(TAG, "挂钩 Activity->dispatchActivityResumed 错误: ", e)
         }
     }
-    
+
     /**
-     * 启用 Dialog 监控
+     * 如果对话框不存在则添加到监控列表
+     */
+    private fun addDialogIfNotExists(dialog: android.app.Dialog, source: String) {
+        if (!dialogs.any { it.get() === dialog }) {
+            dialogs.add(WeakReference(dialog))
+            Log.d(TAG, "对话框已从 $source 添加，总数: ${dialogs.size}")
+            triggerDialogProcessing()
+        } else {
+            Log.d(TAG, "对话框从 $source 已存在于列表中")
+        }
+    }
+
+    /**
+     * 挂钩对话框构造函数
+     */
+    private fun hookDialogConstructor(vararg parameterTypes: Any) {
+        val parameterTypesString = parameterTypes.joinToString(",") {
+            if (it is Class<*>) it.simpleName else it.toString()
+        }
+        try {
+            CompatHelpers.findAndHookConstructor(
+                "android.app.Dialog",
+                getClassLoader(),
+                *parameterTypes,
+                object : XC_MethodHook() {
+                    override fun afterHookedMethod(param: MethodHookParam) {
+                        val dialog = param.thisObject as android.app.Dialog
+                        addDialogIfNotExists(dialog, "构造函数($parameterTypesString)")
+                    }
+                }
+            )
+           // Log.i(TAG, "挂钩对话框构造函数($parameterTypesString) 成功")
+        } catch (e: Throwable) {
+            Log.e(TAG, "挂钩对话框构造函数($parameterTypesString) 错误: ", e)
+        }
+    }
+
+    /**
+     * 启用对话框监控
      */
     private fun enableWindowMonitor() {
-        Log.i(TAG, "enableWindowMonitor called, classLoader: ${mClassLoader?.javaClass?.name}")
-        
+        Log.i(TAG, "启用窗口监控被调用，类加载器: ${mClassLoader?.javaClass?.name}")
+        hookDialogConstructor("android.content.Context")
+        hookDialogConstructor("android.content.Context", Int::class.java)
+        hookDialogConstructor(
+            "android.content.Context",
+            "boolean",
+            "android.content.DialogInterface.OnCancelListener"
+        )
+
         try {
-            CompatHelpers.findAndHookConstructor(
-                "android.app.Dialog",
-                getClassLoader(),
-                "android.content.Context",
-                object : XC_MethodHook() {
-                    override fun afterHookedMethod(param: MethodHookParam) {
-                        val dialog = param.thisObject as android.app.Dialog
-                        dialogs.add(WeakReference(dialog))
-                        Log.d(TAG, "Dialog created via constructor(Context), total: ${dialogs.size}")
-                        triggerDialogProcessing()
-                    }
-                }
-            )
-            Log.i(TAG, "Hook Dialog constructor(Context) success")
-        } catch (e: Throwable) {
-            Log.e(TAG, "Hook Dialog constructor(Context) error: ${e.message}")
-        }
-        
-        try {
-            CompatHelpers.findAndHookConstructor(
-                "android.app.Dialog",
-                getClassLoader(),
-                "android.content.Context",
-                Int::class.java,
-                object : XC_MethodHook() {
-                    override fun afterHookedMethod(param: MethodHookParam) {
-                        val dialog = param.thisObject as android.app.Dialog
-                        dialogs.add(WeakReference(dialog))
-                        Log.d(TAG, "Dialog created via constructor(Context,theme), total: ${dialogs.size}")
-                        triggerDialogProcessing()
-                    }
-                }
-            )
-            Log.i(TAG, "Hook Dialog constructor(Context,theme) success")
-        } catch (e: Throwable) {
-            Log.e(TAG, "Hook Dialog constructor(Context,theme) error: ${e.message}")
-        }
-        
-        try {
-            CompatHelpers.findAndHookConstructor(
-                "android.app.Dialog",
-                getClassLoader(),
-                "android.content.Context",
-                "boolean",
-                "android.content.DialogInterface.OnCancelListener",
-                object : XC_MethodHook() {
-                    override fun afterHookedMethod(param: MethodHookParam) {
-                        val dialog = param.thisObject as android.app.Dialog
-                        dialogs.add(WeakReference(dialog))
-                        Log.d(TAG, "Dialog created via constructor(Context,cancelable,cancelListener), total: ${dialogs.size}")
-                        triggerDialogProcessing()
-                    }
-                }
-            )
-            Log.i(TAG, "Hook Dialog constructor(Context,cancelable,cancelListener) success")
-        } catch (e: Throwable) {
-            Log.e(TAG, "Hook Dialog constructor(Context,cancelable,cancelListener) error: ${e.message}")
-        }
-        
-        try {
-            val captchaDialogClass = de.robv.android.xposed.XposedHelpers.findClass(
+            val captchaDialogClass = XposedHelpers.findClass(
                 "com.alipay.rdssecuritysdk.v3.captcha.view.CaptchaDialog",
                 getClassLoader()
             )
@@ -241,66 +220,51 @@ object SimplePageManager {
                 object : XC_MethodHook() {
                     override fun afterHookedMethod(param: MethodHookParam) {
                         val dialog = param.thisObject as android.app.Dialog
-                        if (!dialogs.any { it.get() === dialog }) {
-                            dialogs.add(WeakReference(dialog))
-                            Log.d(TAG, "CaptchaDialog.show() called, added to dialogs, total: ${dialogs.size}")
-                            triggerDialogProcessing()
-                        } else {
-                            Log.d(TAG, "CaptchaDialog.show() called, already in dialogs")
-                        }
+                        addDialogIfNotExists(dialog, "CaptchaDialog.show()")
                     }
                 }
             )
-            Log.i(TAG, "Hook CaptchaDialog.show() success")
         } catch (e: Throwable) {
-            Log.e(TAG, "Hook CaptchaDialog.show() error: ${e.message}")
+            Log.e(TAG, "挂钩 CaptchaDialog.show() 错误: ", e)
         }
     }
-    
+
     /**
      * 触发 Activity 处理
      */
     private fun triggerActivity() {
-        val activity = topActivity ?: run {
-            Log.i(TAG, "no top activity found")
-            return
-        }
-        
-        val handler = activityFocusHandlerMap[activity.javaClass.name]
-        if (handler != null) {
-            if (hasPendingActivityTask) {
-                return
-            }
-            hasPendingActivityTask = true
-            triggerActivityActive(activity, handler, 0)
-        } else {
-            Log.i(TAG, "triggerActivity not found activity handler: ${activity.javaClass.name}")
-        }
+        triggerPendingActivityHandler("Activity 已恢复")
     }
-    
+
     /**
      * 触发 Dialog 处理
      */
     private fun triggerDialogProcessing() {
+        triggerPendingActivityHandler("Dialog 已创建")
+    }
+
+    /**
+     * 触发待处理的 Activity 处理器
+     */
+    private fun triggerPendingActivityHandler(source: String) {
         val activity = topActivity ?: run {
-            Log.i(TAG, "triggerDialogProcessing: no top activity found")
+            Log.i(TAG, "无法从 $source 触发处理器，未找到顶层 Activity")
             return
         }
-        
         val handler = activityFocusHandlerMap[activity.javaClass.name]
-        if (handler != null) {
-            if (hasPendingActivityTask) {
-                Log.d(TAG, "triggerDialogProcessing: has pending activity task, skip")
-                return
-            }
-            hasPendingActivityTask = true
-            Log.i(TAG, "triggerDialogProcessing: triggering activity handler for Dialog: ${activity.javaClass.name}")
-            triggerActivityActive(activity, handler, 0)
-        } else {
-            Log.d(TAG, "triggerDialogProcessing: not found activity handler: ${activity.javaClass.name}")
+        if (handler == null) {
+            Log.d(TAG, "未找到 ${activity.javaClass.name} 的处理器，来源: $source")
+            return
         }
+        if (hasPendingActivityTask) {
+            Log.d(TAG, "跳过从 $source 触发，已有待处理任务")
+            return
+        }
+        hasPendingActivityTask = true
+        Log.i(TAG, "从 $source 触发 ${activity.javaClass.name} 的处理器")
+        triggerActivityActive(activity, handler, 0)
     }
-    
+
     /**
      * 延迟触发 Activity 处理
      */
@@ -310,24 +274,21 @@ object SimplePageManager {
         triggerCount: Int
     ) {
         if (disable) {
-            Log.i(TAG, "Page Trigger manager disabled")
+            Log.i(TAG, "页面触发管理器已禁用")
             return
         }
-        
-        val job = CoroutineScope(Dispatchers.Main).launch {
+        CoroutineScope(Dispatchers.Main).launch {
             delay(taskDuration.toLong())
             try {
-                Log.i(TAG, "triggerActivityActive activity: ${activity.javaClass.name} for ActivityFocusHandler: ${activityFocusHandler.javaClass.name}")
                 hasPendingActivityTask = false
                 if (activityFocusHandler.handleActivity(activity, SimpleViewImage(activity.window.decorView))) {
                     return@launch
                 }
             } catch (throwable: Throwable) {
-                Log.e(TAG, "error to handle activity: ${activity.javaClass.name}", throwable)
+                Log.e(TAG, "处理 Activity 出错: ${activity.javaClass.name}", throwable)
             }
-            
             if (triggerCount > 10) {
-                Log.w(TAG, "the activity event trigger failed too many times: ${activityFocusHandler.javaClass}")
+              //  Log.w(TAG, "Activity 事件触发失败次数过多: ${activityFocusHandler.javaClass}")
                 return@launch
             }
             triggerActivityActive(activity, activityFocusHandler, triggerCount + 1)

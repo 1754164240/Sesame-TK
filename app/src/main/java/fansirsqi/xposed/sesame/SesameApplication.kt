@@ -1,7 +1,9 @@
 package fansirsqi.xposed.sesame
 
 import android.app.Application
+import android.content.Intent
 import android.os.Process
+import fansirsqi.xposed.sesame.service.CommandService
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.ToastUtil
 
@@ -21,11 +23,24 @@ class SesameApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         ToastUtil.init(this) // 初始化全局 Context
-
         Log.init(this)
-
         val processName = getCurrentProcessName()
         Log.runtime(TAG, "🚀 应用启动 | 进程: $processName | PID: ${Process.myPid()}")
+        // 启动 CommandService
+        startCommandService()
+    }
+
+    /**
+     * 启动 CommandService
+     */
+    private fun startCommandService() {
+        try {
+            val intent = Intent(this, CommandService::class.java)
+            startService(intent)
+            Log.runtime(TAG, "✅ CommandService 已启动")
+        } catch (e: Exception) {
+            Log.runtime(TAG, "❌ CommandService 启动失败: ${e.message}")
+        }
     }
 
     /**

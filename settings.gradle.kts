@@ -14,6 +14,7 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        maven { url = uri("https://jitpack.io") }
         maven("https://maven.aliyun.com/repository/spring")
         mavenLocal {
             content {

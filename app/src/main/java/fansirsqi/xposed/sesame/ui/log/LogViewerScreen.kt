@@ -48,6 +48,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.TrackChanges
 import androidx.compose.material.icons.filled.VerticalAlignBottom
 import androidx.compose.material.icons.filled.VerticalAlignTop
 import androidx.compose.material3.CircularProgressIndicator
@@ -93,7 +94,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
@@ -101,7 +101,6 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import fansirsqi.xposed.sesame.ui.theme.LogViewerTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
@@ -114,308 +113,348 @@ fun LogViewerScreen(
     onBackClick: () -> Unit,
     viewModel: LogViewerViewModel = viewModel()
 ) {
-    LogViewerTheme {
-        val context = LocalContext.current
-        val state by viewModel.uiState.collectAsState()
-        val floatValue by viewModel.fontSize.collectAsState()
-        val currentFontSize = floatValue.sp
 
-        val listState = rememberLazyListState()
-        val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val state by viewModel.uiState.collectAsState()
+    val floatValue by viewModel.fontSize.collectAsState()
+    val currentFontSize = floatValue.sp
 
-        // 菜单显示状态
-        var showMenu by remember { mutableStateOf(false) }
-        var isSearchActive by remember { mutableStateOf(false) }
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
 
-        val focusRequester = remember { FocusRequester() }
+    // 菜单显示状态
+    var showMenu by remember { mutableStateOf(false) }
+    var isSearchActive by remember { mutableStateOf(false) }
 
-        // 拦截返回键
-        BackHandler(enabled = isSearchActive) {
-            isSearchActive = false
-            viewModel.search("")
-        }
+    val focusRequester = remember { FocusRequester() }
 
-        // 自动滚动逻辑
-        LaunchedEffect(filePath) {
-            viewModel.loadLogs(filePath)
-            viewModel.scrollEvent.collect { index ->
-                if (index >= 0 && index < state.mappingList.size) {
-                    try {
-                        listState.scrollToItem(index)
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                    }
+    // 拦截返回键
+    BackHandler(enabled = isSearchActive) {
+        isSearchActive = false
+        viewModel.search("")
+    }
+
+    // 自动滚动逻辑
+    LaunchedEffect(filePath) {
+        viewModel.loadLogs(filePath)
+        viewModel.scrollEvent.collect { index ->
+            if (index >= 0 && index < state.mappingList.size) {
+                try {
+                    listState.scrollToItem(index)
+                } catch (e: Exception) {
+                    e.printStackTrace()
                 }
             }
         }
+    }
 
-        // 自动聚焦
-        LaunchedEffect(isSearchActive) {
-            if (isSearchActive) {
-                delay(100)
-                focusRequester.requestFocus()
-            }
+    // 自动聚焦
+    LaunchedEffect(isSearchActive) {
+        if (isSearchActive) {
+            delay(100)
+            focusRequester.requestFocus()
         }
+    }
 
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        navigationIconContentColor = MaterialTheme.colorScheme.onPrimary,
-                        actionIconContentColor = MaterialTheme.colorScheme.onPrimary
-                    ),
-                    navigationIcon = {
-                        // 【Tooltip 1】返回按钮
-                        TooltipBox(
-                            positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Below),
-                            tooltip = { PlainTooltip { Text("返回") } },
-                            state = rememberTooltipState()
-                        ) {
-                            IconButton(onClick = {
-                                if (isSearchActive) {
-                                    isSearchActive = false
-                                    viewModel.search("")
-                                } else {
-                                    onBackClick()
-                                }
-                            }) {
-                                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
-                            }
-                        }
-                    },
-                    title = {
-                        // Title 区域动画
-                        AnimatedContent(
-                            targetState = isSearchActive,
-                            transitionSpec = {
-                                if (targetState) {
-                                    (slideInHorizontally { it } + fadeIn()).togetherWith(slideOutHorizontally { -it } + fadeOut())
-                                } else {
-                                    (slideInHorizontally { -it } + fadeIn()).togetherWith(slideOutHorizontally { it } + fadeOut())
-                                }
-                            },
-                            label = "TitleAnimation"
-                        ) { searching ->
-                            if (searching) {
-                                TextField(
-                                    value = state.searchQuery,
-                                    onValueChange = { viewModel.search(it) },
-                                    placeholder = {
-                                        Text(
-                                            "Search...",
-                                            style = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f))
-                                        )
-                                    },
-                                    singleLine = true,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .focusRequester(focusRequester),
-                                    colors = TextFieldDefaults.colors(
-                                        focusedContainerColor = Color.Transparent,
-                                        unfocusedContainerColor = Color.Transparent,
-                                        focusedIndicatorColor = Color.Transparent,
-                                        unfocusedIndicatorColor = Color.Transparent,
-                                        cursorColor = MaterialTheme.colorScheme.onPrimary
-                                    ),
-                                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onPrimary),
-                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                                    keyboardActions = KeyboardActions(onSearch = { /* 收起键盘逻辑 */ })
-                                )
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(
+                    // ✅ 统一使用 Surface (背景) 和 OnSurface (前景)
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onSurface,
+                    actionIconContentColor = MaterialTheme.colorScheme.onSurface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface
+                ),
+                navigationIcon = {
+                    TooltipBox(
+                        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Below),
+                        tooltip = { PlainTooltip { Text("返回") } },
+                        state = rememberTooltipState()
+                    ) {
+                        IconButton(onClick = {
+                            if (isSearchActive) {
+                                isSearchActive = false
+                                viewModel.search("")
                             } else {
-                                Column {
+                                onBackClick()
+                            }
+                        }) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
+                        }
+                    }
+                },
+                title = {
+                    AnimatedContent(
+                        targetState = isSearchActive,
+                        transitionSpec = {
+                            if (targetState) {
+                                (slideInHorizontally { it } + fadeIn()).togetherWith(slideOutHorizontally { -it } + fadeOut())
+                            } else {
+                                (slideInHorizontally { -it } + fadeIn()).togetherWith(slideOutHorizontally { it } + fadeOut())
+                            }
+                        },
+                        label = "TitleAnimation"
+                    ) { searching ->
+                        if (searching) {
+                            TextField(
+                                value = state.searchQuery,
+                                onValueChange = { viewModel.search(it) },
+                                placeholder = {
                                     Text(
-                                        File(filePath).name,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        color = MaterialTheme.colorScheme.onPrimary
+                                        "Search...",
+                                        // ✅ 修正颜色：使用 onSurfaceVariant (灰色)，因为背景是 Surface
+                                        style = MaterialTheme.typography.bodyLarge.copy(
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
                                     )
-                                    Text(
-                                        if (state.isLoading) "Loading..." else "${state.mappingList.size} lines",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f)
-                                    )
-                                }
+                                },
+                                singleLine = true,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .focusRequester(focusRequester),
+                                colors = TextFieldDefaults.colors(
+                                    focusedContainerColor = Color.Transparent,
+                                    unfocusedContainerColor = Color.Transparent,
+                                    focusedIndicatorColor = Color.Transparent,
+                                    unfocusedIndicatorColor = Color.Transparent,
+                                    // ✅ 修正光标颜色
+                                    cursorColor = MaterialTheme.colorScheme.onSurface
+                                ),
+                                // ✅ 修正输入文字颜色
+                                textStyle = MaterialTheme.typography.bodyLarge.copy(
+                                    color = MaterialTheme.colorScheme.onSurface
+                                ),
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                                keyboardActions = KeyboardActions(onSearch = { /* 收起键盘逻辑 */ })
+                            )
+                        } else {
+                            Column {
+                                Text(
+                                    File(filePath).name,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    // ✅ 统一颜色
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    if (state.isLoading) "Loading..." else "${state.mappingList.size} lines",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    // ✅ 统一颜色
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
                         }
-                    },
-                    actions = {
-                        AnimatedContent(
-                            targetState = isSearchActive,
-                            transitionSpec = { fadeIn() togetherWith fadeOut() },
-                            label = "ActionAnimation"
-                        ) { searching ->
-                            if (searching) {
-                                // 【Tooltip 2】清除搜索按钮
+                    }
+                },
+                actions = {
+                    AnimatedContent(
+                        targetState = isSearchActive,
+                        transitionSpec = { fadeIn() togetherWith fadeOut() },
+                        label = "ActionAnimation"
+                    ) { searching ->
+                        if (searching) {
+                            TooltipBox(
+                                positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Below),
+                                tooltip = { PlainTooltip { Text("退出搜索") } },
+                                state = rememberTooltipState()
+                            ) {
+                                IconButton(onClick = { viewModel.search("") }) {
+                                    Icon(Icons.Default.Close, "Clear")
+                                }
+                            }
+                        } else {
+                            Row {
+                                val autoScrollText = if (state.autoScroll) "暂停自动滚动" else "开启自动滚动"
                                 TooltipBox(
                                     positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Below),
-                                    tooltip = { PlainTooltip { Text("退出搜索") } },
+                                    tooltip = { PlainTooltip { Text(autoScrollText) } },
                                     state = rememberTooltipState()
                                 ) {
-                                    IconButton(onClick = { viewModel.search("") }) {
-                                        Icon(Icons.Default.Close, "Clear")
+                                    IconButton(onClick = { viewModel.toggleAutoScroll(!state.autoScroll) }) {
+                                        val icon = if (state.autoScroll) Icons.Default.TrackChanges else Icons.Default.Pause
+                                        // ✅ 修正高亮色：使用 Primary 色，或者 Tertiary 色
+                                        val tint = if (state.autoScroll) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                        Icon(icon, "AutoScroll", tint = tint)
                                     }
                                 }
-                            } else {
-                                Row {
-                                    // 【Tooltip 3】自动滚动按钮 (这是你重点要的)
-                                    val autoScrollText = if (state.autoScroll) "暂停自动滚动" else "开启自动滚动"
+
+                                Box {
                                     TooltipBox(
                                         positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Below),
-                                        tooltip = { PlainTooltip { Text(autoScrollText) } },
+                                        tooltip = { PlainTooltip { Text("更多选项") } },
                                         state = rememberTooltipState()
                                     ) {
-                                        IconButton(onClick = { viewModel.toggleAutoScroll(!state.autoScroll) }) {
-                                            // 换成了 Core 库的 VerticalAlignBottom，避免 Extended 库体积过大
-                                            val icon = if (state.autoScroll) Icons.Default.VerticalAlignBottom else Icons.Default.Pause
-                                            val tint = if (state.autoScroll) Color.Green else MaterialTheme.colorScheme.onPrimary
-                                            Icon(icon, "AutoScroll", tint = tint)
+                                        IconButton(onClick = { showMenu = true }) {
+                                            Icon(Icons.Default.MoreVert, "More Options")
                                         }
                                     }
 
-                                    Box {
-                                        TooltipBox(
-                                            positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Below),
-                                            tooltip = { PlainTooltip { Text("更多选项") } },
-                                            state = rememberTooltipState()
-                                        ) {
-                                            IconButton(onClick = { showMenu = true }) {
-                                                Icon(Icons.Default.MoreVert, "More Options")
-                                            }
-                                        }
-
-                                        DropdownMenu(
-                                            expanded = showMenu,
-                                            onDismissRequest = { showMenu = false }
-                                        ) {
-                                            // === 原有：搜索 ===
-                                            DropdownMenuItem(
-                                                text = { Text("搜索日志") },
-                                                onClick = {
-                                                    showMenu = false
-                                                    isSearchActive = true
-                                                },
-                                                leadingIcon = { Icon(Icons.Default.Search, null) }
-                                            )
-
-                                            HorizontalDivider()
-
-                                            // === 新增：滚动控制 ===
-                                            DropdownMenuItem(
-                                                text = { Text("滑动到顶部") },
-                                                onClick = {
-                                                    showMenu = false
-                                                    // 使用父作用域的 scope 和 listState
-                                                    scope.launch { listState.scrollToItem(0) }
-                                                },
-                                                leadingIcon = { Icon(Icons.Default.VerticalAlignTop, null) }
-                                            )
-                                            DropdownMenuItem(
-                                                text = { Text("滑动到底部") },
-                                                onClick = {
-                                                    showMenu = false
-                                                    scope.launch {
-                                                        val lastIndex = (state.mappingList.size - 1).coerceAtLeast(0)
-                                                        listState.scrollToItem(lastIndex)
-                                                    }
-                                                },
-                                                leadingIcon = { Icon(Icons.Default.VerticalAlignBottom, null) }
-                                            )
-
-                                            HorizontalDivider()
-
-
-                                            // === 二级菜单：字体设置 ===
-                                            // 定义二级菜单的显示状态
-                                            var showFontSubMenu by remember { mutableStateOf(false) }
-
-                                            // 使用 Box 作为锚点，确保二级菜单显示在“字体设置”这一项旁边
-                                            Box {
-                                                DropdownMenuItem(
-                                                    text = { Text("字体设置") },
-                                                    onClick = { showFontSubMenu = true },
-                                                    // 左侧图标（可选，如果没有 FormatSize 可以换别的）
-                                                    leadingIcon = { Icon(Icons.Default.FontDownload, null) },
-                                                    // 右侧指示箭头
-//                                                    trailingIcon = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null) }
-                                                )
-
-                                                // 二级菜单本体
-                                                DropdownMenu(
-                                                    expanded = showFontSubMenu,
-                                                    onDismissRequest = { showFontSubMenu = false },
-                                                    // 这里的 offset 可以微调二级菜单的位置，让它稍微错开一点
-                                                    offset = androidx.compose.ui.unit.DpOffset(x = 10.dp, y = 0.dp)
-                                                ) {
-                                                    DropdownMenuItem(
-                                                        text = { Text("放大字体") },
-                                                        onClick = {
-                                                            // 这里看你需求：点击后是仅关闭二级菜单，还是关闭所有菜单？
-                                                            // 通常为了方便连续调节，可以只操作字体，不关闭菜单。
-                                                            // 但如果是为了整洁，可以设为 showMenu = false
-                                                            viewModel.increaseFontSize()
-                                                        },
-                                                        leadingIcon = { Icon(Icons.Default.Add, null) }
-                                                    )
-                                                    DropdownMenuItem(
-                                                        text = { Text("缩小字体") },
-                                                        onClick = { viewModel.decreaseFontSize() },
-                                                        leadingIcon = { Icon(Icons.Default.Remove, null) }
-                                                    )
-                                                    HorizontalDivider()
-                                                    DropdownMenuItem(
-                                                        text = { Text("重置大小") },
-                                                        onClick = {
-                                                            viewModel.resetFontSize()
-                                                            showFontSubMenu = false // 重置通常是一次性操作，可以关闭二级菜单
-                                                        },
-                                                        leadingIcon = { Icon(Icons.Default.Refresh, null) }
-                                                    )
+                                    DropdownMenu(
+                                        expanded = showMenu,
+                                        onDismissRequest = { showMenu = false }
+                                    ) {
+                                        // ... 菜单项保持不变，它们会自动使用 Theme 样式 ...
+                                        DropdownMenuItem(
+                                            text = { Text("搜索日志") },
+                                            onClick = { showMenu = false; isSearchActive = true },
+                                            leadingIcon = { Icon(Icons.Default.Search, null) }
+                                        )
+                                        HorizontalDivider()
+                                        DropdownMenuItem(
+                                            text = { Text("滑动到顶部") },
+                                            onClick = { showMenu = false; scope.launch { listState.scrollToItem(0) } },
+                                            leadingIcon = { Icon(Icons.Default.VerticalAlignTop, null) }
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text("滑动到底部") },
+                                            onClick = {
+                                                showMenu = false
+                                                scope.launch {
+                                                    val lastIndex = (state.mappingList.size - 1).coerceAtLeast(0)
+                                                    listState.scrollToItem(lastIndex)
                                                 }
+                                            },
+                                            leadingIcon = { Icon(Icons.Default.VerticalAlignBottom, null) }
+                                        )
+                                        HorizontalDivider()
+
+                                        // 二级菜单逻辑 ...
+                                        var showFontSubMenu by remember { mutableStateOf(false) }
+                                        Box {
+                                            DropdownMenuItem(
+                                                text = { Text("字体设置") },
+                                                onClick = { showFontSubMenu = true },
+                                                leadingIcon = { Icon(Icons.Default.FontDownload, null) }
+                                            )
+                                            DropdownMenu(
+                                                expanded = showFontSubMenu,
+                                                onDismissRequest = { showFontSubMenu = false },
+                                                offset = androidx.compose.ui.unit.DpOffset(x = 10.dp, y = 0.dp)
+                                            ) {
+                                                DropdownMenuItem(
+                                                    text = { Text("放大字体") },
+                                                    onClick = { viewModel.increaseFontSize() },
+                                                    leadingIcon = { Icon(Icons.Default.Add, null) }
+                                                )
+                                                DropdownMenuItem(
+                                                    text = { Text("缩小字体") },
+                                                    onClick = { viewModel.decreaseFontSize() },
+                                                    leadingIcon = { Icon(Icons.Default.Remove, null) }
+                                                )
+                                                HorizontalDivider()
+                                                DropdownMenuItem(
+                                                    text = { Text("重置大小") },
+                                                    onClick = { viewModel.resetFontSize(); showFontSubMenu = false },
+                                                    leadingIcon = { Icon(Icons.Default.Refresh, null) }
+                                                )
                                             }
-
-                                            HorizontalDivider()
-
-                                            // === 原有：文件操作 ===
-                                            DropdownMenuItem(
-                                                text = { Text("导出文件") },
-                                                onClick = {
-                                                    showMenu = false
-                                                    viewModel.exportLogFile(context)
-                                                },
-                                                leadingIcon = { Icon(Icons.Default.Share, null) }
-                                            )
-
-                                            DropdownMenuItem(
-                                                text = { Text("清空日志", color = MaterialTheme.colorScheme.error) },
-                                                onClick = {
-                                                    showMenu = false
-                                                    viewModel.clearLogFile(context)
-                                                },
-                                                leadingIcon = { Icon(Icons.Default.CleaningServices, null, tint = MaterialTheme.colorScheme.error) }
-                                            )
                                         }
+                                        HorizontalDivider()
+                                        DropdownMenuItem(
+                                            text = { Text("导出文件") },
+                                            onClick = { showMenu = false; viewModel.exportLogFile(context) },
+                                            leadingIcon = { Icon(Icons.Default.Share, null) }
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text("清空日志", color = MaterialTheme.colorScheme.error) },
+                                            onClick = { showMenu = false; viewModel.clearLogFile(context) },
+                                            leadingIcon = { Icon(Icons.Default.CleaningServices, null, tint = MaterialTheme.colorScheme.error) }
+                                        )
                                     }
                                 }
                             }
                         }
                     }
-                )
-            }
-        ) { padding ->
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .background(MaterialTheme.colorScheme.background)
-                    .pointerInput(Unit) {
-                        detectTransformGestures { _, _, zoom, _ ->
-                            if (zoom != 1f) viewModel.scaleFontSize(zoom)
+                }
+            )
+        }
+    ) { padding ->
+        // Body 内容
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .background(MaterialTheme.colorScheme.background)
+                .pointerInput(Unit) {
+                    detectTransformGestures { _, _, zoom, _ ->
+                        if (zoom != 1f) viewModel.scaleFontSize(zoom)
+                    }
+                }
+        ) {
+            if (state.isLoading && state.mappingList.isEmpty()) {
+                Column(
+                    modifier = Modifier.align(Alignment.Center),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    CircularProgressIndicator()
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "Loading...",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                }
+            } else {
+                SelectionContainer {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(start = 8.dp, end = 16.dp, top = 2.dp, bottom = 2.dp)
+                    ) {
+                        items(
+                            count = state.mappingList.size,
+                            key = { index -> index },
+                            contentType = { 1 } // 🔥 显式指定 contentType，帮助 Compose 复用节点
+                        ) { index ->
+                            LogLineItem(
+                                line = viewModel.getLineContent(index),
+                                searchQuery = state.searchQuery,
+                                fontSize = currentFontSize,
+                                textColor = MaterialTheme.colorScheme.onBackground
+                            )
                         }
                     }
-            ) {
-                if (state.isLoading && state.mappingList.isEmpty()) {
-                    // 修复：将 Loading 内容包裹在 Column 中，确保正确居中
+                }
+                DraggableScrollbar(listState = listState, totalItems = state.mappingList.size, modifier = Modifier.align(Alignment.CenterEnd))
+            }
+
+            if (!state.autoScroll && !state.isSearching) {
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(16.dp, bottom = 32.dp, end = 32.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    if (listState.canScrollBackward) {
+                        SmallFloatingActionButton(
+                            onClick = { scope.launch { listState.scrollToItem(0) } },
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                        ) {
+                            Icon(Icons.Default.KeyboardArrowUp, "Top")
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+                    if (listState.canScrollForward) {
+                        SmallFloatingActionButton(
+                            onClick = { viewModel.toggleAutoScroll(true) },
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
+                        ) {
+                            Icon(Icons.Default.KeyboardArrowDown, "Bottom")
+                        }
+                    }
+                }
+            }
+
+            if (state.isSearching) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.background.copy(alpha = 0.6f))
+                        .pointerInput(Unit) {}
+                ) {
                     Column(
                         modifier = Modifier.align(Alignment.Center),
                         horizontalAlignment = Alignment.CenterHorizontally
@@ -423,123 +462,72 @@ fun LogViewerScreen(
                         CircularProgressIndicator()
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            "Loading...",
+                            "Searching...",
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.onBackground
                         )
                     }
-                } else {
-                    SelectionContainer {
-                        LazyColumn(
-                            state = listState,
-                            modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(start = 8.dp, end = 16.dp, top = 2.dp, bottom = 2.dp)
-                        ) {
-                            items(
-                                count = state.mappingList.size,
-                                key = { index -> index }
-                            ) { index ->
-                                val lineContent = viewModel.getLineContent(index)
-                                LogLineItem(
-                                    line = lineContent,
-                                    searchQuery = state.searchQuery,
-                                    fontSize = currentFontSize,
-                                    textColor = MaterialTheme.colorScheme.onBackground
-                                )
-                            }
-                        }
-                    }
-                    DraggableScrollbar(listState = listState, totalItems = state.mappingList.size, modifier = Modifier.align(Alignment.CenterEnd))
-                }
-
-                if (!state.autoScroll && !state.isSearching) {
-                    Column(
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .padding(16.dp, bottom = 32.dp, end = 32.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        if (listState.canScrollBackward) {
-                            SmallFloatingActionButton(
-                                onClick = { scope.launch { listState.scrollToItem(0) } },
-                                containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                            ) {
-                                Icon(Icons.Default.KeyboardArrowUp, "Top")
-                            }
-                            Spacer(modifier = Modifier.height(12.dp))
-                        }
-                        if (listState.canScrollForward) {
-                            SmallFloatingActionButton(
-                                onClick = { viewModel.toggleAutoScroll(true) },
-                                containerColor = MaterialTheme.colorScheme.primary,
-                                contentColor = MaterialTheme.colorScheme.onPrimary
-                            ) {
-                                Icon(Icons.Default.KeyboardArrowDown, "Bottom")
-                            }
-                        }
-                    }
-                }
-
-                if (state.isSearching) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(MaterialTheme.colorScheme.background.copy(alpha = 0.6f))
-                            .pointerInput(Unit) {}
-                    ) {
-                        Column(
-                            modifier = Modifier.align(Alignment.Center),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            CircularProgressIndicator()
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                "Searching...",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.onBackground
-                            )
-                        }
-                    }
                 }
             }
         }
     }
 }
 
-// LogLineItem 和 DraggableScrollbar 保持不变...
+
 @Composable
 fun LogLineItem(line: String, searchQuery: String, fontSize: TextUnit, textColor: Color) {
-    val annotatedString = if (searchQuery.isNotEmpty()) {
-        buildAnnotatedString {
-            val lowerLine = line.lowercase()
-            val lowerQuery = searchQuery.lowercase()
-            var startIndex = 0
-            while (true) {
-                val index = lowerLine.indexOf(lowerQuery, startIndex)
-                if (index == -1) {
-                    append(line.substring(startIndex)); break
+    // 获取高亮颜色
+    val highlightColor = MaterialTheme.colorScheme.tertiary
+    val onHighlightColor = MaterialTheme.colorScheme.onTertiary
+
+    // 🔥 优化点：使用 remember 缓存计算结果
+    // 只有当 line 或 searchQuery 变化时，才会重新执行 block 里的计算逻辑
+    val annotatedString = remember(line, searchQuery, highlightColor, onHighlightColor) {
+        if (searchQuery.isNotEmpty()) {
+            buildAnnotatedString {
+                val lowerLine = line.lowercase()
+                val lowerQuery = searchQuery.lowercase()
+                var startIndex = 0
+                // 安全限制：防止极长行导致的死循环或超时
+                val maxSearchLength = 2000
+                val safeLineLength = line.length.coerceAtMost(maxSearchLength)
+
+                while (true) {
+                    val index = lowerLine.indexOf(lowerQuery, startIndex)
+                    if (index == -1 || index >= safeLineLength) {
+                        append(line.substring(startIndex))
+                        break
+                    }
+                    // 添加普通文本
+                    append(line.substring(startIndex, index))
+                    // 添加高亮文本
+                    withStyle(style = SpanStyle(background = highlightColor, color = onHighlightColor)) {
+                        append(line.substring(index, index + searchQuery.length))
+                    }
+                    startIndex = index + searchQuery.length
                 }
-                append(line.substring(startIndex, index))
-                withStyle(style = SpanStyle(background = Color(0xFFE64000), color = Color.White)) { append(line.substring(index, index + searchQuery.length)) }
-                startIndex = index + searchQuery.length
             }
+        } else {
+            // 如果没有搜索，直接返回普通 AnnotatedString，开销极小
+            // 注意：这里不用 buildAnnotatedString { append(line) }
+            // 而是直接用 AnnotatedString(line) 构造，省去 Builder 开销
+            androidx.compose.ui.text.AnnotatedString(line)
         }
-    } else {
-        buildAnnotatedString { append(line) }
     }
+
     Text(
         text = annotatedString,
         color = textColor,
         fontSize = fontSize,
-        fontFamily = FontFamily.Monospace,
-        lineHeight = fontSize * 1.2f,
+        style = MaterialTheme.typography.bodyMedium.copy(
+            lineHeight = fontSize * 1.2f
+        ),
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 0.dp)
+            .padding(vertical = 0.dp) // 减少不必要的 padding
     )
 }
-
+// DraggableScrollbar 保持不变
 @Composable
 fun DraggableScrollbar(listState: LazyListState, totalItems: Int, modifier: Modifier = Modifier) {
     if (totalItems <= 0) return

@@ -12,8 +12,9 @@ import com.fasterxml.jackson.core.type.TypeReference
 import fansirsqi.xposed.sesame.BuildConfig
 import fansirsqi.xposed.sesame.R
 import fansirsqi.xposed.sesame.entity.ExtendFunctionItem
-import fansirsqi.xposed.sesame.newui.WatermarkView
+//import fansirsqi.xposed.sesame.newui.WatermarkView
 import fansirsqi.xposed.sesame.newutil.DataStore
+import fansirsqi.xposed.sesame.ui.compose.WatermarkInjector
 import fansirsqi.xposed.sesame.ui.widget.ExtendFunctionAdapter
 import fansirsqi.xposed.sesame.util.Detector.getApiUrl
 import fansirsqi.xposed.sesame.util.FansirsqiUtil
@@ -42,7 +43,7 @@ class ExtendActivity : BaseActivity() {
         baseTitle = getString(R.string.extended_func)
         setupRecyclerView()
         populateExtendFunctions()
-        WatermarkView.install(this)
+        WatermarkInjector.inject(this);
     }
 
     private fun setupRecyclerView() {

@@ -25,13 +25,13 @@ import java.util.Map;
 import fansirsqi.xposed.sesame.R;
 import fansirsqi.xposed.sesame.data.Config;
 import fansirsqi.xposed.sesame.data.UIConfig;
-import fansirsqi.xposed.sesame.data.ViewAppInfo;
 import fansirsqi.xposed.sesame.entity.AlipayUser;
 import fansirsqi.xposed.sesame.model.Model;
 import fansirsqi.xposed.sesame.model.ModelConfig;
 import fansirsqi.xposed.sesame.model.SelectModelFieldFunc;
-import fansirsqi.xposed.sesame.newui.WatermarkView;
+//import fansirsqi.xposed.sesame.newui.WatermarkView;
 import fansirsqi.xposed.sesame.task.ModelTask;
+import fansirsqi.xposed.sesame.ui.compose.WatermarkInjector;
 import fansirsqi.xposed.sesame.ui.widget.ContentPagerAdapter;
 import fansirsqi.xposed.sesame.ui.widget.ListDialog;
 import fansirsqi.xposed.sesame.ui.widget.TabAdapter;
@@ -114,12 +114,7 @@ public class SettingActivity extends BaseActivity {
             setBaseSubtitle(getString(R.string.settings) + ": " + this.userName);
         }
         initializeTabs();
-        WatermarkView watermarkView = WatermarkView.Companion.install(this);
-        String tag = "用户: " + userName + "\n ID: " + userId;
-        if (userName.equals("默认") || userId == null) {
-            tag = "用户: " + "未登录" + "\n ID: " + "*************";
-        }
-        watermarkView.setWatermarkText(tag);
+        WatermarkInjector.inject(this);
     }
 
     private void initializeTabs() {

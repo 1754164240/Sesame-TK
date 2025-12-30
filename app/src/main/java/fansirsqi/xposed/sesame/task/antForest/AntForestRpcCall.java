@@ -186,7 +186,7 @@ public class AntForestRpcCall {
     }
 
     public static RpcEntity batchEnergyRpcEntity(String bizType, String userId, List<
-                    Long> bubbleIds)
+            Long> bubbleIds)
             throws JSONException {
         JSONObject arg = new JSONObject();
         arg.put("bizType", bizType);
@@ -533,6 +533,11 @@ public class AntForestRpcCall {
         );
     }
 
+    /** 6秒拼手速 兼容模式打地鼠 */
+    public static String oldstartWhackMole(String source) {
+        return RequestManager.requestString("alipay.antforest.forest.h5.startWhackMole", "[{\"source\":\"" + source + "\"}]");
+    }
+
     /** 打单个地鼠 道具 */
     public static String whackMole(long moleId, String token) throws JSONException
     {
@@ -548,8 +553,17 @@ public class AntForestRpcCall {
         );
     }
 
-    public static String settlementWhackMole(String token) 
-    throws JSONException {
+    /**
+     * 兼容模式打单个地鼠
+     */
+    public static String oldwhackMole(long moleId, String token, String source) {
+        return RequestManager.requestString(
+                "alipay.antforest.forest.h5.whackMole",
+                "[{\"moleId\":" + moleId + ",\"source\":\"" + source + "\",\"token\":\"" + token + "\",\"version\":\"" + VERSION + "\"}]");
+    }
+
+    public static String settlementWhackMole(String token)
+            throws JSONException {
         // moleIdList 改为 1 ,20（包含 1-20）
         List<Integer> moleIdList = IntStream.rangeClosed(1, 15)
                 .boxed()
@@ -565,6 +579,21 @@ public class AntForestRpcCall {
                 "[" + param + "]"
         );
     }
+
+    //兼容模式结算
+    public static String oldsettlementWhackMole(String token, List<String> moleIdList, String source) {
+        return RequestManager.requestString(
+                "alipay.antforest.forest.h5.settlementWhackMole",
+                "[{\"moleIdList\":["
+                        + String.join(",", moleIdList)
+                        + "],\"settlementScene\":\"NORMAL\",\"source\":\"" + source + "\",\"token\":\""
+                        + token
+                        + "\",\"version\":\""
+                        + VERSION
+                        + "\"}]");
+    }
+
+
 
     /** 森林集市 */
     public static String consultForSendEnergyByAction(String sourceType) {
@@ -627,7 +656,7 @@ public class AntForestRpcCall {
 
     /** 上传照片 */
     public static String ecolifeUploadDishImage(String operateType, String imageId,
-            double conf1, double conf2, double conf3, String dayPoint) {
+                                                double conf1, double conf2, double conf3, String dayPoint) {
         return RequestManager.requestString("alipay.ecolife.rpc.h5.uploadDishImage",
                 "[{\"channel\":\"ALIPAY\",\"dayPoint\":\"" + dayPoint +
                         "\",\"source\":\"photo-comparison\",\"uploadParamMap\":{\"AIResult\":[{\"conf\":" + conf1 + ",\"kvPair\":false," +

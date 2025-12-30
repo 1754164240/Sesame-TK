@@ -41,7 +41,6 @@ import fansirsqi.xposed.sesame.BuildConfig;
 import fansirsqi.xposed.sesame.R;
 import fansirsqi.xposed.sesame.data.Config;
 import fansirsqi.xposed.sesame.data.UIConfig;
-import fansirsqi.xposed.sesame.data.ViewAppInfo;
 import fansirsqi.xposed.sesame.entity.AlipayUser;
 import fansirsqi.xposed.sesame.model.Model;
 import fansirsqi.xposed.sesame.model.ModelConfig;
@@ -49,8 +48,9 @@ import fansirsqi.xposed.sesame.model.ModelField;
 import fansirsqi.xposed.sesame.model.ModelFields;
 import fansirsqi.xposed.sesame.model.ModelGroup;
 import fansirsqi.xposed.sesame.model.SelectModelFieldFunc;
-import fansirsqi.xposed.sesame.newui.WatermarkView;
+//import fansirsqi.xposed.sesame.newui.WatermarkView;
 import fansirsqi.xposed.sesame.task.ModelTask;
+import fansirsqi.xposed.sesame.ui.compose.WatermarkInjector;
 import fansirsqi.xposed.sesame.ui.dto.ModelDto;
 import fansirsqi.xposed.sesame.ui.dto.ModelFieldInfoDto;
 import fansirsqi.xposed.sesame.ui.dto.ModelFieldShowDto;
@@ -206,12 +206,7 @@ public class WebSettingsActivity extends BaseActivity {
         for (ModelGroup modelGroup : ModelGroup.values()) {
             groupList.add(new ModelGroupDto(modelGroup.getCode(), modelGroup.getName(), modelGroup.getIcon()));
         }
-        WatermarkView watermarkView = WatermarkView.Companion.install(this);
-        String tag = "用户: " + userName + "\n ID: " + userId;
-        if (userName.equals("默认") || userId == null) {
-            tag = "用户: " + "未登录" + "\n ID: " + "*************";
-        }
-        watermarkView.setWatermarkText(tag);
+        WatermarkInjector.inject(this);
     }
 
 

@@ -597,6 +597,11 @@ class AntFarm : ModelTask() {
             if (enterFarm() == null) {
                 return
             }
+            //先遣返，再雇佣，喂鸡
+            if (sendBackAnimal!!.value) {
+                sendBackAnimal()
+                tc.countDebug("遣返")
+            }
             // 雇佣小鸡
             if (hireAnimal!!.value) {
                 hireAnimal()
@@ -613,10 +618,6 @@ class AntFarm : ModelTask() {
             if (rewardFriend!!.value) {
                 rewardFriend()
                 tc.countDebug("打赏好友")
-            }
-            if (sendBackAnimal!!.value) {
-                sendBackAnimal()
-                tc.countDebug("遣返")
             }
 
             if (receiveFarmToolReward!!.value) {
@@ -1080,6 +1081,7 @@ class AntFarm : ModelTask() {
             Log.record(TAG, "还有待领取的饲料")
             receiveFarmAwards() // 该步骤会自动计算饲料数量，不需要重复刷新状态
         }
+
         // 2. 判断是否需要喂食
         if (AnimalFeedStatus.HUNGRY.name == ownerAnimal.animalFeedStatus) {
             if (feedAnimal!!.value) {
@@ -1143,7 +1145,8 @@ class AntFarm : ModelTask() {
                 syncAnimalStatus(ownerFarmId)
             }
         }
-// 5. 计算并安排下一次自动喂食任务（仅当小鸡不在睡觉时）
+
+        // 5. 计算并安排下一次自动喂食任务（仅当小鸡不在睡觉时）
         if (AnimalFeedStatus.SLEEPY.name != ownerAnimal.animalFeedStatus) {
             try {
                 // 直接使用服务器计算的权威倒计时（单位：秒）
@@ -1171,6 +1174,11 @@ class AntFarm : ModelTask() {
                                         enterFarm()
                                         // 同步最新状态
                                         syncAnimalStatus(ownerFarmId)
+                                        // 遣返
+                                        sendBackAnimal()
+                                        // 雇佣小鸡
+                                        hireAnimal()
+                                        // 喂鸡
                                         handleAutoFeedAnimal()
                                         Log.record(TAG, "🔄 下一次蹲点任务已创建")
                                     } catch (e: Exception) {
@@ -1192,7 +1200,6 @@ class AntFarm : ModelTask() {
                             // 刷新状态
                             syncAnimalStatus(ownerFarmId)
                         }
-                        //handleAutoFeedAnimal()
                     }
                 }
             } catch (e: Exception) {

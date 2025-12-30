@@ -1,7 +1,7 @@
-package fansirsqi.xposed.sesame.hook
+package fansirsqi.xposed.sesame.hook.internal
 
 import de.robv.android.xposed.XposedHelpers
-import fansirsqi.xposed.sesame.hook.ApplicationHook.getAppContext
+import fansirsqi.xposed.sesame.hook.ApplicationHook
 import fansirsqi.xposed.sesame.util.Log
 
 /**
@@ -37,9 +37,9 @@ object SecurityBodyHelper {
                 Log.error(TAG, "SecurityBodyHelper 未初始化，请先调用 init 方法")
                 return null
             }
-            
+
             // 使用 appContext 作为上下文
-            val appContext = getAppContext()
+            val appContext = ApplicationHook.getAppContext()
             if (appContext == null) {
                 Log.error(TAG, "appContext 为 null，可能应用还未完全启动，请稍后再试")
                 return null
@@ -53,7 +53,7 @@ object SecurityBodyHelper {
                 Log.error(TAG, "无法获取 SecurityGuardManager 实例")
                 return null
             }
-            
+
             // 获取 ISecurityBodyComponent 实例
             val securityBodyComponent = XposedHelpers.callMethod(
                 securityGuardManager,
@@ -62,7 +62,7 @@ object SecurityBodyHelper {
                 Log.error(TAG, "无法获取 ISecurityBodyComponent 实例")
                 return null
             }
-            
+
             // 调用 getSecurityBodyDataEx 方法，参数与 SecurityBodyWuaBridgeExtension 中完全一致
             // getSecurityBodyDataEx((String) null, (String) null, "", (HashMap) null, type, 0)
             val result = XposedHelpers.callMethod(
@@ -75,7 +75,7 @@ object SecurityBodyHelper {
                 type,
                 0
             ) as? String
-            
+
             return if (!result.isNullOrEmpty()) {
                 result
             } else {

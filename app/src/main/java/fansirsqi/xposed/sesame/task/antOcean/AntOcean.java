@@ -685,18 +685,20 @@ public class AntOcean extends ModelTask {
                         // 获取错误码,用于自动加入黑名单
                         String errorCode = joFinishTask.optString("code", "");
                         String desc = joFinishTask.optString("desc", "");
-                        
-                        // 自动根据错误码加入黑名单
-                        TaskBlacklist.INSTANCE.autoAddToBlacklist(sceneCode, taskTitle, errorCode);
-                        
+
+                            TaskBlacklist.INSTANCE.autoAddToBlacklist(sceneCode, taskTitle, errorCode);
+
                         // 检查特定错误码:不支持RPC完成的任务,直接跳过
                         if ("400000040".equals(errorCode) || desc.contains("不支持RPC完成")) {
                             continue;
                         }
 
-                        if (count > 1) {
-                            // 多次失败的任务加入黑名单
+                        if (count > 3) {
                             TaskBlacklist.INSTANCE.addToBlacklist(taskType, taskTitle);
+//                             多次失败的任务加入黑名单（排除BUSINESS_LIGHTS03随机任务：逛一逛市集15s）
+//                            if (!"BUSINESS_LIGHTS03随机任务：逛一逛市集15s".equals(taskTitle)) {
+//
+//                            }
                         } else {
                             if (ResChecker.checkRes(TAG, joFinishTask)) {
                                 Log.forest("海洋任务🌊完成[" + taskTitle + "]");

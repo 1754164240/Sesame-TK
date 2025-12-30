@@ -28,6 +28,14 @@ public final class StatusFlags {
     public static final String FLAG_ZMXY_ALCHEMY_NEXT_DAY_AWARD = "zmxy::alchemy::nextDayAward";
 
     // --------------------------------------------
+    // AntMember（会员频道/积分）相关每日标记
+    // --------------------------------------------
+
+    /**
+     * 今日贴纸领取任务标记
+     */
+    public static final String FLAG_AntMember_STICKER = "Flag_AntMember_Sticker";
+    // --------------------------------------------
     // 运动任务大厅-今日是否已尝试循环处理
     // --------------------------------------------
     public static final String FLAG_ANTSPORTS_TASKCENTER_DONE = "Flag_AntSports_TaskCenter_Done";
@@ -54,5 +62,6 @@ public final class StatusFlags {
 
     // 蚂蚁新村-今日丢肥料是否已达上限
     public static final String FLAG_ANTSTALL_THROW_MANURE_LIMIT = "Flag_AntStall_Throw_Manure_Limit";
+
 
 }

@@ -1,6 +1,7 @@
 package fansirsqi.xposed.sesame.task.antMember
 
 import android.annotation.SuppressLint
+import fansirsqi.xposed.sesame.data.Status
 import fansirsqi.xposed.sesame.data.Status.Companion.canMemberPointExchangeBenefitToday
 import fansirsqi.xposed.sesame.data.Status.Companion.canMemberSignInToday
 import fansirsqi.xposed.sesame.data.Status.Companion.hasFlagToday
@@ -9,7 +10,8 @@ import fansirsqi.xposed.sesame.data.Status.Companion.memberSignInToday
 import fansirsqi.xposed.sesame.data.Status.Companion.setFlagToday
 import fansirsqi.xposed.sesame.data.StatusFlags
 import fansirsqi.xposed.sesame.entity.MemberBenefit.Companion.getList
-import fansirsqi.xposed.sesame.hook.SecurityBodyHelper.getSecurityBodyData
+import fansirsqi.xposed.sesame.hook.internal.SecurityBodyHelper
+import fansirsqi.xposed.sesame.hook.internal.SecurityBodyHelper.getSecurityBodyData
 import fansirsqi.xposed.sesame.model.BaseModel.Companion.energyTime
 import fansirsqi.xposed.sesame.model.BaseModel.Companion.modelSleepTime
 import fansirsqi.xposed.sesame.model.ModelFields
@@ -74,6 +76,9 @@ class AntMember : ModelTask() {
     //年度回顾
     private var annualReview: BooleanModelField? = null
 
+    //年度回顾
+    private var receiveSticker: BooleanModelField? = null
+
     // 黄金票配置 - 签到
     private var enableGoldTicket: BooleanModelField? = null
 
@@ -83,6 +88,9 @@ class AntMember : ModelTask() {
 
     /** @brief 信用2101功能开关 */
     private var credit2101: BooleanModelField? = null
+
+    /** @brief 账单 贴纸 功能开关 */
+    private var CollectStickers: BooleanModelField? = null
 
     override fun getFields(): ModelFields {
         val modelFields = ModelFields()
@@ -151,6 +159,14 @@ class AntMember : ModelTask() {
 
         credit2101 = BooleanModelField("credit2101", "信用2101", false)
         modelFields.addField(credit2101)
+
+
+
+        CollectStickers = BooleanModelField("CollectStickers", "领取贴纸", false)
+        modelFields.addField(CollectStickers)
+
+
+
         return modelFields
     }
 
@@ -282,6 +298,10 @@ class AntMember : ModelTask() {
                     Credit2101.doCredit2101()
                     Log.record(TAG, "执行结束 信用2101")
                 }
+                if (CollectStickers!!.value) {
+                    queryAndCollectStickers()
+                }
+
 
                 // 等待所有异步任务完成
                 deferredTasks.awaitAll()
@@ -2407,6 +2427,97 @@ class AntMember : ModelTask() {
         }
     }
 
+
+
+    /**
+     * 查询 + 自动领取贴纸
+     */
+    @SuppressLint("DefaultLocale")
+    fun queryAndCollectStickers() {
+        try {
+            if (Status.hasFlagToday(StatusFlags.FLAG_AntMember_STICKER)){
+                Log.record(TAG, "今日已兑换贴纸，跳过")
+                return
+            }
+
+            val calendar = Calendar.getInstance()
+            val year = calendar.get(Calendar.YEAR).toString()
+            val month = (calendar.get(Calendar.MONTH) + 1).toString()
+
+            // 1. 查询阶段
+            val queryResp = AntMemberRpcCall.queryStickerCanReceive(year, month)
+
+            val queryJson = JSONObject(queryResp)
+            if (!ResChecker.checkRes(TAG, queryJson)) {
+                Log.error(TAG, "查询贴纸失败：$queryJson")
+                return
+            }
+
+            val canReceivePageList = queryJson.optJSONArray("canReceivePageList") ?: return
+
+            // 用于存储 ID -> Name 的映射
+            val stickerNameMap = mutableMapOf<String, String>()
+            val allStickerIds = mutableListOf<String>()
+
+            for (i in 0 until canReceivePageList.length()) {
+                val page = canReceivePageList.optJSONObject(i)
+                val stickerList = page?.optJSONArray("stickerCanReceiveList") ?: continue
+                for (j in 0 until stickerList.length()) {
+                    val stickerObj = stickerList.optJSONObject(j) ?: continue
+                    val id = stickerObj.optString("id")
+                    val name = stickerObj.optString("name")
+                    if (!id.isNullOrEmpty()) {
+                        allStickerIds.add(id)
+                        stickerNameMap[id] = name ?: "未知贴纸"
+                    }
+                }
+            }
+
+            if (allStickerIds.isEmpty()) {
+                Log.record(TAG, "贴纸扫描：暂无可领取的贴纸")
+              //  Status.setFlagToday(StatusFlags.FLAG_AntMember_STICKER)
+                return
+            }
+
+            // 2. 领取阶段
+            val collectResp = AntMemberRpcCall.receiveSticker(year, month, allStickerIds)
+
+            val collectJson = JSONObject(collectResp)
+            if (!ResChecker.checkRes(TAG, collectJson)) {
+                Log.error(TAG, "领取贴纸失败：$collectJson")
+                return
+            }
+
+            // 3. 结果解析与比对输出
+            val specialList = collectJson.optJSONArray("specialStickerList")
+            val obtainedIds = collectJson.optJSONArray("obtainedConfigId")
+
+            Log.record(TAG, "贴纸领取成功，总数：${obtainedIds?.length() ?: 0}")
+
+            if (specialList != null && specialList.length() > 0) {
+                for (i in 0 until specialList.length()) {
+                    val special = specialList.optJSONObject(i) ?: continue
+
+                    // 获取领取结果中的 recordId
+                    val recordId = special.optString("stickerRecordId")
+                    // 从我们之前的 Map 中根据 ID 找到对应的 Name
+                    val stickerName = stickerNameMap[recordId] ?: "特殊贴纸"
+
+                    val ranking = special.optString("rankingText")
+
+                    // 仅对特殊贴纸进行 other 输出，显示真实的贴纸名称
+                    Log.other(TAG, "获得特殊贴纸 → $stickerName ($ranking)")
+                }
+            }
+
+            // 标记今日完成
+            Status.setFlagToday(StatusFlags.FLAG_AntMember_STICKER)
+
+        } catch (e: Exception) {
+            Log.printStackTrace(TAG + " stickerAutoCollect err", e)
+        }
+    }
+
     companion object {
         private val TAG: String = AntMember::class.java.getSimpleName()
 
@@ -2837,5 +2948,8 @@ class AntMember : ModelTask() {
                 Log.printStackTrace(TAG, "taskReceive err:", t)
             }
         }
+
+
+
     }
 }

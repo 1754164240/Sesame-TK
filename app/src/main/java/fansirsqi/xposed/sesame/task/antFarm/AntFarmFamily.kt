@@ -55,7 +55,7 @@ data object AntFarmFamily {
         try {
             enterFamily(familyOptions, notInviteList)
         } catch (e: Exception) {
-            Log.printStackTrace(TAG, e.message, e)
+            Log.printStackTrace(TAG, e)
         }
     }
 
@@ -123,7 +123,7 @@ data object AntFarmFamily {
                 }
             }
         } catch (e: Exception) {
-            Log.printStackTrace(TAG, e.message, e)
+            Log.printStackTrace(TAG,  e)
         }
     }
 
@@ -138,7 +138,7 @@ data object AntFarmFamily {
                 Log.farm("家庭任务🏡每日签到")
             }
         } catch (e: Exception) {
-            Log.printStackTrace(TAG, e.message, e)
+            Log.printStackTrace(TAG,  e)
         }
     }
 

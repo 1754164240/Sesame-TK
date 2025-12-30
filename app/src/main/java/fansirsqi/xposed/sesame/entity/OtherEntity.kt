@@ -1,5 +1,7 @@
 package fansirsqi.xposed.sesame.entity
 
+import fansirsqi.xposed.sesame.task.antDodo.AntDodo
+
 class OtherEntity(id: String, name: String) : MapperEntity() {
     init {
         this.id = id
@@ -31,4 +33,12 @@ object OtherEntityProvider {
         OtherEntity("ExchangeFamilyDecoration", "兑换装饰物品🧱"),
         OtherEntity("shareToFriends", "好友分享🙆‍♂️|下方配置排除列表"),
     )
+
+    @JvmStatic
+    fun listPropGroupOptions(): List<OtherEntity> = listOf(
+        OtherEntity(AntDodo.PropGroupType.COLLECT_ANIMAL, "当前图鉴抽卡券 🎴"),
+        OtherEntity(AntDodo.PropGroupType.ADD_COLLECT_TO_FRIEND_LIMIT, "好友卡抽卡券 👥"),
+        OtherEntity(AntDodo.PropGroupType.UNIVERSAL_CARD, "万能卡 🃏")
+    )
+
 }

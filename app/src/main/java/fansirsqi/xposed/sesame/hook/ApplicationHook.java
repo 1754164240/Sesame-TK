@@ -12,9 +12,12 @@ import android.os.Looper;
 
 import androidx.annotation.NonNull;
 
+import fansirsqi.xposed.sesame.hook.internal.SecurityBodyHelper;
 import fansirsqi.xposed.sesame.hook.keepalive.SmartSchedulerManager;
 import fansirsqi.xposed.sesame.hook.server.ModuleHttpServerManager;
 import fansirsqi.xposed.sesame.hook.simple.SimplePageManager;
+import fansirsqi.xposed.sesame.hook.internal.LocationHelper;
+import fansirsqi.xposed.sesame.util.*;
 import kotlin.Unit;
 import lombok.Setter;
 
@@ -36,9 +39,7 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage;
 import fansirsqi.xposed.sesame.BuildConfig;
 import fansirsqi.xposed.sesame.data.Config;
 import fansirsqi.xposed.sesame.data.General;
-import fansirsqi.xposed.sesame.data.RunType;
 import fansirsqi.xposed.sesame.data.Status;
-import fansirsqi.xposed.sesame.data.ViewAppInfo;
 import fansirsqi.xposed.sesame.entity.AlipayVersion;
 import fansirsqi.xposed.sesame.hook.rpc.bridge.NewRpcBridge;
 import fansirsqi.xposed.sesame.hook.rpc.bridge.OldRpcBridge;
@@ -52,17 +53,7 @@ import fansirsqi.xposed.sesame.newutil.DataStore;
 import fansirsqi.xposed.sesame.task.MainTask;
 import fansirsqi.xposed.sesame.task.ModelTask;
 import fansirsqi.xposed.sesame.task.TaskRunnerAdapter;
-import fansirsqi.xposed.sesame.util.AssetUtil;
-import fansirsqi.xposed.sesame.util.Detector;
-import fansirsqi.xposed.sesame.util.Files;
-import fansirsqi.xposed.sesame.util.Log;
-import fansirsqi.xposed.sesame.util.NetworkUtils;
-import fansirsqi.xposed.sesame.util.Notify;
-import fansirsqi.xposed.sesame.util.PermissionUtil;
-import fansirsqi.xposed.sesame.util.TimeUtil;
-import fansirsqi.xposed.sesame.util.WakeLockManager;
 import fansirsqi.xposed.sesame.util.maps.UserMap;
-import fansirsqi.xposed.sesame.util.GlobalThreadPools;
 import fansirsqi.xposed.sesame.hook.rpc.debug.DebugRpc;
 import io.github.libxposed.api.XposedInterface;
 import io.github.libxposed.api.XposedModuleInterface;
@@ -70,6 +61,7 @@ import kotlin.jvm.JvmStatic;
 import lombok.Getter;
 import fansirsqi.xposed.sesame.util.maps.IdMapManager;
 import fansirsqi.xposed.sesame.util.maps.VipDataIdMap;
+
 public class ApplicationHook {
     static final String TAG = ApplicationHook.class.getSimpleName();
     public XposedInterface xposedInterface = null;
@@ -463,6 +455,7 @@ public class ApplicationHook {
 
     @SuppressLint("PrivateApi")
     private void handleHookLogic(ClassLoader classLoader, String packageName, String apkPath, Object rawParam) {
+
         DataStore.INSTANCE.init(Files.CONFIG_DIR);
         XposedBridge.log(TAG + "|handleHookLogic " + packageName + " scuess!");
         if (hooked) return;
@@ -492,7 +485,6 @@ public class ApplicationHook {
             Log.printStackTrace(TAG, "验证码Hook初始化失败", t);
         }
 
-
         try {
             // 在Hook Application.attach 之前，先 deoptimize LoadedApk.makeApplicationInner
             try {
@@ -506,6 +498,8 @@ public class ApplicationHook {
                 protected void afterHookedMethod(MethodHookParam param) throws Throwable {
                     mainHandler = new Handler(Looper.getMainLooper());
                     appContext = (Context) param.args[0];
+                    //LOG日志的初始化
+                    Log.init(appContext);
 
                     // 在主进程和小组件进程中注册广播接收器
                     if (General.PACKAGE_NAME.equals(finalProcessName) || (finalProcessName != null && finalProcessName.endsWith(":widgetProvider"))) {
@@ -515,9 +509,13 @@ public class ApplicationHook {
                     // SecurityBodyHelper初始化
                     SecurityBodyHelper.INSTANCE.init(classLoader);
 
-                    //LOG日志的初始化
-                    Log.init(appContext);
+                    // LocationHelper初始化
+                    LocationHelper.INSTANCE.init(classLoader);
 
+                    // 异步获取位置信息
+                    LocationHelper.requestLocation(locationJson -> {
+                        Log.debug(TAG, "📍 获取到位置信息: " + locationJson);
+                    });
 
                     // ✅ 优先使用 Hook 捕获的版本号
                     if (VersionHook.hasVersion()) {
@@ -552,29 +550,29 @@ public class ApplicationHook {
                         Log.runtime(TAG, "✅ 已对版本 10.7.26.8100 进行特殊处理");
                     }
 
-if (VersionHook.hasVersion() && alipayVersion.getVersionString() != null) {
-    String version = alipayVersion.getVersionString();
-    
-    // 正则表达式匹配：
-    // 1. 主版本小于10的所有版本: [0-9]\.[0-9]+\.[0-9]+\.[0-9]+
-    // 2. 10.0.x.x 到 10.5.x.x: 10\.[0-5]\.[0-9]+\.[0-9]+
-    // 3. 10.6.0.x 到 10.6.58.x: 10\.6\.([0-9]|[0-4][0-9]|5[0-8])\.[0-9]+
-    if (version.matches("^([0-9]\\.[0-9]+\\.[0-9]+\\.[0-9]+|10\\.[0-5]\\.[0-9]+\\.[0-9]+|10\\.6\\.([0-9]|[0-4][0-9]|5[0-8])\\.[0-9]+)$")) {
-        // 启用SimplePageManager窗口监控
-        SimplePageManager.INSTANCE.enableWindowMonitoring(classLoader);
-        
-        // 初始化CaptchaHandler
-        Log.runtime(TAG, "✅ 开始初始化CaptchaHandler，版本: " + version);
-        SimplePageManager.INSTANCE.addHandler(
-                "com.alipay.mobile.nebulax.xriver.activity.XRiverActivity",
-                new Captcha1Handler());
-        SimplePageManager.INSTANCE.addHandler(
-                "com.eg.android.AlipayGphone.AlipayLogin",
-                new Captcha2Handler());
-    } else {
-        Log.debug(TAG, "当前支付宝版本 " + version + " 不支持自动滑块Hook");
-    }
-}
+                    if (VersionHook.hasVersion() && alipayVersion.getVersionString() != null) {
+                        String version = alipayVersion.getVersionString();
+
+                        // 正则表达式匹配：
+                        // 1. 主版本小于10的所有版本: [0-9]\.[0-9]+\.[0-9]+\.[0-9]+
+                        // 2. 10.0.x.x 到 10.5.x.x: 10\.[0-5]\.[0-9]+\.[0-9]+
+                        // 3. 10.6.0.x 到 10.6.58.x: 10\.6\.([0-9]|[0-4][0-9]|5[0-8])\.[0-9]+
+                        if (version.matches("^([0-9]\\.[0-9]+\\.[0-9]+\\.[0-9]+|10\\.[0-5]\\.[0-9]+\\.[0-9]+|10\\.6\\.([0-9]|[0-4][0-9]|5[0-8])\\.[0-9]+)$")) {
+                            // 启用SimplePageManager窗口监控
+                            SimplePageManager.INSTANCE.enableWindowMonitoring(classLoader);
+
+                            // 初始化CaptchaHandler
+                            Log.runtime(TAG, "✅ 开始初始化CaptchaHandler，版本: " + version);
+                            SimplePageManager.INSTANCE.addHandler(
+                                    "com.alipay.mobile.nebulax.xriver.activity.XRiverActivity",
+                                    new Captcha1Handler());
+                            SimplePageManager.INSTANCE.addHandler(
+                                    "com.eg.android.AlipayGphone.AlipayLogin",
+                                    new Captcha2Handler());
+                        } else {
+                            Log.debug(TAG, "当前支付宝版本 " + version + " 不支持自动滑块Hook");
+                        }
+                    }
 
                     if (BuildConfig.DEBUG) {
                         try {
@@ -643,7 +641,7 @@ if (VersionHook.hasVersion() && alipayVersion.getVersionString() != null) {
                     });
             Log.runtime(TAG, "hook login successfully");
         } catch (Throwable t) {
-            Log.printStackTrace(TAG, "hook login err",t);
+            Log.printStackTrace(TAG, "hook login err", t);
         }
         try {
             XposedHelpers.findAndHookMethod("android.app.Service", classLoader, "onCreate",
@@ -654,7 +652,6 @@ if (VersionHook.hasVersion() && alipayVersion.getVersionString() != null) {
                             if (!General.CURRENT_USING_SERVICE.equals(appService.getClass().getCanonicalName())) {
                                 return;
                             }
-
 
 
                             Log.runtime(TAG, "Service onCreate");
@@ -839,7 +836,7 @@ if (VersionHook.hasVersion() && alipayVersion.getVersionString() != null) {
                             }
                         }
                     } catch (Exception e) {
-                        Log.printStackTrace(TAG,"设置自定义唤醒时间失败:", e);
+                        Log.printStackTrace(TAG, "设置自定义唤醒时间失败:", e);
                     }
                 }
                 if (successCount > 0) {
@@ -847,7 +844,7 @@ if (VersionHook.hasVersion() && alipayVersion.getVersionString() != null) {
                 }
             }
         } catch (Exception e) {
-            Log.printStackTrace(TAG,"setWakenAtTimeAlarm err:", e);
+            Log.printStackTrace(TAG, "setWakenAtTimeAlarm err:", e);
         }
     }
 
@@ -977,7 +974,7 @@ if (VersionHook.hasVersion() && alipayVersion.getVersionString() != null) {
 
                 // 后台运行权限检查!!
                 if (General.PACKAGE_NAME.equals(finalProcessName) && !batteryPermissionChecked) {
-                    if (BaseModel.Companion.getBatteryPerm().getValue() && !PermissionUtil.checkBatteryPermissions()) {
+                    if (BaseModel.Companion.getBatteryPerm().getValue() && !PermissionUtil.checkBatteryPermissions(appContext)) {
                         Log.record(TAG, "支付宝无始终在后台运行权限,准备申请");
                         mainHandler.postDelayed(
                                 () -> {
@@ -1124,15 +1121,18 @@ if (VersionHook.hasVersion() && alipayVersion.getVersionString() != null) {
             Log.printStackTrace(TAG, th);
         }
     }
+
     /**
      * 发送广播到其他应用（显式广播）
+     *
      * @param message 要发送的字符串消息
      */
-    public static void sendBroadcastShell(String API,String message) {
+    public static void sendBroadcastShell(String API, String message) {
         Intent intent = new Intent("fansirsqi.xposed.sesame.SHELL");
         intent.putExtra(API, message);
-        appContext.sendBroadcast(intent,null);
+        appContext.sendBroadcast(intent, null);
     }
+
     /**
      * 通过广播发送重新登录的指令
      */
@@ -1318,17 +1318,6 @@ if (VersionHook.hasVersion() && alipayVersion.getVersionString() != null) {
                             Log.printStack(TAG);
                             GlobalThreadPools.INSTANCE.execute(ApplicationHook::reLogin);
                             break;
-                        case BroadcastActions.STATUS:
-                            // 状态查询处理
-                            Log.printStack(TAG);
-                            if (ViewAppInfo.getRunType() == RunType.DISABLE) {
-                                Intent replyIntent = new Intent("fansirsqi.xposed.sesame.status");
-                                replyIntent.putExtra("EXTRA_RUN_TYPE", RunType.ACTIVE.getNickName());
-                                replyIntent.setPackage(General.MODULE_PACKAGE_NAME);
-                                context.sendBroadcast(replyIntent);
-                                Log.system(TAG, "Replied with status: " + RunType.ACTIVE.getNickName());
-                            }
-                            break;
                         case BroadcastActions.RPC_TEST:
                             GlobalThreadPools.INSTANCE.execute(() -> {
                                 try {
@@ -1396,7 +1385,6 @@ if (VersionHook.hasVersion() && alipayVersion.getVersionString() != null) {
         intentFilter.addAction(BroadcastActions.RPC_TEST); // 调试RPC的动作
         return intentFilter;
     }
-
 
 
 }

@@ -180,7 +180,7 @@ class AntCooperate : ModelTask() {
 
                             val remainingQuota = configTotalLimit - totalWatered
                             if (remainingQuota <= 0) {
-                                Log.forest( "$name 累计浇水已达标($totalWatered/$configTotalLimit)，跳过")
+                                Log.forest("$name 累计浇水已达标($totalWatered/$configTotalLimit)，跳过")
                                 continue
                             }
 
@@ -222,50 +222,76 @@ class AntCooperate : ModelTask() {
     // 真爱合种逻辑
     private fun loveCooperateWater() {
         try {
-            var myWatered: Int?
+            // 1. 本地状态检查 (快速失败)
             if (Status.hasFlagToday("love::teamWater")) {
                 Log.record(TAG, "真爱合种今日已浇过水")
                 return
             }
-            val queryLoveHome = JSONObject(AntCooperateRpcCall.queryLoveHome())
-            if (!ResChecker.checkRes(TAG, queryLoveHome)) {
-                Log.error(TAG, "查询真爱合种首页失败")
+
+            // 2. 查询首页数据
+            val queryResult = AntCooperateRpcCall.queryLoveHome()
+            val queryLoveHome = try {
+                JSONObject(queryResult)
+            } catch (e: Exception) {
+                Log.printStackTrace(TAG, "真爱合种响应JSON解析失败", e)
                 return
-            } else {
-                val teamInfo = queryLoveHome.optJSONObject("teamInfo")
-                if (teamInfo == null) {
-                    Log.error(TAG, "未解析到真爱合种队伍信息，可能是结构变更")
-                    return
-                }
-                val teamId = teamInfo.optString("teamId")
-                val teamStatus = teamInfo.optString("teamStatus")
-                // 通过 waterInfo -> todayWaterMap 查看当前用户今日是否已浇水
-                val waterInfo = teamInfo.optJSONObject("waterInfo")
-                val todayWaterMap = waterInfo?.optJSONObject("todayWaterMap")
-                val currentUid = UserMap.currentUid
-                myWatered = todayWaterMap?.optInt(currentUid, 0)
-                if (myWatered != null) {
-                    if (myWatered > 0) {
-                        Log.forest("真爱合种今日已浇水(" + myWatered + "g)")
-                    }
-                } else {
-                    Log.error(TAG, "真爱合不知道什么勾八错误")
-                }
-                if ("ACTIVATED" == teamStatus && !teamId.isEmpty()) {
-                    val waterNum = loveCooperateWaterNum.value
-                    val waterJo = JSONObject(AntCooperateRpcCall.loveTeamWater(teamId, waterNum))
-                    if (!ResChecker.checkRes(TAG, waterJo)) {
-                        Log.error(TAG, "真爱合种浇水失败: " + waterJo.optString("resultDesc"))
-                    } else {
-                        Log.forest("真爱合种💖[浇水成功]#" + waterNum + "g")
-                        Status.setFlagToday("love::teamWater")
-                    }
-                } else {
-                    Log.error(TAG, "真爱合种队伍状态不可用或ID为空: $teamStatus")
-                }
             }
+
+            if (!ResChecker.checkRes(TAG, queryLoveHome)) {
+                // ResChecker 内部通常已经打印了错误日志
+                return
+            }
+
+            // 3. 解析队伍信息
+            val teamInfo = queryLoveHome.optJSONObject("teamInfo")
+            if (teamInfo == null) {
+                Log.error(TAG, "未找到真爱合种队伍信息，可能是未开启或结构变更")
+                // 如果确认是未开启，可以考虑自动关闭开关
+                // loveCooperateWater.value = false
+                return
+            }
+
+            val teamId = teamInfo.optString("teamId")
+            val teamStatus = teamInfo.optString("teamStatus")
+
+            // 4. 检查服务端记录的今日浇水状态
+            // 结构通常是: waterInfo -> todayWaterMap -> {"uid": waterAmount}
+            val myWateredAmount = teamInfo.optJSONObject("waterInfo")
+                ?.optJSONObject("todayWaterMap")
+                ?.optInt(UserMap.currentUid, 0) ?: 0
+
+            if (myWateredAmount > 0) {
+                Log.forest("真爱合种今日已浇水(${myWateredAmount}g)")
+                // 既然服务端说浇过了，更新本地状态并退出
+                Status.setFlagToday("love::teamWater")
+                return
+            }
+
+            // 5. 校验队伍状态是否允许浇水
+            if (teamId.isEmpty() || "ACTIVATED" != teamStatus) {
+                Log.record(TAG, "真爱合种队伍不可用 (状态: $teamStatus, ID: $teamId)")
+                return
+            }
+
+            // 6. 执行浇水
+            val waterAmount = loveCooperateWaterNum.value ?: 0 // 防止空指针
+            if (waterAmount <= 0) {
+                Log.error(TAG, "配置的浇水数值无效: $waterAmount")
+                return
+            }
+
+            val waterResult = AntCooperateRpcCall.loveTeamWater(teamId, waterAmount)
+            val waterJo = JSONObject(waterResult)
+
+            if (ResChecker.checkRes(TAG, waterJo)) {
+                Log.forest("真爱合种💖[浇水成功]#${waterAmount}g")
+                Status.setFlagToday("love::teamWater")
+            } else {
+                Log.error(TAG, "真爱合种浇水失败: " + waterJo.optString("resultDesc"))
+            }
+
         } catch (t: Throwable) {
-            Log.printStackTrace(TAG, "loveCooperateWater err:", t)
+            Log.printStackTrace(TAG, "loveCooperateWater 异常:", t)
         }
     }
 
@@ -313,10 +339,10 @@ class AntCooperate : ModelTask() {
             }
 
             var needReturn = false //判断是否要返回个人
-            if(!isTeam(homeJo)){
+            if (!isTeam(homeJo)) {
 
                 val updateUserConfigStr = AntCooperateRpcCall.updateUserConfig(true)
-                val UserConfigJo =  JSONObject(updateUserConfigStr)
+                val UserConfigJo = JSONObject(updateUserConfigStr)
                 if (!ResChecker.checkRes(TAG, UserConfigJo)) {
                     Log.record(TAG, "updateUserConfig 返回异常")
                     return
@@ -370,10 +396,10 @@ class AntCooperate : ModelTask() {
                 Log.record(TAG, "今日累计: ${newTotal}g / ${userDailyTarget}g")
             }
             //如果从个人来的就回到个人
-            if(needReturn){
+            if (needReturn) {
 
                 val updateUserConfigStr = AntCooperateRpcCall.updateUserConfig(false)
-                val UserConfigJo =  JSONObject(updateUserConfigStr)
+                val UserConfigJo = JSONObject(updateUserConfigStr)
                 if (!ResChecker.checkRes(TAG, UserConfigJo)) {
                     Log.record(TAG, "updateUserConfig 返回异常")
                     return

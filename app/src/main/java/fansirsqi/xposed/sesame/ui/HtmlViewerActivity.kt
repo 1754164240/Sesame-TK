@@ -22,7 +22,7 @@ import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewFeature
 import fansirsqi.xposed.sesame.R
 import fansirsqi.xposed.sesame.databinding.ActivityHtmlViewerBinding
-import fansirsqi.xposed.sesame.newui.WatermarkView
+import fansirsqi.xposed.sesame.ui.compose.WatermarkInjector
 import fansirsqi.xposed.sesame.util.Files
 import fansirsqi.xposed.sesame.util.LanguageUtil
 import fansirsqi.xposed.sesame.util.Log
@@ -70,7 +70,7 @@ class HtmlViewerActivity : BaseActivity() {
         binding = ActivityHtmlViewerBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        WatermarkView.install(this)
+        WatermarkInjector.inject(this);
 
         setupUI()
         handleInsets()

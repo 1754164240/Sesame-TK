@@ -774,6 +774,34 @@ public class AntMemberRpcCall {
         }
     }
 
+    /**
+     * 查询可领取的贴纸列表
+     */
+    public static String queryStickerCanReceive(String year, String month) {
+        String data = "[{\"isFirstShow\":\"false\",\"month\":\"" + month + "\",\"year\":\"" + year + "\"}]";
+        return RequestManager.requestString("alipay.memberasset.sticker.queryStickerCanReceive", data);
+    }
+
+    /**
+     * 领取指定的贴纸
+     * @param stickerIds 贴纸ID集合
+     */
+    public static String receiveSticker(String year, String month, List<String> stickerIds) {
+        if (stickerIds == null || stickerIds.isEmpty()) return null;
+
+        // 构建 stickerIds 的 JSON 数组字符串
+        StringBuilder sb = new StringBuilder("[");
+        for (int i = 0; i < stickerIds.size(); i++) {
+            sb.append("\"").append(stickerIds.get(i)).append("\"");
+            if (i < stickerIds.size() - 1) sb.append(",");
+        }
+        sb.append("]");
+
+        String data = "[{\"month\":\"" + month + "\",\"stickerIds\":" + sb.toString() + ",\"year\":\"" + year + "\"}]";
+        return RequestManager.requestString("alipay.memberasset.sticker.receiveSticker", data);
+    }
+
+
     //芝麻信誉 部分
     public static class Zmxy {
         private static String Version="2025-10-22";
@@ -1081,5 +1109,16 @@ public class AntMemberRpcCall {
                 );
             }
         }
+
+
+
+
+
+
+
+
+
+
+
     }
 }

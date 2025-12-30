@@ -5,11 +5,12 @@ import fansirsqi.xposed.sesame.util.Log
 import io.github.libxposed.service.XposedService
 import io.github.libxposed.service.XposedServiceHelper
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
-object ServiceManager {
+object LsposedServiceManager {
 
-    private const val TAG = "ServiceManager"
+    private const val TAG = "LsposedServiceManager"
 
     /** 当前连接状态，线程安全 */
     private val _connectionState = AtomicReference<ConnectionState>(ConnectionState.Connecting)
@@ -29,8 +30,8 @@ object ServiceManager {
     /** 状态监听器列表 */
     private val listeners = CopyOnWriteArrayList<(ConnectionState) -> Unit>()
 
-    /** 是否已初始化 */
-    private val isInitialized = AtomicReference(false)
+    /** ✨ 修复：使用 AtomicBoolean 保证值比较的正确性 */
+    private val isInitialized = AtomicBoolean(false)
 
     /** 初始化 ServiceManager 并注册 XposedService 监听 */
     fun init() {
@@ -47,6 +48,7 @@ object ServiceManager {
             }
 
             override fun onServiceDied(deadService: XposedService) {
+                // 检查 service 属性而不是直接比较，避免在多线程环境下的竞态条件
                 if (service == deadService) {
                     Log.runtime(TAG, "LSPosed service died.")
                     updateState(ConnectionState.Disconnected)

@@ -2,7 +2,6 @@ package fansirsqi.xposed.sesame.hook
 
 import de.robv.android.xposed.XC_MethodHook
 import de.robv.android.xposed.XposedHelpers
-import fansirsqi.xposed.sesame.model.BaseModel
 import fansirsqi.xposed.sesame.util.Log
 
 /**

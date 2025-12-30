@@ -2,6 +2,7 @@ package fansirsqi.xposed.sesame.task.antMember
 
 import android.annotation.SuppressLint
 import fansirsqi.xposed.sesame.data.StatusFlags
+import fansirsqi.xposed.sesame.hook.internal.LocationHelper
 import fansirsqi.xposed.sesame.newutil.TaskBlacklist.autoAddToBlacklist
 import fansirsqi.xposed.sesame.newutil.TaskBlacklist.isTaskInBlacklist
 import fansirsqi.xposed.sesame.util.GlobalThreadPools
@@ -211,6 +212,7 @@ object Credit2101 {
             var currentLng: Double
             val cityCode: String
 
+            
             if (location == null) {
                 Log.record(TAG, "信用2101📍[定位失败] 使用北京默认值")
 
@@ -732,52 +734,76 @@ object Credit2101 {
         }
     }
 
-    /**
-     * 使用外部 IP 接口 + qqsuu IP 查询获取 cityCode / 经纬度
-     */
     private fun resolveLocation(accountCityCode: String?): LocationInfo? {
         return runCatching {
-            // 1. 通过 ip.sb 获取 IP + 初始经纬度
-            val ipJson = httpGetJson("https://api.ip.sb/geoip/") ?: run {
-                Log.error(TAG, "信用2101📍[ip.sb 查询失败]")
-                return@runCatching null
-            }
+            var cityCode = accountCityCode
+            var lat: Double
+            var lng: Double
 
-            val ip = ipJson.optString("ip", "")
-            var lat = ipJson.optDouble("latitude", Double.NaN)
-            var lng = ipJson.optDouble("longitude", Double.NaN)
+            try {
+                val locationJson = LocationHelper.getLocation()
+                if (locationJson != null) {
+                    val status = locationJson.optString("status", "")
+                    if (status.isNotEmpty()) {
+                        Log.error(TAG, "信用2101📍[LocationHelper] $status，尝试使用 API 备用$locationJson")
+                        throw Exception("LocationHelper 定位失败: $status")
+                    }
 
-            var cityCode: String? = null
+                    lat = locationJson.optDouble("latitude", Double.NaN)
+                    lng = locationJson.optDouble("longitude", Double.NaN)
 
-            if (ip.isNotEmpty()) {
-                // 2. 通过 qqsuu 获取更精确的经纬度 + 行政区码
-                val qqJson = httpGetJson("https://api.qqsuu.cn/api/dm-ipquery?ip=$ip")
-                if (qqJson != null && qqJson.optInt("code", -1) == 200) {
-                    val data = qqJson.optJSONObject("data")
-                    cityCode = data?.optString("areacode", "")
+                    if (lat.isNaN() || lng.isNaN()) {
+                        Log.error(TAG, "信用2101📍[LocationHelper失败] lat/lng 缺失 lat=$lat lng=$lng，尝试使用 API 备用")
+                        throw Exception("LocationHelper 定位数据不完整")
+                    }
 
-                    val latStr = data?.optString("latitude", "")
-                    val lngStr = data?.optString("longitude", "")
-                    val lat2 = latStr?.toDoubleOrNull()
-                    val lng2 = lngStr?.toDoubleOrNull()
+                    Log.record(TAG, "信用2101📍[LocationHelper] 使用支付宝定位成功")
+                } else {
+                    Log.error(TAG, "信用2101📍[LocationHelper] 返回为空，尝试使用 API 备用")
+                    throw Exception("LocationHelper 返回为空")
+                }
+            } catch (e: Exception) {
+                Log.error(TAG, "信用2101📍[LocationHelper异常] ${e.message}，尝试使用 API 备用")
+                val ipJson = httpGetJson("https://api.ip.sb/geoip/") ?: run {
+                    Log.error(TAG, "信用2101📍[API定位失败] ip.sb 查询失败")
+                    return@runCatching null
+                }
 
-                    if (lat2 != null && lng2 != null) {
-                        lat = lat2
-                        lng = lng2
+                val ip = ipJson.optString("ip", "")
+                lat = ipJson.optDouble("latitude", Double.NaN)
+                lng = ipJson.optDouble("longitude", Double.NaN)
+
+                if (ip.isNotEmpty()) {
+                    val qqJson = httpGetJson("https://api.qqsuu.cn/api/dm-ipquery?ip=$ip")
+                    if (qqJson != null && qqJson.optInt("code", -1) == 200) {
+                        val data = qqJson.optJSONObject("data")
+                        cityCode = data?.optString("areacode", accountCityCode.toString())
+
+                        val latStr = data?.optString("latitude", "")
+                        val lngStr = data?.optString("longitude", "")
+                        val lat2 = latStr?.toDoubleOrNull()
+                        val lng2 = lngStr?.toDoubleOrNull()
+
+                        if (lat2 != null && lng2 != null) {
+                            lat = lat2
+                            lng = lng2
+                        }
                     }
                 }
+
+                if (cityCode.isNullOrEmpty()) {
+                    cityCode = accountCityCode
+                }
+
+                if (cityCode.isNullOrEmpty() || lat.isNaN() || lng.isNaN()) {
+                    Log.error(TAG, "信用2101📍[API定位失败] cityCode/lat/lng 缺失 cityCode=$cityCode lat=$lat lng=$lng")
+                    return@runCatching null
+                }
+
+                Log.record(TAG, "信用2101📍[API定位] 使用 API 定位成功")
             }
 
-            if (cityCode.isNullOrEmpty()) {
-                cityCode = accountCityCode
-            }
-
-            if (cityCode.isNullOrEmpty() || lat.isNaN() || lng.isNaN()) {
-                Log.error(TAG, "信用2101📍[定位失败] cityCode/lat/lng 缺失 cityCode=$cityCode lat=$lat lng=$lng")
-                null
-            } else {
-                LocationInfo(cityCode, lat, lng)
-            }
+            LocationInfo(cityCode.toString(), lat, lng)
         }.getOrElse {
             Log.printStackTrace(TAG, it)
             null
