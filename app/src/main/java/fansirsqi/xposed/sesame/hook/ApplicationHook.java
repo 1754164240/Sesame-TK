@@ -202,19 +202,18 @@ public class ApplicationHook {
             }
 
             if (appContext == null) {
-                Log.debug(TAG, "⚠️ 无法初始化调度器: appContext 为 null");
+                 Log.record(TAG, "⚠️ 无法初始化调度器: appContext 为 null");
                 return;
             }
 
             try {
-                Log.debug(TAG, "🔧 开始初始化智能调度器...");
+                 Log.record(TAG, "🔧 开始初始化智能调度器...");
                 // 初始化智能调度器（纯协程，无唤醒锁）
                 SmartSchedulerManager.INSTANCE.initialize(appContext);
                 smartSchedulerInitialized = true; // volatile 写，保证其他线程可见
-                Log.debug(TAG, "✅ 智能调度器初始化成功");
+                 Log.record(TAG, "✅ 智能调度器初始化成功");
             } catch (Exception e) {
-                Log.error(TAG, "❌ 智能调度器初始化失败: " + e.getMessage());
-                Log.printStackTrace(TAG, e);
+                Log.printStackTrace(TAG,"❌ 智能调度器初始化失败: ", e);
                 // 重要：初始化失败时不设置 smartSchedulerInitialized = true，允许下次重试
             }
         }
@@ -514,7 +513,7 @@ public class ApplicationHook {
 
                     // 异步获取位置信息
                     LocationHelper.requestLocation(locationJson -> {
-                        Log.debug(TAG, "📍 获取到位置信息: " + locationJson);
+                         Log.record(TAG, "📍 获取到位置信息: " + locationJson);
                     });
 
                     // ✅ 优先使用 Hook 捕获的版本号
@@ -570,7 +569,7 @@ public class ApplicationHook {
                                     "com.eg.android.AlipayGphone.AlipayLogin",
                                     new Captcha2Handler());
                         } else {
-                            Log.debug(TAG, "当前支付宝版本 " + version + " 不支持自动滑块Hook");
+                             Log.record(TAG, "当前支付宝版本 " + version + " 不支持自动滑块Hook");
                         }
                     }
 
@@ -1337,7 +1336,7 @@ public class ApplicationHook {
                             break;
                         default:
                             // 协程调度器会自动处理任务触发，无需额外处理
-                            Log.debug(TAG, "收到未知广播: " + action);
+                             Log.record(TAG, "收到未知广播: " + action);
                             break;
                     }
                 }

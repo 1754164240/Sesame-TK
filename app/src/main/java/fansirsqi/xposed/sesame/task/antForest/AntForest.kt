@@ -1433,7 +1433,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             }
             // 1. 检查接口返回是否成功
             if (!ResChecker.checkRes(TAG + "载入用户主页失败:", userHomeObj)) {
-                Log.debug(TAG, "载入失败: " + userHomeObj.optString("resultDesc", "未知错误"))
+                 Log.record(TAG, "载入失败: " + userHomeObj.optString("resultDesc", "未知错误"))
                 return userHomeObj
             }
             val serverTime = userHomeObj.optLong("now", System.currentTimeMillis())
@@ -1452,7 +1452,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
 
             // 3. 判断是否允许收取能量
             if (!collectEnergy!!.value || jsonCollectMap.contains(userId)) {
-                Log.debug(TAG, "[$userName] 不允许收取能量，跳过")
+                 Log.record(TAG, "[$userName] 不允许收取能量，跳过")
                 return userHomeObj
             }
             // 4. 获取所有可收集的能量球
@@ -1576,7 +1576,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
 
                 CollectStatus.WAITING -> {
                     if (bubbleCount <= 0) {
-                        Log.debug(TAG, "跳过数量为[$bubbleId]的等待能量球的蹲点任务")
+                         Log.record(TAG, "跳过数量为[$bubbleId]的等待能量球的蹲点任务")
                         continue
                     }
                     // 等待成熟的能量球，添加到蹲点队列
@@ -1605,7 +1605,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                             produceTime = produceTime,
                             fromTag = "蹲点收取"
                         )
-                        Log.debug(
+                         Log.record(
                             TAG,
                             "添加蹲点: [$userName] 能量球[$bubbleId] 将在[${TimeUtil.getCommonDate(produceTime)}]成熟$protectionLog"
                         )
@@ -1620,9 +1620,9 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         }
 
         // 打印调试信息
-        Log.debug(TAG, "[$userName] 可收集能量球: ${availableBubbles.size}个")
+         Log.record(TAG, "[$userName] 可收集能量球: ${availableBubbles.size}个")
         if (waitingBubblesCount > 0) {
-            Log.debug(TAG, "[$userName] 等待成熟能量球: ${waitingBubblesCount}个")
+             Log.record(TAG, "[$userName] 等待成熟能量球: ${waitingBubblesCount}个")
         }
     }
 
@@ -2178,12 +2178,12 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             }
 
             if (friendList == null) {
-                Log.debug(TAG, "${sourceName}数据为空，跳过处理")
+                 Log.record(TAG, "${sourceName}数据为空，跳过处理")
                 return@withContext
             }
 
             if (friendList.length() == 0) {
-                Log.debug(TAG, "${sourceName}列表为空，跳过处理")
+                 Log.record(TAG, "${sourceName}列表为空，跳过处理")
                 return@withContext
             }
 
@@ -2265,7 +2265,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 Log.record(TAG, "    PK好友: [$userName$userId], 不满足收取条件，跳过")
                 return
             }
-            Log.debug(TAG, "  正在查询PK好友 [$userName$userId] 的主页...")
+             Log.record(TAG, "  正在查询PK好友 [$userName$userId] 的主页...")
             collectEnergy(userId, queryFriendHome(userId, "PKContest"), "pk")
         } else { // 普通好友
             val needCollectEnergy =
@@ -2280,7 +2280,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             // 只要开启了收能量，就进去看看，以便添加蹲点
             if (needCollectEnergy) {
                 // 即使排行榜信息显示没有可收能量，也进去检查，以便添加蹲点任务
-                Log.debug(TAG, "  正在查询好友 [$userName$userId] 的主页...")
+                 Log.record(TAG, "  正在查询好友 [$userName$userId] 的主页...")
                 userHomeObj = collectEnergy(userId, queryFriendHome(userId, null), "friend")
             }
             if (needHelpProtect) {
@@ -4680,7 +4680,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         userName: String?
     ): CollectResult {
         try {
-            Log.debug(TAG, "蹲点收取开始：用户[${userName}] userId[${userId}] fromTag[${fromTag}]")
+             Log.record(TAG, "蹲点收取开始：用户[${userName}] userId[${userId}] fromTag[${fromTag}]")
             // 获取服务器时间
             val serverTime = userHomeObj.optLong("now", System.currentTimeMillis())
             // 判断是否是自己的账号
@@ -4693,32 +4693,32 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             val hasBomb = bombEndTime > serverTime
             val hasProtection = hasShield || hasBomb
 
-            Log.debug(TAG, "蹲点收取保护检查详情：")
-            Log.debug(TAG, "  是否是主号: $isSelf")
-            Log.debug(
+             Log.record(TAG, "蹲点收取保护检查详情：")
+             Log.record(TAG, "  是否是主号: $isSelf")
+             Log.record(
                 TAG, "  服务器时间: $serverTime (${
                     SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(
                         Date(serverTime)
                     )
                 })"
             )
-            Log.debug(
+             Log.record(
                 TAG, "  保护罩结束时间: $shieldEndTime (${
                     if (shieldEndTime > 0) SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(
                         Date(shieldEndTime)
                     ) else "无保护罩"
                 })"
             )
-            Log.debug(
+             Log.record(
                 TAG, "  炸弹卡结束时间: $bombEndTime (${
                     if (bombEndTime > 0) SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(
                         Date(bombEndTime)
                     ) else "无炸弹卡"
                 })"
             )
-            Log.debug(TAG, "  是否有保护罩: $hasShield")
-            Log.debug(TAG, "  是否有炸弹卡: $hasBomb")
-            Log.debug(TAG, "  总体保护状态: $hasProtection")
+             Log.record(TAG, "  是否有保护罩: $hasShield")
+             Log.record(TAG, "  是否有炸弹卡: $hasBomb")
+             Log.record(TAG, "  总体保护状态: $hasProtection")
 
             // 只对好友账号进行保护检查，主号无视保护罩
             if (!isSelf && hasProtection) {
@@ -4735,7 +4735,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
 
             // 主号的保护罩不影响收取自己的能量
             if (isSelf && hasProtection) {
-                Log.debug(TAG, "  ⭐ 主号有保护罩，但可以收取自己的能量")
+                 Log.record(TAG, "  ⭐ 主号有保护罩，但可以收取自己的能量")
             }
 
             // 先查询用户能量状态
@@ -4745,7 +4745,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 message = "无法查询用户能量信息"
             )
 
-            // Log.debug(TAG, "蹲点收取查询结果: $queryResult")
+            //  Log.record(TAG, "蹲点收取查询结果: $queryResult")
 
             // 提取可收取的能量球ID
             val availableBubbles: MutableList<Long> = ArrayList()
@@ -4760,7 +4760,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 )
             }
 
-            Log.debug(TAG, "蹲点收取找到${availableBubbles.size}个可收取能量球: $availableBubbles")
+             Log.record(TAG, "蹲点收取找到${availableBubbles.size}个可收取能量球: $availableBubbles")
 
             // 记录收取前的总能量
             val beforeTotal = totalCollected
@@ -4817,7 +4817,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                     // 获取真实用户名
                     val realUserName = getAndCacheUserName(task.userId, friendHomeObj, task.fromTag)
                     val isSelf = task.userId == UserMap.currentUid
-                    Log.debug(TAG, "蹲点收取：用户[${realUserName}] userId=${task.userId} currentUid=${UserMap.currentUid} isSelf=${isSelf}")
+                     Log.record(TAG, "蹲点收取：用户[${realUserName}] userId=${task.userId} currentUid=${UserMap.currentUid} isSelf=${isSelf}")
                     // 直接执行能量收取，让原有的collectEnergy方法处理保护罩和炸弹检查
                     val result = collectEnergyForWaiting(task.userId, friendHomeObj, task.fromTag, realUserName)
                     result.copy(userName = realUserName)
@@ -4831,7 +4831,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             }
         } catch (e: CancellationException) {
             // 协程取消是正常现象，不记录为错误
-            Log.debug(TAG, "collectUserEnergyForWaiting 协程被取消")
+             Log.record(TAG, "collectUserEnergyForWaiting 协程被取消")
             throw e  // 必须重新抛出以保证取消机制正常工作
         } catch (e: Exception) {
             Log.printStackTrace(TAG, "collectUserEnergyForWaiting err", e)

@@ -24,7 +24,7 @@ class AntCooperate : ModelTask() {
      *
      * @return 合种任务名称
      */
-    override fun getName(): String? {
+    override fun getName(): String {
         return "蚂蚁森林合种" //保留这个全称
     }
 
@@ -84,7 +84,7 @@ class AntCooperate : ModelTask() {
      *
      * @return 是否可以执行合种任务
      */
-    override fun check(): Boolean? {
+    override fun check(): Boolean {
         if (TaskCommon.IS_ENERGY_TIME) {
             Log.record(TAG, "⏸ 当前为只收能量时间【" + BaseModel.energyTime.value + "】，停止执行" + name + "任务！")
             return false
@@ -167,7 +167,7 @@ class AntCooperate : ModelTask() {
 
                         if (configTotalLimit == null) {
                             // 逻辑保持原意：如果没有配置总限制，则直接把今日剩余额度拉满
-                            Log.record(TAG, "未配置 $name 限制总浇水，目标为填满今日额度")
+                            Log.record(TAG, "未配置 $name 限制总浇水，目标为填满今日可浇水量（服务端或本地限制）")
                             planToWater = waterDayLimit
                         } else {
                             Log.record(TAG, "载入配置 $name 限制总浇水[$configTotalLimit]g")
@@ -184,10 +184,6 @@ class AntCooperate : ModelTask() {
                                 continue
                             }
 
-                            // 目标水量 = 剩余额度 (注意：这里原逻辑是覆盖了 configPerRound，如果需要结合每轮限制，应取最小值)
-                            // 这里优化为：取 (剩余总额度) 和 (本轮配置) 之间的较小值？
-                            // 原代码逻辑是：有总限制时，直接浇剩余的量。这里保持原逻辑，但为了安全，不能超过本轮配置
-                            // 如果你想保持原意“只要没到总限制，就按总限制差额浇”，则如下：
                             planToWater = remainingQuota
                         }
 
@@ -196,6 +192,7 @@ class AntCooperate : ModelTask() {
                         var actualWater = planToWater
 
                         if (actualWater > waterDayLimit) actualWater = waterDayLimit
+                        if (actualWater > configPerRound) actualWater = configPerRound
                         if (actualWater > userCurrentEnergy) actualWater = userCurrentEnergy
 
                         Log.record(TAG, "[$name] 结算: 计划 $planToWater, 剩余限额 $waterDayLimit, 背包 $userCurrentEnergy -> 实际: $actualWater")
@@ -342,8 +339,8 @@ class AntCooperate : ModelTask() {
             if (!isTeam(homeJo)) {
 
                 val updateUserConfigStr = AntCooperateRpcCall.updateUserConfig(true)
-                val UserConfigJo = JSONObject(updateUserConfigStr)
-                if (!ResChecker.checkRes(TAG, UserConfigJo)) {
+                val userConfigJo = JSONObject(updateUserConfigStr)
+                if (!ResChecker.checkRes(TAG, userConfigJo)) {
                     Log.record(TAG, "updateUserConfig 返回异常")
                     return
                 }
@@ -399,8 +396,8 @@ class AntCooperate : ModelTask() {
             if (needReturn) {
 
                 val updateUserConfigStr = AntCooperateRpcCall.updateUserConfig(false)
-                val UserConfigJo = JSONObject(updateUserConfigStr)
-                if (!ResChecker.checkRes(TAG, UserConfigJo)) {
+                val userConfigJo = JSONObject(updateUserConfigStr)
+                if (!ResChecker.checkRes(TAG, userConfigJo)) {
                     Log.record(TAG, "updateUserConfig 返回异常")
                     return
                 }

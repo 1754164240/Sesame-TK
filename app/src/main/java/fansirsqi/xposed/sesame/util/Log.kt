@@ -87,7 +87,6 @@ object Log {
 
     @JvmStatic
     fun other(msg: String) {
-        record(msg)
         OTHER_LOGGER.debug("{}", msg)
     }
 
@@ -98,7 +97,6 @@ object Log {
 
     @JvmStatic
     fun debug(msg: String) {
-        record(msg)
         DEBUG_LOGGER.debug("{}", msg)
     }
 
@@ -109,7 +107,6 @@ object Log {
 
     @JvmStatic
     fun error(msg: String) {
-        record(msg)
         ERROR_LOGGER.error("$DEFAULT_TAG{}", msg)
     }
 

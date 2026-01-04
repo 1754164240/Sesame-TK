@@ -1,29 +1,37 @@
 package fansirsqi.xposed.sesame.hook.rpc.debug;
+
 import fansirsqi.xposed.sesame.hook.RequestManager;
 import fansirsqi.xposed.sesame.task.reserve.ReserveRpcCall;
 import fansirsqi.xposed.sesame.util.Log;
 import fansirsqi.xposed.sesame.util.ResChecker;
 import fansirsqi.xposed.sesame.util.GlobalThreadPools;
+
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+
 import java.util.Iterator;
+
 public class DebugRpc {
-    private static final String TAG = DebugRpc.class.getCanonicalName();
+    private static final String TAG = "Rpc测试";
+
     public String getName() {
         return "Rpc测试";
     }
+
     public void start(String broadcastFun, String broadcastData, String testType) {
         new Thread() {
             String broadcastFun;
             String broadcastData;
             String testType;
+
             public Thread setData(String fun, String data, String type) {
                 broadcastFun = fun;
                 broadcastData = data;
                 testType = type;
                 return this;
             }
+
             @Override
             public void run() {
                 switch (testType) {
@@ -53,20 +61,24 @@ public class DebugRpc {
             }
         }.setData(broadcastFun, broadcastData, testType).start();
     }
+
     private String test(String fun, String data) {
         return RequestManager.requestString(fun, data);
     }
+
     public String queryEnvironmentCertDetailList(String alias, int pageNum, String targetUserID) {
         return DebugRpcCall.queryEnvironmentCertDetailList(alias, pageNum, targetUserID);
     }
+
     public String sendTree(String certificateId, String friendUserId) {
         return DebugRpcCall.sendTree(certificateId, friendUserId);
     }
+
     private void getNewTreeItems() {
         try {
             String s = ReserveRpcCall.queryTreeItemsForExchange();
             JSONObject jo = new JSONObject(s);
-            if (ResChecker.checkRes(TAG,jo)) {
+            if (ResChecker.checkRes(TAG, jo)) {
                 JSONArray ja = jo.getJSONArray("treeItems");
                 for (int i = 0; i < ja.length(); i++) {
                     jo = ja.getJSONObject(i);
@@ -84,6 +96,7 @@ public class DebugRpc {
             Log.printStackTrace(TAG, t);
         }
     }
+
     /**
      * 查询特定项目下可交换树木的信息。
      *
@@ -95,7 +108,7 @@ public class DebugRpc {
             String response = ReserveRpcCall.queryTreeForExchange(projectId);
             JSONObject jo = new JSONObject(response);
             // 检查RPC调用结果码是否为"SUCCESS"，表示成功
-            if (ResChecker.checkRes(TAG,jo)) {
+            if (ResChecker.checkRes(TAG, jo)) {
                 // 获取可交换树木的信息
                 JSONObject exchangeableTree = jo.getJSONObject("exchangeableTree");
                 // 获取当前预算
@@ -113,7 +126,7 @@ public class DebugRpc {
                     tips = "可以合种-合种类型：" + coexchangeTypeIdList;
                 }
                 // 记录查询结果
-                Log.debug(TAG,"新树上苗🌱[" + region + "-" + treeName + "]#" + currentBudget + "株-" + tips);
+                Log.debug(TAG, "新树上苗🌱[" + region + "-" + treeName + "]#" + currentBudget + "株-" + tips);
             } else {
                 // 如果RPC调用失败，记录错误描述和项目ID
                 // 注意：这里应该记录projectId而不是s（响应字符串）
@@ -129,6 +142,7 @@ public class DebugRpc {
             Log.printStackTrace(TAG, t);
         }
     }
+
     /**
      * 获取可交换的树木项目列表，并对每个可用的项目查询当前预算。
      */
@@ -138,7 +152,7 @@ public class DebugRpc {
             String response = ReserveRpcCall.queryTreeItemsForExchange();
             JSONObject jo = new JSONObject(response);
             // 检查RPC调用结果码是否为"SUCCESS"，表示成功
-            if (ResChecker.checkRes(TAG,jo)) {
+            if (ResChecker.checkRes(TAG, jo)) {
                 // 获取树木项目列表
                 JSONArray ja = jo.getJSONArray("treeItems");
                 // 遍历项目列表
@@ -171,6 +185,7 @@ public class DebugRpc {
             Log.printStackTrace(TAG, t);
         }
     }
+
     /**
      * 树苗查询
      *
@@ -183,7 +198,7 @@ public class DebugRpc {
             String response = ReserveRpcCall.queryTreeForExchange(projectId);
             JSONObject jo = new JSONObject(response);
             // 检查RPC调用结果码是否为"SUCCESS"，表示成功
-            if (ResChecker.checkRes(TAG,jo)) {
+            if (ResChecker.checkRes(TAG, jo)) {
                 // 获取可交换树木的信息
                 JSONObject exchangeableTree = jo.getJSONObject("exchangeableTree");
                 // 获取当前预算
@@ -191,7 +206,7 @@ public class DebugRpc {
                 // 获取区域信息
                 String region = exchangeableTree.getString("region");
                 // 记录树木查询结果
-                Log.debug(TAG,"树苗查询🌱[" + region + "-" + treeName + "]#剩余:" + currentBudget);
+                Log.debug(TAG, "树苗查询🌱[" + region + "-" + treeName + "]#剩余:" + currentBudget);
             } else {
                 // 如果RPC调用失败，记录错误描述和项目ID
                 Log.record(jo.getString("resultDesc") + " projectId: " + projectId);
@@ -206,6 +221,7 @@ public class DebugRpc {
             Log.printStackTrace(TAG, t);
         }
     }
+
     /**
      * 模拟网格行走过程，处理行走中的事件，如完成迷你游戏和广告任务。
      */
@@ -275,6 +291,7 @@ public class DebugRpc {
             Log.printStackTrace(TAG, t);
         }
     }
+
     private void queryAreaTrees() {
         try {
             JSONObject jo = new JSONObject(ReserveRpcCall.queryAreaTrees());
@@ -289,7 +306,7 @@ public class DebugRpc {
                 if (!areaTrees.has(regionKey)) {
                     JSONObject region = regionConfig.getJSONObject(regionKey);
                     String regionName = region.optString("regionName");
-                    Log.debug(TAG,"未解锁地区🗺️[" + regionName + "]");
+                    Log.debug(TAG, "未解锁地区🗺️[" + regionName + "]");
                 }
             }
         } catch (Throwable t) {
@@ -297,6 +314,7 @@ public class DebugRpc {
             Log.printStackTrace(TAG, t);
         }
     }
+
     private void getUnlockTreeItems() {
         try {
             JSONObject jo = new JSONObject(ReserveRpcCall.queryTreeItemsForExchange("", "project"));
@@ -313,7 +331,7 @@ public class DebugRpc {
                     String itemName = jo.optString("itemName");
                     String region = jo.optString("region");
                     String organization = jo.optString("organization");
-                    Log.debug(TAG,"未解锁项目🐘[" + region + "-" + itemName + "]#" + organization);
+                    Log.debug(TAG, "未解锁项目🐘[" + region + "-" + itemName + "]#" + organization);
                 }
             }
         } catch (Throwable t) {

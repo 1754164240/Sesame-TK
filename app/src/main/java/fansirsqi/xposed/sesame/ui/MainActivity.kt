@@ -21,6 +21,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -178,6 +179,7 @@ class MainActivity : BaseActivity() {
         data object OpenErrorLog : MainUiEvent()
         data object OpenOtherLog : MainUiEvent()
         data object OpenAllLog : MainUiEvent()
+        data object OpenDebugLog : MainUiEvent()
         data object OpenSettings : MainUiEvent()
 
         // 🔥 新增菜单相关事件
@@ -199,12 +201,12 @@ class MainActivity : BaseActivity() {
             MainUiEvent.OpenGithub -> openUrl("https://github.com/Fansirsqi/Sesame-TK")
             MainUiEvent.OpenErrorLog -> executeWithVerification { openLogFile(Files.getErrorLogFile()) }
             MainUiEvent.OpenAllLog -> openLogFile(Files.getRecordLogFile())
+            MainUiEvent.OpenDebugLog -> openLogFile(Files.getDebugLogFile())
             MainUiEvent.OpenSettings -> {
                 showUserSelectionDialog(userList) { selectedUser ->
                     navigateToSettings(selectedUser)
                 }
             }
-
             // 🔥 新增菜单逻辑处理
             is MainUiEvent.ToggleIconHidden -> {
                 val shouldHide = event.isHidden
@@ -226,8 +228,6 @@ class MainActivity : BaseActivity() {
                     .setNegativeButton(R.string.cancel) { d, _ -> d.dismiss() }
                     .show()
             }
-
-
         }
     }
 
@@ -557,10 +557,18 @@ fun MainScreen(
                         .heightIn(min = 130.dp)
                         .padding(8.dp)
                         .clip(RoundedCornerShape(8.dp)) // 点击水波纹圆角
-                        .clickable(
-                            // 只有不在加载时才允许点击
+                        .combinedClickable(
                             enabled = !isOneWordLoading,
-                            onClick = { onEvent(MainActivity.MainUiEvent.RefreshOneWord) }
+                            onClick = {
+                                // 短按：刷新一言
+                                onEvent(MainActivity.MainUiEvent.RefreshOneWord)
+                            },
+                            onLongClick = {
+                                // 长按：打开 Debug 日志
+                                onEvent(MainActivity.MainUiEvent.OpenDebugLog)
+                                // 可选：给个震动反馈或 Toast 提示
+                                ToastUtil.showToast(context, "准备起飞🛫")
+                            }
                         )
                         .padding(8.dp) // 内部留白
                 ) {

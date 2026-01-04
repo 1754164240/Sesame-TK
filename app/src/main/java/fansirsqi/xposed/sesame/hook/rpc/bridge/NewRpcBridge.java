@@ -196,7 +196,7 @@ public class NewRpcBridge implements RpcBridge {
 
         // 如果RPC组件未准备好，尝试重新初始化一次
         if (localNewRpcCallMethod == null) {
-            Log.debug(TAG, "RPC方法为null，尝试重新初始化...");
+             Log.record(TAG, "RPC方法为null，尝试重新初始化...");
             try {
                 load();
                 // 重新加载初始化后的变量
@@ -205,7 +205,7 @@ public class NewRpcBridge implements RpcBridge {
                 localNewRpcInstance = newRpcInstance;
                 localLoader = loader;
                 localBridgeCallbackClazzArray = bridgeCallbackClazzArray;
-                Log.debug(TAG, "RPC重新初始化成功");
+                 Log.record(TAG, "RPC重新初始化成功");
             } catch (Exception e) {
                 Log.error(TAG, "RPC重新初始化失败:");
                 Log.printStackTrace(e);
@@ -271,9 +271,8 @@ public class NewRpcBridge implements RpcBridge {
                                                 }
                                             } catch (Exception e) {
                                                 rpcEntity.setError();
-                                                Log.error(TAG, "new rpc response2 | id: " + rpcEntity.hashCode() + " | method: " + rpcEntity.getRequestMethod() +
-                                                        " err:");
-                                                Log.printStackTrace(e);
+                                                Log.printStackTrace(TAG,"new rpc response2 | id: " + rpcEntity.hashCode() + " | method: " + rpcEntity.getRequestMethod() +
+                                                        " err:",e);
                                             }
                                         }
                                         return null;
@@ -297,17 +296,17 @@ public class NewRpcBridge implements RpcBridge {
                             long currentTime = System.currentTimeMillis();
                             long timeSinceLastStart = currentTime - lastAlipayStartTime;
                             if (timeSinceLastStart < ALIPAY_START_DEBOUNCE_TIME) {
-                                Log.debug(TAG, "距离上次启动支付宝仅 " + timeSinceLastStart + "ms，跳过本次启动");
+                                 Log.record(TAG, "距离上次启动支付宝仅 " + timeSinceLastStart + "ms，跳过本次启动");
                             } else {
                                 synchronized (alipayStartLock) {
                                     // 双重检查，防止多线程竞争
                                     currentTime = System.currentTimeMillis();
                                     timeSinceLastStart = currentTime - lastAlipayStartTime;
                                     if (timeSinceLastStart < ALIPAY_START_DEBOUNCE_TIME) {
-                                        Log.debug(TAG, "距离上次启动支付宝仅 " + timeSinceLastStart + "ms，跳过本次启动（双重检查）");
+                                         Log.record(TAG, "距离上次启动支付宝仅 " + timeSinceLastStart + "ms，跳过本次启动（双重检查）");
                                     } else {
                                         lastAlipayStartTime = currentTime;
-                                        Log.debug(TAG, "检测到安全验证错误，自动启动支付宝进行滑块中...");
+                                         Log.record(TAG, "检测到安全验证错误，自动启动支付宝进行滑块中...");
                                         Toast.INSTANCE.show(
                                                 "为了保障您的操作安全，请进行验证后继续,自动启动支付宝进行滑块中..."
                                         );

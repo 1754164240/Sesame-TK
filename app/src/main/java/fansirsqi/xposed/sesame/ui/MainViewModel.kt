@@ -16,10 +16,8 @@ import fansirsqi.xposed.sesame.util.Files
 import fansirsqi.xposed.sesame.util.maps.UserMap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -248,11 +246,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
 
     companion object {
-        val TAG = "MainViewModel"
+        const val TAG = "MainViewModel"
         val verifuids: List<String> = getFolderList(Files.CONFIG_DIR.absolutePath)
         var verifyId: String = "待施工🚧..."
 
-        var lspService = LsposedServiceManager.service
 
     }
 }

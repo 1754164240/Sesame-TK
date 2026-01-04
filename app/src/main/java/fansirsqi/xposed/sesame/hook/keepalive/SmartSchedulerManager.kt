@@ -31,7 +31,7 @@ object SmartSchedulerManager {
     @Synchronized
     fun initialize(context: Context?) {
         if (initialized) {
-            Log.debug(TAG, "调度器已经初始化，跳过重复初始化")
+             Log.record(TAG, "调度器已经初始化，跳过重复初始化")
             return
         }
 
@@ -42,7 +42,7 @@ object SmartSchedulerManager {
 
         try {
             val appContext = context.applicationContext ?: context
-            Log.debug(TAG, "🔧 正在初始化调度器...")
+             Log.record(TAG, "🔧 正在初始化调度器...")
 
             // 创建调度器
             scheduler = CoroutineScheduler(appContext)

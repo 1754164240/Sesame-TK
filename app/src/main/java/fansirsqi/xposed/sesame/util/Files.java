@@ -519,7 +519,7 @@ public class Files {
                 } catch (IOException e) {
                     // 捕获 close 时的异常（包括 EPERM）
                     // 数据已经 flush，close 失败不影响写入结果
-                    Log.debug(TAG, "文件关闭异常（数据已写入）: " + e.getMessage());
+                     Log.record(TAG, "文件关闭异常（数据已写入）: " + e.getMessage());
                 }
             }
         }

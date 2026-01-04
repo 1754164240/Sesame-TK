@@ -5,7 +5,13 @@ import fansirsqi.xposed.sesame.data.Status
 import fansirsqi.xposed.sesame.hook.Toast
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.ResChecker
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.max
@@ -59,7 +65,7 @@ object WhackMole {
                 }
                 Status.setFlagToday(EXEC_FLAG)
             } catch (e: Exception) {
-                Log.other("打地鼠异常: ${e.message}")
+                Log.printStackTrace(TAG, "打地鼠异常: ", e)
             } finally {
                 isRunning = false
                 Log.record(TAG, "🎮 打地鼠运行状态已重置")
@@ -107,7 +113,8 @@ object WhackMole {
                             delay(100 + (0..200).random().toLong())
                         }
                     }
-                } catch (t: Throwable) { }
+                } catch (t: Throwable) {
+                }
             }
 
             // 3. 计算剩余 ID 并结算 (使用 oldsettlementWhackMole)
@@ -144,7 +151,9 @@ object WhackMole {
                     delay(intervalCalculator.calculateNextDelay(dynamicInterval, roundNum, totalGames, remaining))
                 }
             }
-        } catch (e: CancellationException) { return }
+        } catch (e: CancellationException) {
+            return
+        }
 
         // 等待结算窗口
         val waitTime = max(0L, GAME_DURATION_MS - (System.currentTimeMillis() - startTime.get()))
@@ -173,7 +182,9 @@ object WhackMole {
             val token = startResp.optString("token")
             Toast.show("打地鼠 第${round}局启动\nToken: $token")
             GameSession(token, round)
-        } catch (e: Exception) { null }
+        } catch (e: Exception) {
+            null
+        }
     }
 
     private suspend fun settleStandardRound(session: GameSession): Int = withContext(Dispatchers.IO) {
@@ -183,7 +194,8 @@ object WhackMole {
             if (ResChecker.checkRes(TAG, resp)) {
                 return@withContext resp.optInt("totalEnergy", 0)
             }
-        } catch (e: Exception) { }
+        } catch (e: Exception) {
+        }
         0
     }
 }

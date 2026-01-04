@@ -47,16 +47,16 @@ object EcoLife {
                 return
             }
 
-            if (AntForest.Companion.ecoLifeOption!!.value.contains("plate")) {
+            if (AntForest.ecoLifeOption!!.value.contains("plate")) {
                 // 光盘行动
                 photoGuangPan(dayPoint)
             }
 
             val actionListVO = data.getJSONArray("actionListVO")
             // 绿色打卡
-            if (AntForest.Companion.ecoLifeOption!!.value.contains("tick")) {
+            if (AntForest.ecoLifeOption!!.value.contains("tick")) {
                 if (!data.getBoolean("openStatus")) {
-                    if (!openEcoLife() || !AntForest.Companion.ecoLifeOpen!!.value) {
+                    if (!openEcoLife() || !AntForest.ecoLifeOpen!!.value) {
                         return
                     }
                     jsonObject = JSONObject(AntForestRpcCall.ecolifeQueryHomePage())
@@ -161,7 +161,7 @@ object EcoLife {
                 Log.record("$TAG.photoGuangPan.ecolifeQueryDish", jo.optString("resultDesc"))
                 return
             }
-            var photo: MutableMap<String?, String?>? = HashMap<String?, String?>()
+            var photo: MutableMap<String?, String?>? = HashMap()
             val data = jo.optJSONObject("data")
             if (data != null) {
                 val beforeMealsImageUrl = data.optString("beforeMealsImageUrl")

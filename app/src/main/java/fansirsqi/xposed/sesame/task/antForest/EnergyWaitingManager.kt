@@ -3,8 +3,6 @@ package fansirsqi.xposed.sesame.task.antForest
 import android.annotation.SuppressLint
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.TimeUtil
-import java.text.SimpleDateFormat
-import java.util.Date
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
@@ -16,6 +14,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.json.JSONObject
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.max
@@ -252,11 +252,11 @@ object EnergyWaitingManager {
                 if (existingTask != null) {
                     // 如果已存在且时间相同，跳过添加
                     if (existingTask.produceTime == produceTime) {
-                        Log.debug(TAG, "蹲点任务[$taskId]已存在且时间相同，跳过重复添加")
+                         Log.record(TAG, "蹲点任务[$taskId]已存在且时间相同，跳过重复添加")
                         return@withLock
                     }
                     // 如果时间不同，记录更新信息
-                    Log.debug(TAG, "更新蹲点任务[$taskId]：时间从[${TimeUtil.getCommonDate(existingTask.produceTime)}]更新为[${TimeUtil.getCommonDate(produceTime)}]")
+                     Log.record(TAG, "更新蹲点任务[$taskId]：时间从[${TimeUtil.getCommonDate(existingTask.produceTime)}]更新为[${TimeUtil.getCommonDate(produceTime)}]")
                 }
 
                 // 检查是否是自己的账号
@@ -289,7 +289,7 @@ object EnergyWaitingManager {
                     // 自己的账号：不获取保护时间，直接设置为0
                     finalShieldEndTime = 0L
                     finalBombEndTime = 0L
-                    Log.debug(TAG, "⭐️ [主号|$userName]不检查保护罩，到时间直接收取")
+                     Log.record(TAG, "⭐️ [主号|$userName]不检查保护罩，到时间直接收取")
                 }
 
                 // 注释：原本的时间有效性检查已删除
@@ -299,7 +299,7 @@ object EnergyWaitingManager {
                 // 检查等待时间是否过长
                 val waitTime = produceTime - currentTime
                 if (waitTime > MAX_WAIT_TIME_MS) {
-                    Log.debug(TAG, "能量球[$bubbleId]等待时间过长(${waitTime/1000/60}分钟)，跳过蹲点")
+                     Log.record(TAG, "能量球[$bubbleId]等待时间过长(${waitTime/1000/60}分钟)，跳过蹲点")
                     // 移除过长的任务
                     waitingTasks.remove(taskId)
                     EnergyWaitingPersistence.saveTasks(waitingTasks)
@@ -384,7 +384,7 @@ object EnergyWaitingManager {
                     // 阶段1：如果等待时间>2分钟且是好友任务，先等到倒计时2分钟时验证
                     if (waitTime > twoMinutes && !task.isSelf()) {
                         val waitBeforeValidation = waitTime - twoMinutes
-                        Log.debug(TAG, "蹲点[${task.getUserTypeTag()}${task.userName}]将在${(waitBeforeValidation/1000/60).toInt()}分钟后验证")
+                         Log.record(TAG, "蹲点[${task.getUserTypeTag()}${task.userName}]将在${(waitBeforeValidation/1000/60).toInt()}分钟后验证")
                         delay(waitBeforeValidation)
 
                         // 检查任务是否被移除
@@ -414,10 +414,10 @@ object EnergyWaitingManager {
                                     Log.record(TAG, "✅ 验证通过[${task.getUserTypeTag()}${task.userName}]：无保护罩，继续等待2分钟")
                                 }
                             } else {
-                                Log.debug(TAG, "验证[${task.getUserTypeTag()}${task.userName}]：无法获取主页信息，继续执行")
+                                 Log.record(TAG, "验证[${task.getUserTypeTag()}${task.userName}]：无法获取主页信息，继续执行")
                             }
                         } catch (e: Exception) {
-                            Log.debug(TAG, "验证[${task.getUserTypeTag()}${task.userName}]出错: ${e.message}，继续执行")
+                             Log.record(TAG, "验证[${task.getUserTypeTag()}${task.userName}]出错: ${e.message}，继续执行")
                         }
 
                         // 更新剩余等待时间为2分钟
@@ -438,8 +438,8 @@ object EnergyWaitingManager {
                         }
 
                         // 仅在最后1分钟显示倒计时
-                        if (remainingWait > 0 && remainingWait <= 60000L) {
-                            Log.debug(TAG, "蹲点[${task.getUserTypeTag()}${task.userName}]倒计时${remainingWait/1000}秒")
+                        if (remainingWait in 1..60000L) {
+                             Log.record(TAG, "蹲点[${task.getUserTypeTag()}${task.userName}]倒计时${remainingWait/1000}秒")
                         }
                     }
 
@@ -466,7 +466,7 @@ object EnergyWaitingManager {
                 executePreciseWaitingTask(task)
 
             } catch (_: CancellationException) {
-                Log.debug(TAG, "精确蹲点任务[${task.taskId}]被取消")
+                 Log.record(TAG, "精确蹲点任务[${task.taskId}]被取消")
             } catch (e: Exception) {
                 Log.printStackTrace(TAG, "精确蹲点任务[${task.taskId}]执行异常", e)
 
@@ -480,7 +480,7 @@ object EnergyWaitingManager {
 
                     // 重试延迟
                     val retryDelay = smartRetryStrategy.getRetryDelay(task.retryCount, e.message)
-                    Log.debug(TAG, "精确蹲点任务[${task.taskId}]将在${retryDelay/1000}秒后重试")
+                     Log.record(TAG, "精确蹲点任务[${task.taskId}]将在${retryDelay/1000}秒后重试")
                     delay(retryDelay)
                     startPreciseWaitingCoroutine(retryTask)
                 } else {
@@ -502,7 +502,7 @@ object EnergyWaitingManager {
             try {
                 // 检查任务是否仍然有效
                 if (!waitingTasks.containsKey(task.taskId)) {
-                    Log.debug(TAG, "精确蹲点任务[${task.taskId}]已被移除，跳过执行")
+                     Log.record(TAG, "精确蹲点任务[${task.taskId}]已被移除，跳过执行")
                     return@withLock
                 }
 
@@ -525,7 +525,7 @@ object EnergyWaitingManager {
                         Log.record(TAG, "🎲 随机间隔控制：延迟${delayTime / 1000}秒执行蹲点任务[${task.taskId}]（随机间隔${randomIntervalMs/1000}秒）")
                         delay(delayTime)
                     } else {
-                        Log.debug(TAG, "⚡ 无需延迟：距离上次执行已超过${timeSinceLastExecute/1000}秒")
+                         Log.record(TAG, "⚡ 无需延迟：距离上次执行已超过${timeSinceLastExecute/1000}秒")
                     }
                 }
 
@@ -540,7 +540,7 @@ object EnergyWaitingManager {
                 val protectionEndTime = if (task.isSelf()) 0L else task.getProtectionEndTime()
                 val isProtectionEnd = if (task.isSelf()) true else protectionEndTime <= actualTime
                 if (energyTimeRemain > 300) { // 如果还有超过5分钟才成熟，直接跳过
-                    Log.debug(TAG, "⚠️ 能量距离成熟还有${energyTimeRemain}秒，时机过早，跳过本次收取")
+                     Log.record(TAG, "⚠️ 能量距离成熟还有${energyTimeRemain}秒，时机过早，跳过本次收取")
                     return@withLock
                 }
                 // 判断是否需要详细日志（未成熟或刚成熟2分钟内）
@@ -700,7 +700,7 @@ object EnergyWaitingManager {
                 // 通过回调调用AntForest的收取方法
                 callback.collectUserEnergyForWaiting(task)
             } else {
-                Log.debug(TAG, "能量收取回调未设置，跳过收取：用户[${task.userId}] 能量球[${task.bubbleId}]")
+                 Log.record(TAG, "能量收取回调未设置，跳过收取：用户[${task.userId}] 能量球[${task.bubbleId}]")
                 CollectResult(
                     success = false,
                     userName = task.userName,
@@ -786,7 +786,7 @@ object EnergyWaitingManager {
                 } else {
                     // 仅在手动调试或强制模式下打印此日志，避免刷屏
                     if (enableRevalidation) {
-                        Log.debug(TAG, "定期清理检查：无过期任务")
+                         Log.record(TAG, "定期清理检查：无过期任务")
                     }
                 }
 
@@ -802,10 +802,10 @@ object EnergyWaitingManager {
                 if (waitingTasks.isNotEmpty()) {
                     // 如果是定时任务且没有做任何操作，可以考虑降低日志级别或不打印
                     if (matureTasks.isNotEmpty() || expiredTasks.isNotEmpty() || enableRevalidation) {
-                        Log.debug(TAG, "清理维护完成，当前活跃蹲点${waitingTasks.size}个")
+                         Log.record(TAG, "清理维护完成，当前活跃蹲点${waitingTasks.size}个")
                     }
                 } else {
-                    Log.debug(TAG, "清理维护完成，当前无活跃蹲点任务")
+                     Log.record(TAG, "清理维护完成，当前无活跃蹲点任务")
                 }
             }
         }
@@ -896,7 +896,7 @@ object EnergyWaitingManager {
         managerScope.launch {
             taskMutex.withLock {
                 if (waitingTasks.isEmpty()) {
-                    Log.debug(TAG, "无需验证：当前无蹲点任务")
+                     Log.record(TAG, "无需验证：当前无蹲点任务")
                     return@withLock
                 }
 
@@ -917,7 +917,7 @@ object EnergyWaitingManager {
                         val userHomeResponse = AntForestRpcCall.queryFriendHomePage(task.userId, task.fromTag)
 
                         if (userHomeResponse.isNullOrEmpty()) {
-                            Log.debug(TAG, "  验证[${task.getUserTypeTag()}${task.userName}]：无法获取主页信息，保留任务")
+                             Log.record(TAG, "  验证[${task.getUserTypeTag()}${task.userName}]：无法获取主页信息，保留任务")
                             return@forEach
                         }
 
@@ -941,7 +941,7 @@ object EnergyWaitingManager {
                         // 添加短暂延迟，避免请求过快
                         delay(200)
                     } catch (e: Exception) {
-                        Log.debug(TAG, "  验证任务[${task.taskId}]时出错: ${e.message}，保留任务")
+                         Log.record(TAG, "  验证任务[${task.taskId}]时出错: ${e.message}，保留任务")
                     }
                 }
 
@@ -1016,7 +1016,7 @@ object EnergyWaitingManager {
                 val loadedTasks = EnergyWaitingPersistence.loadTasks()
 
                 if (loadedTasks.isEmpty()) {
-                    Log.debug(TAG, "持久化存储中无任务需要恢复")
+                     Log.record(TAG, "持久化存储中无任务需要恢复")
                     return@launch
                 }
 
@@ -1028,7 +1028,7 @@ object EnergyWaitingManager {
                         try {
                             // 检查任务是否已经存在（避免重复添加）
                             if (waitingTasks.containsKey(task.taskId)) {
-                                Log.debug(TAG, "任务[${task.taskId}]已存在，跳过重复添加")
+                                 Log.record(TAG, "任务[${task.taskId}]已存在，跳过重复添加")
                                 return@withLock false
                             }
 
