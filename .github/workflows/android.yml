@@ -228,7 +228,6 @@ jobs:
       - name: 🔁 Sync Release to Target Repository
         uses: softprops/action-gh-release@v2
         with:
-          repository: Xposed-Modules-Repo/fansirsqi.xposed.sesame # 目标仓库的拥有者和仓库名称
           name: ${{ github.event.release.tag_name || steps.extract_info.outputs.version }} # 发布的名称。默认为标签名称
           files: |
             ${{ steps.extract_apks.outputs.signed_arm64 }}
@@ -241,7 +240,6 @@ jobs:
             CHECKSUMS-Sesame-x86-${{ steps.extract_info.outputs.version }}.apk.sha256
             CHECKSUMS-Sesame-x86_64-${{ steps.extract_info.outputs.version }}.apk.sha256
             CHECKSUMS-Sesame-universal-${{ steps.extract_info.outputs.version }}.apk.sha256
-          token: ${{ secrets.TARGET_REPO_PAT }}
           tag_name: ${{ steps.extract_info.outputs.version}}
           draft: false
           append_body: true
