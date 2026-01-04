@@ -65,7 +65,7 @@ abstract class IdMaps private constructor() {
     @Synchronized
     fun load(userId: String? = null) {
         if (userId.isNullOrEmpty()) {
-            Log.runtime(TAG, "Skip loading map for empty userId")
+            Log.record(TAG, "Skip loading map for empty userId")
             doLoadGlobal()
         } else {
             idMap.clear()

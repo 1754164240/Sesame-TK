@@ -57,7 +57,7 @@ object EnergyRainCoroutine {
             Log.debug(TAG, "execEnergyRain 协程被取消")
             throw e  // 必须重新抛出以保证取消机制正常工作
         } catch (th: Throwable) {
-            Log.runtime(TAG, "执行能量雨出错:")
+            Log.record(TAG, "执行能量雨出错:")
             Log.printStackTrace(TAG, th)
         }
     }
@@ -108,7 +108,7 @@ object EnergyRainCoroutine {
                                 }
                             } else {
                                 Log.record(TAG, "送能量雨失败")
-                                Log.runtime(TAG, rainJsonObj.toString())
+                                Log.record(TAG, rainJsonObj.toString())
                             }
                             granted = true
                             break
@@ -133,7 +133,7 @@ object EnergyRainCoroutine {
             Log.debug(TAG, "energyRain 协程被取消")
             throw e  // 必须重新抛出以保证取消机制正常工作
         } catch (th: Throwable) {
-            Log.runtime(TAG, "energyRain err:")
+            Log.record(TAG, "energyRain err:")
             Log.printStackTrace(TAG, th)
         }
     }
@@ -165,14 +165,14 @@ object EnergyRainCoroutine {
                 }
                 randomDelay(300, 400) // 随机延迟 300-400ms
             } else {
-                Log.runtime(TAG, "startEnergyRain: $joStart")
+                Log.record(TAG, "startEnergyRain: $joStart")
             }
         } catch (e: kotlinx.coroutines.CancellationException) {
             // 协程取消是正常现象，不记录为错误
             Log.debug(TAG, "startEnergyRain 协程被取消")
             throw e  // 必须重新抛出以保证取消机制正常工作
         } catch (th: Throwable) {
-            Log.runtime(TAG, "startEnergyRain err:")
+            Log.record(TAG, "startEnergyRain err:")
             Log.printStackTrace(TAG, th)
         }
     }

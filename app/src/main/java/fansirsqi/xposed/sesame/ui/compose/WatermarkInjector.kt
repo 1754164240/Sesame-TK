@@ -6,7 +6,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
-import fansirsqi.xposed.sesame.ui.components.WatermarkLayer
+import fansirsqi.xposed.sesame.newui.WatermarkLayer
 import fansirsqi.xposed.sesame.ui.theme.AppTheme
 
 /**

@@ -150,12 +150,12 @@ class EcoProtection : ModelTask() {
                                     )
                                 } else {
                                     Log.record(jo.getString("resultDesc"))
-                                    Log.runtime(jo.toString())
+                                    Log.record(jo.toString())
                                 }
                             }
                         } else {
                             Log.record(jo.getString("resultDesc"))
-                            Log.runtime(ancientTreeDetail.toString())
+                            Log.record(ancientTreeDetail.toString())
                         }
                         sleepCompat(500L)
                     }

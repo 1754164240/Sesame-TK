@@ -105,13 +105,13 @@ object HookUtil {
                                         Log.capture(prettyRecord)
                                     }
                                 } catch (e: Exception) {
-                                    Log.runtime(TAG, "JSON 构建失败: ${e.message}")
+                                    Log.record(TAG, "JSON 构建失败: ${e.message}")
                                 }
                             }
                         }
                     }
                 })
-            Log.runtime(TAG, "Hook RpcBridgeExtension#rpc 成功")
+            Log.record(TAG, "Hook RpcBridgeExtension#rpc 成功")
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "Hook RpcBridgeExtension#rpc 失败", t)
         }
@@ -165,7 +165,7 @@ object HookUtil {
                     }
                 }
             })
-            Log.runtime(TAG, "Hook DefaultBridgeCallback#sendJSONResponse 成功")
+            Log.record(TAG, "Hook DefaultBridgeCallback#sendJSONResponse 成功")
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "Hook DefaultBridgeCallback#sendJSONResponse 失败", t)
         }
@@ -176,7 +176,7 @@ object HookUtil {
      * @param classLoader 类加载器
      */
     fun fuckAccounLimit(classLoader: ClassLoader) {
-        Log.runtime(TAG, "Hook AccountManagerListAdapter#getCount")
+        Log.record(TAG, "Hook AccountManagerListAdapter#getCount")
         XposedHelpers.findAndHookMethod(
             "com.alipay.mobile.security.accountmanager.data.AccountManagerListAdapter",  // target class
             classLoader, "getCount",  // method name
@@ -202,7 +202,7 @@ object HookUtil {
                     }
                 }
             })
-        Log.runtime(TAG, "Hook AccountManagerListAdapter#getCount END")
+        Log.record(TAG, "Hook AccountManagerListAdapter#getCount END")
     }
 
 
@@ -245,7 +245,7 @@ object HookUtil {
 
     fun hookUser(classLoader: ClassLoader) {
         runCatching {
-            Log.runtime(TAG, "loading userCache from target app")
+            Log.record(TAG, "loading userCache from target app")
             UserMap.unload()
             val selfId = getUserId(classLoader)
             UserMap.setCurrentUserId(selfId) //有些地方要用到 要set一下
@@ -275,14 +275,14 @@ object HookUtil {
                     if (userId == selfId) selfEntity = userEntity
                     UserMap.add(userEntity)
                 }.onFailure {
-                    Log.runtime(TAG, "addUserObject err:")
+                    Log.record(TAG, "addUserObject err:")
                     Log.printStackTrace(it)
                 }
             }
 
             UserMap.saveSelf(selfEntity)
             UserMap.save(selfId)
-            Log.runtime(TAG, "userCache load scuess !")
+            Log.record(TAG, "userCache load scuess !")
         }.onFailure {
             Log.printStackTrace(TAG, "hookUser 失败", it)
         }

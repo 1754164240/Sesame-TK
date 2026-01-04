@@ -83,9 +83,9 @@ import fansirsqi.xposed.sesame.SesameApplication.Companion.preferencesKey
 import fansirsqi.xposed.sesame.entity.UserEntity
 import fansirsqi.xposed.sesame.newui.DeviceInfoCard
 import fansirsqi.xposed.sesame.newui.DeviceInfoUtil
+import fansirsqi.xposed.sesame.newui.WatermarkLayer
 import fansirsqi.xposed.sesame.newutil.IconManager
 import fansirsqi.xposed.sesame.ui.MainViewModel.Companion.verifyId
-import fansirsqi.xposed.sesame.ui.components.WatermarkLayer
 import fansirsqi.xposed.sesame.ui.log.LogViewerComposeActivity
 import fansirsqi.xposed.sesame.ui.theme.AppTheme
 import fansirsqi.xposed.sesame.util.Detector
@@ -115,7 +115,8 @@ class MainActivity : BaseActivity() {
         super.onCreate(savedInstanceState)
 
         // 1. 检查权限并初始化逻辑
-        if (PermissionUtil.checkOrRequestFilePermissions(this)) {
+        hasPermissions = PermissionUtil.checkOrRequestFilePermissions(this)
+        if (hasPermissions) {
             viewModel.initAppLogic()
             // 🔥 修复：Native 检测必须在 Activity 中调用
             initNativeDetector()
@@ -150,7 +151,6 @@ class MainActivity : BaseActivity() {
                     )
                 }
             }
-
         }
 
 //        WatermarkView.install(activity = this)

@@ -40,24 +40,24 @@ object LsposedServiceManager {
         val listener = object : XposedServiceHelper.OnServiceListener {
             override fun onServiceBind(boundService: XposedService) {
                 if (isModuleActivated) {
-                    Log.runtime(TAG, "Another Xposed service tried to connect: ${boundService.frameworkName}. Ignoring.")
+                    Log.record(TAG, "Another Xposed service tried to connect: ${boundService.frameworkName}. Ignoring.")
                     return
                 }
-                Log.runtime(TAG, "LSPosed service connected: ${boundService.frameworkName} v${boundService.frameworkVersion}")
+                Log.record(TAG, "LSPosed service connected: ${boundService.frameworkName} v${boundService.frameworkVersion}")
                 updateState(ConnectionState.Connected(boundService))
             }
 
             override fun onServiceDied(deadService: XposedService) {
                 // 检查 service 属性而不是直接比较，避免在多线程环境下的竞态条件
                 if (service == deadService) {
-                    Log.runtime(TAG, "LSPosed service died.")
+                    Log.record(TAG, "LSPosed service died.")
                     updateState(ConnectionState.Disconnected)
                 }
             }
         }
 
         XposedServiceHelper.registerListener(listener)
-        Log.runtime(TAG, "ServiceManager initialized and listener registered.")
+        Log.record(TAG, "ServiceManager initialized and listener registered.")
     }
 
     /** 添加状态监听器，添加后立即触发一次当前状态 */

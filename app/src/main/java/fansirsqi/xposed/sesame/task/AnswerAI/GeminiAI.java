@@ -103,7 +103,7 @@ public class GeminiAI implements AnswerAIInterface {
                 String json = response.body().string();
                 if (!response.isSuccessful()) {
                     Log.other("Gemini请求失败");
-                    Log.runtime(TAG, "Gemini接口异常：" + json);
+                    Log.record(TAG, "Gemini接口异常：" + json);
                     return result;
                 }
                 JSONObject jsonObject = new JSONObject(json);

@@ -1,7 +1,6 @@
 package fansirsqi.xposed.sesame.util
 
 import android.content.Context
-import fansirsqi.xposed.sesame.BuildConfig
 import fansirsqi.xposed.sesame.model.BaseModel
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
@@ -19,8 +18,6 @@ object Log {
     private val errorCountMap = ConcurrentHashMap<String, AtomicInteger>()
 
     // Logger 实例
-    private val RUNTIME_LOGGER: Logger
-    private val SYSTEM_LOGGER: Logger
     private val RECORD_LOGGER: Logger
     private val DEBUG_LOGGER: Logger
     private val FOREST_LOGGER: Logger
@@ -28,15 +25,12 @@ object Log {
     private val OTHER_LOGGER: Logger
     private val ERROR_LOGGER: Logger
     private val CAPTURE_LOGGER: Logger
-    private val CAPTCHA_LOGGER: Logger
 
     init {
         // 🔥 1. 立即初始化 Logcat，确保在任何 Context 到来之前控制台可用
         Logback.initLogcatOnly()
 
         // 2. 初始化 Logger 实例 (此时它们已经有了 Logcat 能力)
-        RUNTIME_LOGGER = LoggerFactory.getLogger("runtime")
-        SYSTEM_LOGGER = LoggerFactory.getLogger("system")
         RECORD_LOGGER = LoggerFactory.getLogger("record")
         DEBUG_LOGGER = LoggerFactory.getLogger("debug")
         FOREST_LOGGER = LoggerFactory.getLogger("forest")
@@ -44,7 +38,6 @@ object Log {
         OTHER_LOGGER = LoggerFactory.getLogger("other")
         ERROR_LOGGER = LoggerFactory.getLogger("error")
         CAPTURE_LOGGER = LoggerFactory.getLogger("capture")
-        CAPTCHA_LOGGER = LoggerFactory.getLogger("captcha")
     }
 
     /**
@@ -62,35 +55,11 @@ object Log {
 
     // --- 日志方法 ---
 
-    @JvmStatic
-    fun system(msg: String) {
-        SYSTEM_LOGGER.info("$DEFAULT_TAG{}", msg)
-    }
-
-    @JvmStatic
-    fun system(tag: String, msg: String) {
-        system("[$tag]: $msg")
-    }
-
-    @JvmStatic
-    fun runtime(msg: String) {
-        system(msg)
-        // 注意：这里需要确保 BaseModel 已经初始化，或者增加空安全检查
-        if (BaseModel.runtimeLog.value == true || BuildConfig.DEBUG) {
-            RUNTIME_LOGGER.info("$DEFAULT_TAG{}", msg)
-        }
-    }
-
-    @JvmStatic
-    fun runtime(tag: String, msg: String) {
-        runtime("[$tag]: $msg")
-    }
 
     @JvmStatic
     fun record(msg: String) {
-        runtime(msg)
         if (BaseModel.recordLog.value == true) {
-            RECORD_LOGGER.info("$DEFAULT_TAG{}", msg)
+            RECORD_LOGGER.debug("$DEFAULT_TAG{}", msg)
         }
     }
 
@@ -102,7 +71,7 @@ object Log {
     @JvmStatic
     fun forest(msg: String) {
         record(msg)
-        FOREST_LOGGER.info("{}", msg)
+        FOREST_LOGGER.debug("{}", msg)
     }
 
     @JvmStatic
@@ -113,13 +82,13 @@ object Log {
     @JvmStatic
     fun farm(msg: String) {
         record(msg)
-        FARM_LOGGER.info("{}", msg)
+        FARM_LOGGER.debug("{}", msg)
     }
 
     @JvmStatic
     fun other(msg: String) {
         record(msg)
-        OTHER_LOGGER.info("{}", msg)
+        OTHER_LOGGER.debug("{}", msg)
     }
 
     @JvmStatic
@@ -129,8 +98,8 @@ object Log {
 
     @JvmStatic
     fun debug(msg: String) {
-        runtime(msg)
-        DEBUG_LOGGER.info("{}", msg)
+        record(msg)
+        DEBUG_LOGGER.debug("{}", msg)
     }
 
     @JvmStatic
@@ -140,7 +109,7 @@ object Log {
 
     @JvmStatic
     fun error(msg: String) {
-        runtime(msg)
+        record(msg)
         ERROR_LOGGER.error("$DEFAULT_TAG{}", msg)
     }
 
@@ -159,16 +128,6 @@ object Log {
         capture("[$tag]: $msg")
     }
 
-    @JvmStatic
-    fun captcha(msg: String) {
-        runtime(msg)
-        CAPTCHA_LOGGER.info("{}", msg)
-    }
-
-    @JvmStatic
-    fun captcha(tag: String, msg: String) {
-        captcha("[$tag]: $msg")
-    }
 
     /**
      * 检查是否应该打印此错误（去重机制）
@@ -190,7 +149,7 @@ object Log {
 
         // 如果是第3次，记录一个汇总信息
         if (currentCount == MAX_DUPLICATE_ERRORS) {
-            runtime("⚠️ 错误【$errorSignature】已出现${currentCount}次，后续将不再打印详细堆栈")
+            record("⚠️ 错误【$errorSignature】已出现${currentCount}次，后续将不再打印详细堆栈")
             return true
         }
 
@@ -241,6 +200,6 @@ object Log {
     @JvmStatic
     fun printStack(tag: String) {
         val stackTrace = "stack: " + android.util.Log.getStackTraceString(Exception("获取当前堆栈$tag:"))
-        system(stackTrace)
+        record(stackTrace)
     }
 }

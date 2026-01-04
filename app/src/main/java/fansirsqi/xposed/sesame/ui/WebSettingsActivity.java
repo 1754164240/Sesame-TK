@@ -120,10 +120,10 @@ public class WebSettingsActivity extends BaseActivity {
             @Override
             public void handleOnBackPressed() {
                 if (webView.canGoBack()) {
-                    Log.runtime(TAG, "WebSettingsActivity.handleOnBackPressed: go back");
+                    Log.record(TAG, "WebSettingsActivity.handleOnBackPressed: go back");
                     webView.goBack();
                 } else {
-                    Log.runtime(TAG, "WebSettingsActivity.handleOnBackPressed: save");
+                    Log.record(TAG, "WebSettingsActivity.handleOnBackPressed: save");
                     save();
                     finish();
                 }
@@ -217,7 +217,7 @@ public class WebSettingsActivity extends BaseActivity {
                 if (webView.canGoBack()) {
                     webView.goBack();
                 } else {
-                    Log.runtime(TAG, "WebAppInterface onBackPressed: save");
+                    Log.record(TAG, "WebAppInterface onBackPressed: save");
                     save();
                     WebSettingsActivity.this.finish();
                 }
@@ -235,7 +235,7 @@ public class WebSettingsActivity extends BaseActivity {
         public String getTabs() {
             String result = JsonUtil.formatJson(tabList, false);
             if (BuildConfig.DEBUG) {
-                Log.runtime(TAG, "WebSettingsActivity.getTabs: " + result);
+//                Log.record(TAG, "WebSettingsActivity.getTabs: " + result);
             }
             return result;
         }
@@ -258,7 +258,7 @@ public class WebSettingsActivity extends BaseActivity {
         public String getGroup() {
             String result = JsonUtil.formatJson(groupList, false);
             if (BuildConfig.DEBUG) {
-                Log.runtime(TAG, "WebSettingsActivity.getGroup: " + result);
+//                Log.record(TAG, "WebSettingsActivity.getGroup: " + result);
             }
             return result;
         }
@@ -276,7 +276,7 @@ public class WebSettingsActivity extends BaseActivity {
             }
             String result = JsonUtil.formatJson(modelDtoList, false);
             if (BuildConfig.DEBUG) {
-                Log.runtime(TAG, "WebSettingsActivity.getModelByGroup: " + result);
+//                Log.record(TAG, "WebSettingsActivity.getModelByGroup: " + result);
             }
             return result;
         }
@@ -316,7 +316,7 @@ public class WebSettingsActivity extends BaseActivity {
                 }
                 String result = JsonUtil.formatJson(list, false);
                 if (BuildConfig.DEBUG) {
-                    Log.runtime(TAG, "WebSettingsActivity.getModel: " + result);
+//                    Log.record(TAG, "WebSettingsActivity.getModel: " + result);
                 }
                 return result;
             }
@@ -363,7 +363,7 @@ public class WebSettingsActivity extends BaseActivity {
                 if (modelField != null) {
                     String result = JsonUtil.formatJson(ModelFieldInfoDto.toInfoDto(modelField), false);
                     if (BuildConfig.DEBUG) {
-                        Log.runtime(TAG, "WebSettingsActivity.getField: " + result);
+//                        Log.record(TAG, "WebSettingsActivity.getField: " + result);
                     }
                     return result;
                 }
@@ -397,7 +397,7 @@ public class WebSettingsActivity extends BaseActivity {
         public boolean saveOnExit() {
             // 切换到主线程执行 UI 操作和保存逻辑
             runOnUiThread(() -> {
-                Log.runtime(TAG, "WebViewCallback: saveOnExit called");
+                Log.record(TAG, "WebViewCallback: saveOnExit called");
                 // 1. 调用外部类 WebSettingsActivity 的 save() 方法进行持久化保存
                 save();
                 // 2. 关闭当前 Activity
@@ -481,7 +481,7 @@ public class WebSettingsActivity extends BaseActivity {
                 break;
             case 6:
                 // 在调用 save() 之前，先调用 JS 函数同步 WebView 中的数据到 Java 端
-                Log.runtime(TAG, "WebSettingsActivity.onOptionsItemSelected: Calling handleData() in WebView");
+                Log.record(TAG, "WebSettingsActivity.onOptionsItemSelected: Calling handleData() in WebView");
                 webView.evaluateJavascript("if(typeof handleData === 'function'){ handleData(); } else { console.error('handleData function not found'); }", null);
                 // 使用 Handler 延迟执行 save()，给 JS 一点时间完成异步操作
                 // 200 毫秒是一个经验值，如果仍然有问题可以适当增加

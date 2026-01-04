@@ -26,7 +26,7 @@ class UIConfig private constructor() {
             UI_OPTION_WEB -> WebSettingsActivity::class.java
             UI_OPTION_NEW -> SettingActivity::class.java
             else -> {
-                Log.runtime(TAG, "未知的 UI 选项: $uiOption")
+                Log.record(TAG, "未知的 UI 选项: $uiOption")
                 WebSettingsActivity::class.java
             }
         }
@@ -59,7 +59,7 @@ class UIConfig private constructor() {
                         val formatted = JsonUtil.formatJson(INSTANCE)
                         // Kotlin 中字符串使用 != 比较的是内容 (equals)
                         if (formatted != null && formatted != json) {
-                            Log.runtime(TAG, "格式化${TAG}配置")
+                            Log.record(TAG, "格式化${TAG}配置")
                             Files.write2File(formatted, targetFile)
                         }
                     } else {
@@ -71,7 +71,7 @@ class UIConfig private constructor() {
                 }
             } catch (e: Exception) {
                 Log.printStackTrace(TAG, e)
-                Log.runtime(TAG, "重置${TAG}配置")
+                Log.record(TAG, "重置${TAG}配置")
                 resetToDefault()
                 try {
                     Files.write2File(JsonUtil.formatJson(INSTANCE), targetFile)
@@ -86,7 +86,7 @@ class UIConfig private constructor() {
         @JvmStatic
         @Synchronized
         private fun resetToDefault() {
-            Log.runtime(TAG, "重置UI配置")
+            Log.record(TAG, "重置UI配置")
             INSTANCE.uiOption = UI_OPTION_WEB
             INSTANCE.isInit = false
         }

@@ -2,7 +2,6 @@ package fansirsqi.xposed.sesame.model
 
 import fansirsqi.xposed.sesame.BuildConfig
 import fansirsqi.xposed.sesame.hook.CaptchaHook.updateHooks
-import fansirsqi.xposed.sesame.hook.Toast
 import fansirsqi.xposed.sesame.model.modelFieldExt.BooleanModelField
 import fansirsqi.xposed.sesame.model.modelFieldExt.ChoiceModelField
 import fansirsqi.xposed.sesame.model.modelFieldExt.IntegerModelField
@@ -253,7 +252,7 @@ class BaseModel : Model() {
         @JvmStatic
         fun destroyData() {
             try {
-                Log.runtime(TAG, "🧹清理所有数据")
+                Log.record(TAG, "🧹清理所有数据")
                 IdMapManager.getInstance(BeachMap::class.java).clear()
                 //            IdMapManager.getInstance(ReserveaMap.class).clear();
 //            IdMapManager.getInstance(CooperateMap.class).clear();

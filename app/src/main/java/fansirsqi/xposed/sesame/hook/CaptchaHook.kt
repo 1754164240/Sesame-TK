@@ -46,8 +46,8 @@ object CaptchaHook {
      */
     fun setupHook(classLoader: ClassLoader) {
         savedClassLoader = classLoader
-        Log.runtime(TAG, "验证码Hook系统初始化完成")
-        Log.runtime(TAG, "⚠️ Hook配置将在配置文件加载后同步")
+        Log.record(TAG, "验证码Hook系统初始化完成")
+        Log.record(TAG, "⚠️ Hook配置将在配置文件加载后同步")
         
         // 注意：此时配置文件还未加载，不能立即应用Hook
         // 实际的Hook应用会在BaseModel.boot()中进行
@@ -65,21 +65,21 @@ object CaptchaHook {
             return
         }
         
-        Log.runtime(TAG, "📝 更新验证码Hook状态:")
-        Log.runtime(TAG, "  UI层拦截: ${if (enableUI) "✅ 开启" else "⛔ 关闭"}")
+        Log.record(TAG, "📝 更新验证码Hook状态:")
+        Log.record(TAG, "  UI层拦截: ${if (enableUI) "✅ 开启" else "⛔ 关闭"}")
         
         // 先卸载所有现有Hook
         unhookAll()
         
         // 根据开关状态重新Hook
         if (enableUI) {
-            Log.runtime(TAG, "  🔧 设置UI层拦截...")
+            Log.record(TAG, "  🔧 设置UI层拦截...")
             uiHookUnhook = hookCaptchaDialogShow(classLoader)
         } else {
-            Log.runtime(TAG, "  ⚠️ 验证码拦截已关闭")
+            Log.record(TAG, "  ⚠️ 验证码拦截已关闭")
         }
         
-        Log.runtime(TAG, "验证码Hook更新完成 ✅")
+        Log.record(TAG, "验证码Hook更新完成 ✅")
     }
     
     /**
@@ -110,13 +110,13 @@ object CaptchaHook {
                     override fun beforeHookedMethod(param: MethodHookParam) {
                         // 阻止验证码对话框显示
                         param.result = null
-                        Log.runtime(TAG, "✅ [UI层拦截] 已阻止验证码对话框显示")
-                        Log.runtime(TAG, "  对话框: ${param.thisObject.javaClass.simpleName}")
+                        Log.record(TAG, "✅ [UI层拦截] 已阻止验证码对话框显示")
+                        Log.record(TAG, "  对话框: ${param.thisObject.javaClass.simpleName}")
                     }
                 }
             )
             
-            Log.runtime(TAG, "✅ Hook CaptchaDialog.show() 成功")
+            Log.record(TAG, "✅ Hook CaptchaDialog.show() 成功")
             unhook
         } catch (e: Throwable) {
             Log.error(TAG, "❌ Hook CaptchaDialog.show() 失败")

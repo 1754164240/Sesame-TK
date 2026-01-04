@@ -116,7 +116,7 @@ private fun Context.showPasswordDialog(onSuccess: () -> Unit) {
  */
 fun Context.navigateToSettings(userEntity: UserEntity) {
     if (Detector.loadLibrary("checker")) {
-        Log.runtime("载入用户配置 ${userEntity.showName}")
+        Log.record("载入用户配置 ${userEntity.showName}")
         val targetActivity = fansirsqi.xposed.sesame.data.UIConfig.INSTANCE.targetActivityClass
         val intent = Intent(this, targetActivity).apply {
             putExtra("userId", userEntity.userId)

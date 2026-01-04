@@ -32,12 +32,12 @@ object ModuleHttpServerManager {
     ): Boolean {
         // 仅主进程启动，避免子进程重复创建导致端口占用
         if (processName != packageName) {
-            Log.runtime(TAG, "非主进程，无需启动内置 HTTP 服务: $processName")
+            Log.record(TAG, "非主进程，无需启动内置 HTTP 服务: $processName")
             return false
         }
 
         if (server != null) {
-            Log.runtime(TAG, "HTTP 服务已在运行，跳过重复创建")
+            Log.record(TAG, "HTTP 服务已在运行，跳过重复创建")
             return true
         }
 
@@ -46,7 +46,7 @@ object ModuleHttpServerManager {
             // 使用与原逻辑一致的启动方式
             s.start(NanoHTTPD.SOCKET_READ_TIMEOUT, false)
             server = s
-            Log.runtime(TAG, "HTTP 服务启动成功，端口: $port")
+            Log.record(TAG, "HTTP 服务启动成功，端口: $port")
             true
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "HTTP 服务启动失败:", t)
@@ -62,7 +62,7 @@ object ModuleHttpServerManager {
         try {
             server?.stop()
             if (server != null) {
-                Log.runtime(TAG, "HTTP 服务已停止")
+                Log.record(TAG, "HTTP 服务已停止")
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "HTTP 服务停止异常:", t)

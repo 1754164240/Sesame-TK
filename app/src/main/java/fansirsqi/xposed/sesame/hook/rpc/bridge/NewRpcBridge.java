@@ -102,7 +102,7 @@ public class NewRpcBridge implements RpcBridge {
                     }
                 }
                 if (newRpcInstance == null) {
-                    Log.runtime(TAG, "get newRpcInstance null");
+                    Log.record(TAG, "get newRpcInstance null");
                     throw new RuntimeException("get newRpcInstance is null");
                 }
             }
@@ -127,9 +127,9 @@ public class NewRpcBridge implements RpcBridge {
                     , loader.loadClass("com.alibaba.ariver.engine.api.bridge.model.ApiContext")
                     , bridgeCallbackClazz
             );
-            Log.runtime(TAG, "get newRpcCallMethod successfully");
+            Log.record(TAG, "get newRpcCallMethod successfully");
         } catch (Exception e) {
-            Log.runtime(TAG, "get newRpcCallMethod err:");
+            Log.record(TAG, "get newRpcCallMethod err:");
             throw e;
         }
     }
@@ -253,7 +253,7 @@ public class NewRpcBridge implements RpcBridge {
                                                         jsonString = (String) XposedHelpers.callMethod(obj, "toJSONString");
                                                     } catch (Exception retryException) {
                                                         // 重试后仍失败，记录日志并标记错误，触发外层RPC重试
-                                                        Log.runtime(TAG, "toJSONString 重试后仍然失败，将触发整个 RPC 请求重试: " + retryException.getMessage());
+                                                        Log.record(TAG, "toJSONString 重试后仍然失败，将触发整个 RPC 请求重试: " + retryException.getMessage());
                                                         rpcEntity.setResponseObject(obj, null);
                                                         rpcEntity.setError();
                                                         return null;
@@ -363,8 +363,8 @@ public class NewRpcBridge implements RpcBridge {
             logNullResponse(rpcEntity, "重试次数耗尽", tryCount);
             return null;
         } finally {
-            Log.system(TAG, "New RPC\n方法: " + rpcEntity.getRequestMethod() + "\n参数: " + rpcEntity.getRequestData() + "\n数据: " + rpcEntity.getResponseString() + "\n" + "\n" + "堆栈:" + new Exception().getStackTrace()[1].toString());
-            Log.printStack(TAG);
+         //   Log.record(TAG, "New RPC\n方法: " + rpcEntity.getRequestMethod() + "\n参数: " + rpcEntity.getRequestData() + "\n数据: " + rpcEntity.getResponseString() + "\n" + "\n" + "堆栈:" + new Exception().getStackTrace()[1].toString());
+         //   Log.printStack(TAG);
 
         }
     }

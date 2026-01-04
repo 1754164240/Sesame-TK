@@ -41,8 +41,9 @@ object IconManager {
             // 平时：启用默认版，禁用圣诞版
             enableComponent(context, pm, COMPONENT_DEFAULT)
             disableComponent(context, pm, COMPONENT_CHRISTMAS)
-
-            ToastUtil.showToast(context, "欢迎回来!")
+        }
+        if (inDateRange(1, 1, 1)) {
+            ToastUtil.showToast(context, "Happy New Year!")
         }
     }
 
@@ -51,6 +52,13 @@ object IconManager {
         val month = calendar.get(java.util.Calendar.MONTH) + 1
         val day = calendar.get(java.util.Calendar.DAY_OF_MONTH)
         return month == 12 && (day in 25..25)
+    }
+
+    private fun inDateRange(mon: Int, start: Int, end: Int): Boolean {
+        val calendar = java.util.Calendar.getInstance()
+        val month = calendar.get(java.util.Calendar.MONTH) + 1
+        val day = calendar.get(java.util.Calendar.DAY_OF_MONTH)
+        return mon == month && (day in start..end)
     }
 
     private fun enableComponent(context: Context, pm: PackageManager, className: String) {

@@ -368,8 +368,8 @@ object Credit2101RpcCall {
                   "eventId": "$eventId",
                   "extParams": {
                     "cityCode": "$cityCode",
-                    "latitude": "${latitude}",
-                    "longitude": "${longitude}",
+                    "latitude": "$latitude",
+                    "longitude": "$longitude",
                     "storyId": "$storyId"
                   }
                 }
@@ -547,4 +547,6 @@ object Credit2101RpcCall {
             data
         )
     }
+
+
 }

@@ -99,7 +99,7 @@ public class Reserve extends ModelTask {
                             IdMapManager.getInstance(ReserveaMap.class).add(itemId, itemName + "(" + energy + "g)");
                         }
                     }
-                    Log.runtime(TAG, "初始化保护地任务成功。");
+                    Log.record(TAG, "初始化保护地任务成功。");
                 }
                 // 将筛选结果保存到 ReserveIdMapUtil
                 IdMapManager.getInstance(ReserveaMap.class).save();
@@ -154,7 +154,7 @@ public class Reserve extends ModelTask {
                     }
                 }
             } else {
-                Log.runtime(TAG, jo.getString("resultDesc"));
+                Log.record(TAG, jo.getString("resultDesc"));
             }
         } catch (Throwable t) {
             Log.printStackTrace(TAG, "animalReserve err:",t);
@@ -184,7 +184,7 @@ public class Reserve extends ModelTask {
                 }
             } else {
                 Log.record(jo.getString("resultDesc"));
-                Log.runtime(s);
+                Log.record(s);
             }
         } catch (Throwable t) {
             Log.printStackTrace(TAG, "queryTreeForExchange err:",t);

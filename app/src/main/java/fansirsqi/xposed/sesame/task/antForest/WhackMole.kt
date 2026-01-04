@@ -76,7 +76,7 @@ object WhackMole {
             // 1. 开始游戏 (使用 oldstartWhackMole)
             val response = JSONObject(AntForestRpcCall.oldstartWhackMole(SOURCE))
             if (!response.optBoolean("success")) {
-                Log.runtime(TAG, response.optString("resultDesc", "开始失败"))
+                Log.record(TAG, response.optString("resultDesc", "开始失败"))
                 return@withContext
             }
 
@@ -121,7 +121,7 @@ object WhackMole {
                 Log.forest("森林能量⚡️[兼容模式完成 总能量+${total}g]")
             }
         } catch (t: Throwable) {
-            Log.runtime(TAG, "兼容模式出错: ${t.message}")
+            Log.record(TAG, "兼容模式出错: ${t.message}")
         }
     }
 

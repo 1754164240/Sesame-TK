@@ -123,9 +123,9 @@ public class ApplicationHook {
                 socialSdkContactServiceClass = XposedHelpers.findClass(AlipayClasses.SOCIAL_SDK, loader);
 
                 initialized = true;
-                Log.runtime(TAG, "✅ 反射缓存初始化成功");
+                Log.record(TAG, "✅ 反射缓存初始化成功");
             } catch (Throwable t) {
-                Log.runtime(TAG, "⚠️ 反射缓存初始化部分失败，将使用传统反射");
+                Log.record(TAG, "⚠️ 反射缓存初始化部分失败，将使用传统反射");
                 Log.printStackTrace(TAG, t);
                 // 部分失败不影响使用，后续会回退到传统反射
             }
@@ -420,7 +420,7 @@ public class ApplicationHook {
             File finalSoFile = AssetUtil.INSTANCE.copyStorageSoFileToPrivateDir(context, soFile);
             if (finalSoFile != null) {
                 System.load(finalSoFile.getAbsolutePath());
-                Log.runtime(TAG, "Loading " + soFile.getName() + " from :" + finalSoFile.getAbsolutePath());
+                Log.record(TAG, "Loading " + soFile.getName() + " from :" + finalSoFile.getAbsolutePath());
             } else {
                 Detector.INSTANCE.loadLibrary(soFile.getName().replace(".so", "").replace("lib", ""));
             }
@@ -433,7 +433,7 @@ public class ApplicationHook {
      * ✅ 原有新版入口：LibXposed / LSPosed ≥ 1.9 使用
      */
     public void loadPackage(XposedModuleInterface.PackageLoadedParam lpparam) {
-        Log.runtime(TAG, "xposed start loadPackage: " + lpparam.getPackageName());
+        Log.record(TAG, "xposed start loadPackage: " + lpparam.getPackageName());
         if (!General.PACKAGE_NAME.equals(lpparam.getPackageName())) return;
         classLoader = lpparam.getClassLoader();
         handleHookLogic(classLoader, lpparam.getPackageName(), lpparam.getApplicationInfo().sourceDir, lpparam);
@@ -443,7 +443,7 @@ public class ApplicationHook {
      * ✅ 新增旧版兼容入口：传统 Xposed / EdXposed / LSPosed < 1.9 使用
      */
     public void loadPackageCompat(XC_LoadPackage.LoadPackageParam lpparam) {
-        Log.runtime(TAG, "xp82 start loadPackageCompat: " + lpparam.packageName);
+        Log.record(TAG, "xp82 start loadPackageCompat: " + lpparam.packageName);
         XposedBridge.log(TAG + "|Hook in  " + lpparam.packageName + " in process ${lpparam.processName}");
         if (!General.PACKAGE_NAME.equals(lpparam.packageName)) return;
         classLoader = lpparam.classLoader;
@@ -469,7 +469,7 @@ public class ApplicationHook {
         }
         finalProcessName = processName;
 
-        Log.runtime(TAG, "🔀 当前进程: " + finalProcessName);
+        Log.record(TAG, "🔀 当前进程: " + finalProcessName);
 
         // ✅ 第一步: 尽早安装版本号 Hook (在所有其他 Hook 之前)
         VersionHook.installHook(classLoader);
@@ -480,7 +480,7 @@ public class ApplicationHook {
         // Hook验证码关闭功能
         try {
             CaptchaHook.INSTANCE.setupHook(classLoader);
-            Log.runtime(TAG, "验证码Hook系统已初始化");
+            Log.record(TAG, "验证码Hook系统已初始化");
         } catch (Throwable t) {
             Log.printStackTrace(TAG, "验证码Hook初始化失败", t);
         }
@@ -520,18 +520,18 @@ public class ApplicationHook {
                     // ✅ 优先使用 Hook 捕获的版本号
                     if (VersionHook.hasVersion()) {
                         alipayVersion = VersionHook.getCapturedVersion();
-                        Log.runtime(TAG, "📦 支付宝版本(Hook): " + alipayVersion.getVersionString());
+                        Log.record(TAG, "📦 支付宝版本(Hook): " + alipayVersion.getVersionString());
                     } else {
                         // 回退方案: 使用传统 PackageManager 获取
-                        Log.runtime(TAG, "⚠️ Hook 未捕获到版本号,使用回退方案");
+                        Log.record(TAG, "⚠️ Hook 未捕获到版本号,使用回退方案");
                         try {
                             PackageInfo pInfo = appContext.getPackageManager().getPackageInfo(packageName, 0);
                             if (pInfo.versionName != null) {
                                 alipayVersion = new AlipayVersion(pInfo.versionName);
-                                Log.runtime(TAG, "📦 支付宝版本(回退): " + pInfo.versionName);
+                                Log.record(TAG, "📦 支付宝版本(回退): " + pInfo.versionName);
 
                             } else {
-                                Log.runtime(TAG, "⚠️ 无法获取版本信息");
+                                Log.record(TAG, "⚠️ 无法获取版本信息");
                                 alipayVersion = new AlipayVersion(""); // 空版本
                             }
                         } catch (Exception e) {
@@ -547,7 +547,7 @@ public class ApplicationHook {
                     // 特殊版本处理 (如果使用 Hook 获取的版本)
                     if (VersionHook.hasVersion() && "10.7.26.8100".equals(alipayVersion.getVersionString())) {
                         HookUtil.INSTANCE.fuckAccounLimit(classLoader);
-                        Log.runtime(TAG, "✅ 已对版本 10.7.26.8100 进行特殊处理");
+                        Log.record(TAG, "✅ 已对版本 10.7.26.8100 进行特殊处理");
                     }
 
                     if (VersionHook.hasVersion() && alipayVersion.getVersionString() != null) {
@@ -562,7 +562,7 @@ public class ApplicationHook {
                             SimplePageManager.INSTANCE.enableWindowMonitoring(classLoader);
 
                             // 初始化CaptchaHandler
-                            Log.runtime(TAG, "✅ 开始初始化CaptchaHandler，版本: " + version);
+                            Log.record(TAG, "✅ 开始初始化CaptchaHandler，版本: " + version);
                             SimplePageManager.INSTANCE.addHandler(
                                     "com.alipay.mobile.nebulax.xriver.activity.XRiverActivity",
                                     new Captcha1Handler());
@@ -576,7 +576,7 @@ public class ApplicationHook {
 
                     if (BuildConfig.DEBUG) {
                         try {
-                            Log.runtime(TAG, "start service for debug rpc");
+                            Log.record(TAG, "start service for debug rpc");
                             // 使用管理器，仅主进程启动并防重复
                             ModuleHttpServerManager.INSTANCE.startIfNeeded(
                                     8080,
@@ -601,9 +601,9 @@ public class ApplicationHook {
                     new XC_MethodHook() {
                         @Override
                         protected void afterHookedMethod(MethodHookParam param) {
-                            Log.runtime(TAG, "hook onResume after start");
+                            Log.record(TAG, "hook onResume after start");
                             String targetUid = getUserId();
-                            Log.runtime(TAG, "onResume targetUid: " + targetUid);
+                            Log.record(TAG, "onResume targetUid: " + targetUid);
                             if (targetUid == null) {
                                 Log.record(TAG, "onResume:用户未登录");
                                 Toast.INSTANCE.show("用户未登录");
@@ -613,11 +613,11 @@ public class ApplicationHook {
                                 if (initHandler(true)) {
                                     init = true;
                                 }
-                                Log.runtime(TAG, "initHandler success");
+                                Log.record(TAG, "initHandler success");
                                 return;
                             }
                             String currentUid = UserMap.INSTANCE.getCurrentUid();
-                            Log.runtime(TAG, "onResume currentUid: " + currentUid);
+                            Log.record(TAG, "onResume currentUid: " + currentUid);
                             if (!targetUid.equals(currentUid)) {
                                 if (currentUid != null) {
                                     initHandler(true);  // 重新初始化
@@ -632,14 +632,14 @@ public class ApplicationHook {
                                 offline = false;
                                 execHandler();
                                 ((Activity) param.thisObject).finish();
-                                Log.runtime(TAG, "Activity reLogin");
+                                Log.record(TAG, "Activity reLogin");
                             }
                             // 如果所有特殊情况都未命中，执行一次常规任务检查
                             execHandler();
-                            Log.runtime(TAG, "hook onResume after end");
+                            Log.record(TAG, "hook onResume after end");
                         }
                     });
-            Log.runtime(TAG, "hook login successfully");
+            Log.record(TAG, "hook login successfully");
         } catch (Throwable t) {
             Log.printStackTrace(TAG, "hook login err", t);
         }
@@ -654,7 +654,7 @@ public class ApplicationHook {
                             }
 
 
-                            Log.runtime(TAG, "Service onCreate");
+                            Log.record(TAG, "Service onCreate");
                             appContext = appService.getApplicationContext();
                             boolean isok = Detector.INSTANCE.isLegitimateEnvironment(appContext);
                             if (isok) {
@@ -663,7 +663,7 @@ public class ApplicationHook {
                             }
                             try (DexKitBridge ignored = DexKitBridge.create(apkPath)) {
                                 // Other use cases
-                                Log.runtime(TAG, "hook dexkit successfully");
+                                Log.record(TAG, "hook dexkit successfully");
                             }
                             service = appService;
                             mainTask = MainTask.newInstance("MAIN_TASK", () -> {
@@ -693,9 +693,11 @@ public class ApplicationHook {
                                                 Log.record(TAG, "手动APP触发，已开启");
                                                 TaskRunnerAdapter adapter = new TaskRunnerAdapter();
                                                 adapter.run();
+                                                return;
+                                            } else {
+                                                Log.record(TAG, "手动APP触发，已关闭");
+                                                return;
                                             }
-                                            Log.record(TAG, "手动APP触发，已关闭");
-                                            return;
                                         }
                                     }
 
@@ -739,9 +741,9 @@ public class ApplicationHook {
                     }
 
             );
-            Log.runtime(TAG, "hook service onCreate successfully");
+            Log.record(TAG, "hook service onCreate successfully");
         } catch (Throwable t) {
-            Log.runtime(TAG, "hook service onCreate err");
+            Log.record(TAG, "hook service onCreate err");
             Log.printStackTrace(TAG, t);
         }
 
@@ -764,7 +766,7 @@ public class ApplicationHook {
                         }
                     });
         } catch (Throwable t) {
-            Log.runtime(TAG, "hook service onDestroy err");
+            Log.record(TAG, "hook service onDestroy err");
             Log.printStackTrace(TAG, t);
         }
 
@@ -788,7 +790,7 @@ public class ApplicationHook {
             if (appContext == null) {
                 if (retryCount < 3) {
                     final int currentRetry = retryCount + 1;
-                    Log.runtime(TAG, "appContext 未初始化，延迟" + (currentRetry * 2) + "秒后重试 (第" + currentRetry + "次)");
+                    Log.record(TAG, "appContext 未初始化，延迟" + (currentRetry * 2) + "秒后重试 (第" + currentRetry + "次)");
                     if (mainHandler != null) {
                         mainHandler.postDelayed(() -> setWakenAtTimeAlarmWithRetry(currentRetry), currentRetry * 2000L);
                     }
@@ -872,7 +874,7 @@ public class ApplicationHook {
 
             Model.initAllModel(); // 在所有服务启动前装模块配置
             if (service == null) {
-                Log.runtime(TAG, "⚠️ Service 未就绪，初始化将推迟到 Service 启动");
+                Log.record(TAG, "⚠️ Service 未就绪，初始化将推迟到 Service 启动");
                 return false;
             }
 
@@ -1065,7 +1067,7 @@ public class ApplicationHook {
                 reLogin();
             }
         } catch (Exception e) {
-            Log.runtime(TAG, "checkInactiveTime err:" + e.getMessage());
+            Log.record(TAG, "checkInactiveTime err:" + e.getMessage());
             Log.printStackTrace(TAG, e);
         }
     }
@@ -1117,7 +1119,7 @@ public class ApplicationHook {
         try {
             appContext.sendBroadcast(new Intent(action));
         } catch (Throwable th) {
-            Log.runtime(TAG, errorMsg);
+            Log.record(TAG, errorMsg);
             Log.printStackTrace(TAG, th);
         }
     }
@@ -1169,7 +1171,7 @@ public class ApplicationHook {
             try {
                 Class<?> alipayApplicationClass = ReflectionCache.getAlipayApplicationClass(classLoader);
                 if (alipayApplicationClass == null) {
-                    Log.runtime(TAG, "⚠️ 无法获取 AlipayApplication 类");
+                    Log.record(TAG, "⚠️ 无法获取 AlipayApplication 类");
                     return null;
                 }
 
@@ -1196,7 +1198,7 @@ public class ApplicationHook {
         try {
             return XposedHelpers.callMethod(getMicroApplicationContext(), "findServiceByInterface", service);
         } catch (Throwable th) {
-            Log.runtime(TAG, "getServiceObject err");
+            Log.record(TAG, "getServiceObject err");
             Log.printStackTrace(TAG, th);
         }
         return null;
@@ -1209,7 +1211,7 @@ public class ApplicationHook {
         try {
             Class<?> socialSdkClass = ReflectionCache.getSocialSdkClass(classLoader);
             if (socialSdkClass == null) {
-                Log.runtime(TAG, "⚠️ 无法获取 SocialSdkContactService 类");
+                Log.record(TAG, "⚠️ 无法获取 SocialSdkContactService 类");
                 return null;
             }
 
@@ -1217,7 +1219,7 @@ public class ApplicationHook {
                     getServiceObject(socialSdkClass.getName()),
                     "getMyAccountInfoModelByLocal");
         } catch (Throwable th) {
-            Log.runtime(TAG, "getUserObject err");
+            Log.record(TAG, "getUserObject err");
             Log.printStackTrace(TAG, th);
         }
         return null;
@@ -1233,7 +1235,7 @@ public class ApplicationHook {
                 return (String) XposedHelpers.getObjectField(userObject, "userId");
             }
         } catch (Throwable th) {
-            Log.runtime(TAG, "getUserId err");
+            Log.record(TAG, "getUserId err");
             Log.printStackTrace(TAG, th);
         }
         return null;
@@ -1267,7 +1269,7 @@ public class ApplicationHook {
         public void onReceive(Context context, Intent intent) {
             try {
                 String action = intent.getAction();
-                Log.runtime(TAG, "Alipay got Broadcast " + action + " intent:" + intent);
+                Log.record(TAG, "Alipay got Broadcast " + action + " intent:" + intent);
                 if (action != null) {
                     switch (action) {
                         case BroadcastActions.RESTART:
@@ -1324,11 +1326,11 @@ public class ApplicationHook {
                                     String method = intent.getStringExtra("method");
                                     String data = intent.getStringExtra("data");
                                     String type = intent.getStringExtra("type");
-                                    Log.runtime(TAG, "收到RPC测试请求 - Method: " + method + ", Type: " + type);
+                                    Log.record(TAG, "收到RPC测试请求 - Method: " + method + ", Type: " + type);
                                     DebugRpc rpcInstance = new DebugRpc();
                                     rpcInstance.start(method, data, type);
                                 } catch (Throwable th) {
-                                    Log.runtime(TAG, "sesame 测试RPC请求失败:");
+                                    Log.record(TAG, "sesame 测试RPC请求失败:");
                                     Log.printStackTrace(TAG, th);
                                 }
                             });
@@ -1365,10 +1367,10 @@ public class ApplicationHook {
                 context.registerReceiver(new AlipayBroadcastReceiver(), intentFilter);
             }
             // 记录成功注册广播接收器的日志
-            Log.runtime(TAG, "hook registerBroadcastReceiver successfully");
+            Log.record(TAG, "hook registerBroadcastReceiver successfully");
         } catch (Throwable th) {
             // 记录注册广播接收器失败的日志
-            Log.runtime(TAG, "hook registerBroadcastReceiver err:");
+            Log.record(TAG, "hook registerBroadcastReceiver err:");
             // 打印异常堆栈信息
             Log.printStackTrace(TAG, th);
         }

@@ -76,7 +76,7 @@ public class ListAdapter extends BaseAdapter {
                 return contains1 ? -1 : 1;
             });
         } catch (Exception e) {
-            Log.runtime(TAG,"ListAdapter error");
+            Log.record(TAG,"ListAdapter error");
             Log.printStackTrace(e);
         }
     }

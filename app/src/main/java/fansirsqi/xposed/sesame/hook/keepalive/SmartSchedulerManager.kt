@@ -48,7 +48,7 @@ object SmartSchedulerManager {
             scheduler = CoroutineScheduler(appContext)
             initialized = true
             
-            Log.runtime(TAG, "✅ 调度器管理器已初始化 (基于 AlarmManager)")
+            Log.record(TAG, "✅ 调度器管理器已初始化 (基于 AlarmManager)")
         } catch (e: Exception) {
             Log.error(TAG, "❌ 初始化失败: ${e.message}")
             Log.printStackTrace(TAG, e)
@@ -92,6 +92,6 @@ object SmartSchedulerManager {
      */
     fun cleanup() {
         scheduler?.cleanup()
-        Log.runtime(TAG, "调度器管理器已清理")
+        Log.record(TAG, "调度器管理器已清理")
     }
 }

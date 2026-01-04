@@ -111,6 +111,8 @@ object DataStore {
     /*  类型安全读取                                       */
     /* -------------------------------------------------- */
     fun <T : Any> getOrCreate(key: String, typeRef: TypeReference<T>): T = lock.write {
+        // 在写入前，强制从磁盘重新加载，以获取其他进程的修改
+        forceLoadFromDisk()
         // 1. 尝试从内存获取
         data[key]?.let {
             try {
@@ -148,6 +150,32 @@ object DataStore {
                     Log.e(TAG, "Cannot create default instance for ${rawClass.simpleName}, relying on Jackson null handling or crash.")
                     throw RuntimeException("Could not create default value for ${rawClass.name}", e)
                 }
+            }
+        }
+    }
+
+    /**
+     * 强制从磁盘加载最新数据到内存。
+     * 在每次写入操作（put, remove, getOrCreate）之前调用，以防止多进程冲突。
+     */
+    private fun forceLoadFromDisk() {
+        try {
+            if (!::storageFile.isInitialized || !storageFile.exists() || storageFile.length() == 0L) {
+                // 如果文件不存在或为空，我们假设内存是空的。
+                data.clear()
+                return
+            }
+            // 不进行任何时间检查，直接读取文件
+            val loaded: Map<String, Any> = mapper.readValue(storageFile)
+            data.clear()
+            data.putAll(loaded)
+            // 更新加载时间戳，这样文件监控的 loadFromDisk 就不会因我们自己的写入而重复加载
+            lastLoadedTime.set(storageFile.lastModified())
+        } catch (e: Exception) {
+            // 如果文件正在被另一个进程写入，可能会导致解析异常，这里我们选择忽略，
+            // 在下一个写入周期，数据会被同步。
+            if (e !is MismatchedInputException) {
+                Log.w(TAG, "Force load from disk failed: ${e.message}")
             }
         }
     }
@@ -279,11 +307,15 @@ object DataStore {
     }
 
     fun put(key: String, value: Any) = lock.write {
+        // 在写入前，强制从磁盘重新加载，以获取其他进程的修改
+        forceLoadFromDisk()
         data[key] = value
         saveToDisk()
     }
 
     fun remove(key: String) = lock.write {
+        // 在写入前，强制从磁盘重新加载，以获取其他进程的修改
+        forceLoadFromDisk()
         data.remove(key)
         saveToDisk()
     }

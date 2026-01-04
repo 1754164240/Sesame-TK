@@ -56,7 +56,7 @@ object CoroutineUtils {
                 Thread.sleep(millis)
             } catch (ie: InterruptedException) {
                 Thread.currentThread().interrupt()
-                Log.runtime("CoroutineUtils", "延迟被中断: ${ie.message}")
+                Log.record("CoroutineUtils", "延迟被中断: ${ie.message}")
             }
         }
     }

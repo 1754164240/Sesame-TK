@@ -84,7 +84,7 @@ public class AnswerAI extends Model {
         try {
             enable = getEnableField().getValue();
             int selectedType = aiType.getValue();
-            Log.runtime(String.format("初始化AI服务：已选择[%s]", AIType.nickNames[selectedType]));
+            Log.record(String.format("初始化AI服务：已选择[%s]", AIType.nickNames[selectedType]));
             initializeAIService(selectedType);
         } catch (Exception e) {
             Log.error(TAG, "初始化AI服务失败: " + e.getMessage());
@@ -111,7 +111,7 @@ public class AnswerAI extends Model {
             case AIType.CUSTOM:
                 answerAIInterface = new CustomService(CustomServiceToken.getValue(), CustomServiceUrl.getValue());
                 answerAIInterface.setModelName(CustomServiceModel.getValue());
-                Log.runtime(String.format("已配置自定义服务：URL=[%s], Model=[%s]", CustomServiceUrl.getValue(), CustomServiceModel.getValue()));
+                Log.record(String.format("已配置自定义服务：URL=[%s], Model=[%s]", CustomServiceUrl.getValue(), CustomServiceModel.getValue()));
                 break;
             default:
                 answerAIInterface = AnswerAIInterface.getInstance();

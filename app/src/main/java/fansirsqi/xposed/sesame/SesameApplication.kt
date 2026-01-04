@@ -25,7 +25,7 @@ class SesameApplication : Application() {
         ToastUtil.init(this) // 初始化全局 Context
         Log.init(this)
         val processName = getCurrentProcessName()
-        Log.runtime(TAG, "🚀 应用启动 | 进程: $processName | PID: ${Process.myPid()}")
+        Log.record(TAG, "🚀 应用启动 | 进程: $processName | PID: ${Process.myPid()}")
         // 启动 CommandService
         startCommandService()
     }
@@ -37,9 +37,9 @@ class SesameApplication : Application() {
         try {
             val intent = Intent(this, CommandService::class.java)
             startService(intent)
-            Log.runtime(TAG, "✅ CommandService 已启动")
+            Log.record(TAG, "✅ CommandService 已启动")
         } catch (e: Exception) {
-            Log.runtime(TAG, "❌ CommandService 启动失败: ${e.message}")
+            Log.record(TAG, "❌ CommandService 启动失败: ${e.message}")
         }
     }
 

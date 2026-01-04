@@ -120,11 +120,10 @@ object Logback {
             val policy = SizeAndTimeBasedRollingPolicy<ILoggingEvent>().apply {
                 context = lc
                 fileNamePattern = "${logDir}bak/$logName-%d{yyyy-MM-dd}.%i.log"
-                setMaxFileSize(FileSize.valueOf("50MB")) // 还原为 50MB
-                setTotalSizeCap(FileSize.valueOf("100MB"))
-                maxHistory = 7
+                setMaxFileSize(FileSize.valueOf("7MB")) // 还原为 50MB
+                setTotalSizeCap(FileSize.valueOf("32MB"))
+                maxHistory = 3
                 isCleanHistoryOnStart = true // 还原 Java 中的 setCleanHistoryOnStart(true)
-
                 // 必须调用 setParent
                 setParent(fileAppender)
                 start()

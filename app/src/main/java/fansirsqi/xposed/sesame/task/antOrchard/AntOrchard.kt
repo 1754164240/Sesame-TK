@@ -86,7 +86,7 @@ class AntOrchard : ModelTask() {
             val indexJson = JSONObject(indexResponse)
 
             if (indexJson.optString("resultCode") != "100") {
-                Log.runtime(TAG, indexJson.optString("resultDesc", "orchardIndex 调用失败"))
+                Log.record(TAG, indexJson.optString("resultDesc", "orchardIndex 调用失败"))
                 return
             }
 
@@ -347,7 +347,7 @@ class AntOrchard : ModelTask() {
                                 }
                             }
                         } else {
-                            Log.runtime(TAG, jo3.toString())
+                            Log.record(TAG, jo3.toString())
                         }
                     } else {
                         Log.record(TAG, "七日礼包已领取")
@@ -474,7 +474,7 @@ class AntOrchard : ModelTask() {
                         .getInt("awardCount")
                     Log.farm("农场签到📅[获得肥料]#${awardCount}g")
                 } else {
-                    Log.runtime(TAG, joSign.toString())
+                    Log.record(TAG, joSign.toString())
                 }
             } else {
                 Log.record(TAG, "农场今日已签到")
@@ -612,7 +612,7 @@ class AntOrchard : ModelTask() {
         try {
             // 1. 请求同步数据
             val wua = SecurityBodyHelper.getSecurityBodyData(4).toString()
-            Log.record(TAG, "限时奖励: set Wua $wua")
+
             val response = AntOrchardRpcCall.orchardSyncIndex(wua)
             val root = JSONObject(response)
 
@@ -732,15 +732,14 @@ class AntOrchard : ModelTask() {
                             repeat(need) { index ->
                                 val wua = SecurityBodyHelper.getSecurityBodyData(4).toString()
                                 val spreadResult = AntOrchardRpcCall.orchardSpreadManure(wua, "ch_appcenter__chsub_9patch")
-                                Log.record(TAG, "施肥第 ${index + 1} 次结果：$spreadResult")
-
                                 val resultJson = JSONObject(spreadResult)
                                 val resultCode = resultJson.optString("resultCode", "")
                                 val resultDesc = resultJson.optString("resultDesc", "")
-
                                 if (resultCode != "100") {
                                     Log.error(TAG, "农场 orchardSpreadManure 错误：$resultDesc")
                                     return   // ❗施肥失败直接退出整个 limitedTimeChallenge()
+                                } else{
+                                    Log.record(TAG, "施肥第 ${index + 1} 次结果：$resultDesc")
                                 }
                             }
 

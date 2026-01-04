@@ -1,7 +1,5 @@
 package fansirsqi.xposed.sesame.task.antOcean;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -9,7 +7,6 @@ import org.json.JSONObject;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -26,7 +23,6 @@ import fansirsqi.xposed.sesame.model.modelFieldExt.BooleanModelField;
 import fansirsqi.xposed.sesame.model.modelFieldExt.ChoiceModelField;
 import fansirsqi.xposed.sesame.model.modelFieldExt.SelectAndCountModelField;
 import fansirsqi.xposed.sesame.model.modelFieldExt.SelectModelField;
-import fansirsqi.xposed.sesame.newutil.DataStore;
 import fansirsqi.xposed.sesame.newutil.TaskBlacklist;
 import fansirsqi.xposed.sesame.task.ModelTask;
 import fansirsqi.xposed.sesame.task.TaskCommon;
@@ -248,12 +244,12 @@ public class AntOcean extends ModelTask {
                             }
                         }
                     }
-                    Log.runtime(TAG, "初始化沙滩数据成功.");
+                    Log.record(TAG, "初始化沙滩数据成功.");
                 }
                 // 将所有筛选结果保存到 BeachMap
                 IdMapManager.getInstance(BeachMap.class).save();
             } else {
-                Log.runtime(jsonResponse.optString("resultDesc", "未知错误"));
+                Log.record(jsonResponse.optString("resultDesc", "未知错误"));
             }
         } catch (JSONException e) {
             Log.printStackTrace(TAG, "JSON 解析错误:", e);
@@ -308,7 +304,7 @@ public class AntOcean extends ModelTask {
 
 
             } else {
-                Log.runtime(TAG, joHomePage.getString("resultDesc"));
+                Log.record(TAG, joHomePage.getString("resultDesc"));
             }
         } catch (Throwable t) {
             Log.printStackTrace(TAG, "queryHomePage err:",t);
@@ -327,7 +323,7 @@ public class AntOcean extends ModelTask {
                 }
                 switchOceanChapter();
             } else {
-                Log.runtime(TAG, jo.getString("resultDesc"));
+                Log.record(TAG, jo.getString("resultDesc"));
             }
         } catch (Throwable t) {
             Log.printStackTrace(TAG, "queryMiscInfo err:",t);
@@ -359,7 +355,7 @@ public class AntOcean extends ModelTask {
                             }
                         }
                     } else {
-                        Log.runtime(TAG, jo.getString("resultDesc"));
+                        Log.record(TAG, jo.getString("resultDesc"));
                     }
                 }
             }
@@ -378,7 +374,7 @@ public class AntOcean extends ModelTask {
                     checkReward(cleanRewardVOS);
                     Log.forest("神奇海洋🌊[清理:" + UserMap.getMaskName(userId) + "海域]");
                 } else {
-                    Log.runtime(TAG, jo.getString("resultDesc"));
+                    Log.record(TAG, jo.getString("resultDesc"));
                 }
             }
         } catch (Throwable t) {
@@ -394,7 +390,7 @@ public class AntOcean extends ModelTask {
                 JSONArray rewardVOS = jo.getJSONArray("surpriseRewardVOS");
                 checkReward(rewardVOS);
             } else {
-                Log.runtime(TAG, jo.getString("resultDesc"));
+                Log.record(TAG, jo.getString("resultDesc"));
             }
         } catch (Throwable t) {
             Log.printStackTrace(TAG,"ipOpenSurprise err:", t);
@@ -410,7 +406,7 @@ public class AntOcean extends ModelTask {
                 String name = fishDetailVO.getString("name");
                 Log.forest("神奇海洋🌊[" + name + "]合成成功");
             } else {
-                Log.runtime(TAG, jo.getString("resultDesc"));
+                Log.record(TAG, jo.getString("resultDesc"));
             }
         } catch (Throwable t) {
             Log.printStackTrace(TAG, "combineFish err:",t);
@@ -452,7 +448,7 @@ public class AntOcean extends ModelTask {
                 if (ResChecker.checkRes(TAG, jo)) {
                     Log.forest("神奇海洋🌊[学习海洋科普知识]#潘多拉能量+1");
                 } else {
-                    Log.runtime(TAG, jo.getString("resultDesc"));
+                    Log.record(TAG, jo.getString("resultDesc"));
                 }
             }
         } catch (Throwable t) {
@@ -468,7 +464,7 @@ public class AntOcean extends ModelTask {
                 String name = jo.getJSONObject("currentPhaseInfo").getJSONObject("extInfo").getString("name");
                 Log.forest("神奇海洋🌊迎回[" + name + "]");
             } else {
-                Log.runtime(TAG, jo.getString("resultDesc"));
+                Log.record(TAG, jo.getString("resultDesc"));
             }
         } catch (Throwable t) {
             Log.printStackTrace(TAG, "unLockReplicaPhase err:",t);
@@ -494,7 +490,7 @@ public class AntOcean extends ModelTask {
                     }
                 }
             } else {
-                Log.runtime(TAG, jo.getString("resultDesc"));
+                Log.record(TAG, jo.getString("resultDesc"));
             }
         } catch (Throwable t) {
             Log.printStackTrace(TAG, "queryReplicaHome err:",t);
@@ -508,7 +504,7 @@ public class AntOcean extends ModelTask {
             if (ResChecker.checkRes(TAG, jo)) {
                 AntOceanRpcCall.repairSeaArea();
             } else {
-                Log.runtime(TAG, jo.getString("resultDesc"));
+                Log.record(TAG, jo.getString("resultDesc"));
             }
         } catch (Throwable t) {
             Log.printStackTrace(TAG,"queryOceanPropList err:", t);
@@ -545,11 +541,11 @@ public class AntOcean extends ModelTask {
                     if (ResChecker.checkRes(TAG, jo)) {
                         Log.forest("神奇海洋🌊切换到[" + dstChapterName + "]系列");
                     } else {
-                        Log.runtime(TAG, jo.getString("resultDesc"));
+                        Log.record(TAG, jo.getString("resultDesc"));
                     }
                 }
             } else {
-                Log.runtime(TAG, jo.getString("resultDesc"));
+                Log.record(TAG, jo.getString("resultDesc"));
             }
         } catch (Throwable t) {
             Log.printStackTrace(TAG, "queryUserRanking err:",t);
@@ -580,7 +576,7 @@ public class AntOcean extends ModelTask {
                     }
                 }
             } else {
-                Log.runtime(TAG, jo.getString("resultDesc"));
+                Log.record(TAG, jo.getString("resultDesc"));
             }
         } catch (Throwable t) {
             Log.printStackTrace(TAG, "querySeaAreaDetailList err:",t);
@@ -610,10 +606,10 @@ public class AntOcean extends ModelTask {
                     JSONArray cleanRewardVOS = jo.getJSONArray("cleanRewardVOS");
                     checkReward(cleanRewardVOS);
                 } else {
-                    Log.runtime(TAG, jo.getString("resultDesc"));
+                    Log.record(TAG, jo.getString("resultDesc"));
                 }
             } else {
-                Log.runtime(TAG, jo.getString("resultDesc"));
+                Log.record(TAG, jo.getString("resultDesc"));
             }
         } catch (Throwable t) {
             Log.printStackTrace(TAG, "queryMiscInfo err:",t);
@@ -633,7 +629,7 @@ public class AntOcean extends ModelTask {
                     }
                 }
             } else {
-                Log.runtime(TAG, jo.getString("resultDesc"));
+                Log.record(TAG, jo.getString("resultDesc"));
             }
         } catch (Throwable t) {
             Log.printStackTrace(TAG, "queryMiscInfo err:",t);
@@ -728,7 +724,7 @@ public class AntOcean extends ModelTask {
             String questionResponse = AntOceanRpcCall.getQuestion();
             JSONObject questionJson = new JSONObject(questionResponse);
             if (questionJson.getBoolean("answered")) {
-                Log.runtime(TAG, "问题已经被回答过,跳过答题流程");
+                Log.record(TAG, "问题已经被回答过,跳过答题流程");
                 return;
             }
             if (questionJson.getInt("resultCode") == 200) {
@@ -756,7 +752,7 @@ public class AntOcean extends ModelTask {
      */
     private static void doOceanPDLTask() {
         try {
-            Log.runtime(TAG, "执行潘多拉海域任务");
+            Log.record(TAG, "执行潘多拉海域任务");
             String homeResponse = AntOceanRpcCall.PDLqueryReplicaHome();
             JSONObject homeJson = new JSONObject(homeResponse);
             if (ResChecker.checkRes(TAG, homeJson)) {
@@ -822,7 +818,7 @@ public class AntOcean extends ModelTask {
                     }
                 }
             } else {
-                Log.runtime(TAG, jo.getString("resultDesc"));
+                Log.record(TAG, jo.getString("resultDesc"));
             }
         } catch (Throwable t) {
             Log.printStackTrace(TAG, "protectBeach err:",t);
@@ -888,7 +884,7 @@ public class AntOcean extends ModelTask {
                 }
             } else {
                 Log.record(jo.getString("resultDesc"));
-                Log.runtime(s);
+                Log.record(s);
             }
         } catch (Throwable t) {
             Log.printStackTrace(TAG, "queryCultivationDetail err:",t);

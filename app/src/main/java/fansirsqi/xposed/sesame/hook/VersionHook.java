@@ -35,7 +35,7 @@ public class VersionHook {
     public static void installHook(ClassLoader classLoader) {
         // 防止重复安装
         if (hookInstalled) {
-            Log.runtime(TAG, "⚠️ Hook 已安装,跳过");
+            Log.record(TAG, "⚠️ Hook 已安装,跳过");
             return;
         }
 
@@ -63,7 +63,7 @@ public class VersionHook {
                                     // 只在第一次捕获时记录日志
                                     if (capturedVersion == null && versionName != null) {
                                         capturedVersion = new AlipayVersion(versionName);
-                                        Log.runtime(TAG, "✅ 捕获支付宝版本: " + versionName +
+                                        Log.record(TAG, "✅ 捕获支付宝版本: " + versionName +
                                                 " (code: " + versionCode +
                                                 ", longCode: " + longVersionCode + ")");
                                     }
@@ -77,10 +77,10 @@ public class VersionHook {
             );
 
             hookInstalled = true;
-            Log.runtime(TAG, "✅ 版本号 Hook 安装成功");
+            Log.record(TAG, "✅ 版本号 Hook 安装成功");
 
         } catch (Throwable t) {
-            Log.runtime(TAG, "❌ 安装版本号 Hook 失败");
+            Log.record(TAG, "❌ 安装版本号 Hook 失败");
             Log.printStackTrace(TAG, t);
         }
     }
@@ -100,6 +100,6 @@ public class VersionHook {
     public static void reset() {
         capturedVersion = null;
         hookInstalled = false;
-        Log.runtime(TAG, "🔄 版本号 Hook 状态已重置");
+        Log.record(TAG, "🔄 版本号 Hook 状态已重置");
     }
 }

@@ -2,9 +2,6 @@ package fansirsqi.xposed.sesame.hook
 
 import android.annotation.SuppressLint
 import android.app.Activity
-import android.graphics.Point
-import android.util.DisplayMetrics
-import android.view.Display
 import fansirsqi.xposed.sesame.hook.simple.MotionEventSimulator
 import fansirsqi.xposed.sesame.hook.simple.SimplePageManager
 import fansirsqi.xposed.sesame.hook.simple.SimpleViewImage
@@ -36,7 +33,7 @@ abstract class BaseCaptchaHandler {
         // 滑动参数配置
         private const val SLIDE_START_OFFSET = 25 // 滑动起始位置偏移量（像素）
         private const val SLIDE_END_MARGIN = 20   // 滑动结束位置距离右侧的边距（像素）
-        private const val SLIDE_DURATION_MIN = 400L // 最小滑动持续时间
+        private const val SLIDE_DURATION_MIN = 500L // 最小滑动持续时间
         private const val SLIDE_DURATION_MAX = 600L // 最大滑动持续时间
 
         // 滑动后延迟检查是否成功
@@ -80,12 +77,12 @@ abstract class BaseCaptchaHandler {
                // Log.captcha(TAG, "未找到滑动验证文本，跳过处理")
                 return false // 未找到关键视图，返回 false 让其他处理器尝试
             }
-            Log.captcha(TAG, "发现滑动验证文本: ${slideTextInDialog.getText()}")
-            
+            Log.record(TAG, "发现滑动验证文本: ${slideTextInDialog.getText()}")
+            delay(500L) // 等待界面稳定
             // 执行滑动验证
             return performSlideAndVerify(activity, slideTextInDialog)
         } catch (e: Exception) {
-            Log.captcha(TAG, "处理滑动验证码时发生错误: ${e.stackTraceToString()}")
+            Log.record(TAG, "处理滑动验证码时发生错误: ${e.stackTraceToString()}")
             return false
         } finally {
             captchaProcessingMutex.unlock()
@@ -99,23 +96,20 @@ abstract class BaseCaptchaHandler {
      * @return 如果验证码成功解除返回 true，否则返回 false。
      */
     private suspend fun performSlideAndVerify(activity: Activity, slideTextView: SimpleViewImage): Boolean {
-        Log.captcha(TAG, "========== 正在查找真实滑块并执行滑动 ==========")
         val sliderView = ViewHierarchyAnalyzer.findActualSliderView(slideTextView) ?: run {
-            Log.captcha(TAG, "未能找到可操作的滑块视图，滑动无法执行。")
+            Log.record(TAG, "未能找到可操作的滑块视图，滑动无法执行。")
             return false
         }
         
         // 计算滑动坐标
         val (startX, startY, endX, endY) = calculateSlideCoordinates(activity, sliderView) ?: run {
-            Log.captcha(TAG, "计算滑动坐标失败，滑动无法执行。")
+            Log.record(TAG, "计算滑动坐标失败，滑动无法执行。")
             return false
         }
-        Log.captcha(TAG, "计算出的滑动路径: ($startX, $startY) -> ($endX, $endY)")
-        
+
         // 随机化滑动持续时间，模拟更自然的行为
         val slideDuration = Random.nextLong(SLIDE_DURATION_MIN, SLIDE_DURATION_MAX + 1)
-        Log.captcha(TAG, "使用滑动持续时间: ${slideDuration}ms")
-        
+
         // 执行滑动
         MotionEventSimulator.simulateSwipe(
             view = sliderView,
@@ -128,10 +122,10 @@ abstract class BaseCaptchaHandler {
 
         delay(POST_SLIDE_CHECK_DELAY_MS)
         return if (checkCaptchaTextGone()) {
-            Log.captcha(TAG, "验证码文本已消失，滑动成功。")
+            Log.record(TAG, "验证码文本已消失，滑动成功。")
             true
         } else {
-            Log.captcha(TAG, "验证码文本仍然存在，滑动可能失败。")
+            Log.record(TAG, "验证码文本仍然存在，滑动可能失败。")
             false
         }
     }
@@ -185,21 +179,21 @@ abstract class BaseCaptchaHandler {
         // 确保滑动终点不超过屏幕边界
         if (endX > maxEndX) {
             endX = maxEndX
-            Log.captcha(TAG, "调整滑动终点以适配屏幕边界")
+            Log.record(TAG, "调整滑动终点以适配屏幕边界")
         }
         // 确保滑动距离足够（至少滑块宽度的1.5倍）
         val minSlideDistance = sliderWidth * 1.5f
         val actualSlideDistance = endX - startX
         if (actualSlideDistance < minSlideDistance) {
             endX = startX + minSlideDistance + Random.nextInt(-3, 4) // 添加随机偏移
-            Log.captcha(TAG, "调整滑动距离至最小要求: ${minSlideDistance}px")
+            Log.record(TAG, "调整滑动距离至最小要求: ${minSlideDistance}px")
         }
         val endY = startY // 保持水平滑动
         // 输出详细的调试信息
-        Log.captcha(TAG, "屏幕信息: 尺寸=${screenWidth}x$screenHeight")
-        Log.captcha(TAG, "滑动区域信息: 容器位置=[$containerX,$containerY], 尺寸=${containerWidth}x$containerHeight")
-        Log.captcha(TAG, "滑块信息: 位置=[$sliderX,$sliderY], 尺寸=${sliderWidth}x${sliderHeight}")
-        Log.captcha(TAG, "计算结果: 起点=[$startX,$startY], 终点=[$endX,$endY], 滑动距离=${endX-startX}px")
+        Log.record(TAG, "屏幕信息: 尺寸=${screenWidth}x$screenHeight")
+        Log.record(TAG, "滑动区域信息: 容器位置=[$containerX,$containerY], 尺寸=${containerWidth}x$containerHeight")
+        Log.record(TAG, "滑块信息: 位置=[$sliderX,$sliderY], 尺寸=${sliderWidth}x${sliderHeight}")
+        Log.record(TAG, "计算结果: 起点=[$startX,$startY], 终点=[$endX,$endY], 滑动距离=${endX-startX}px")
 
         ApplicationHook.sendBroadcastShell(
             getSlidePathKey(),
@@ -218,10 +212,10 @@ abstract class BaseCaptchaHandler {
     private fun checkCaptchaTextGone(): Boolean {
         val slideTextInDialog = findSlideTextInDialog()
         return if (slideTextInDialog == null) {
-            Log.captcha(TAG, "验证码文本已消失 (在对话框中未找到)。")
+            Log.record(TAG, "验证码文本已消失 (在对话框中未找到)。")
             true
         } else {
-            Log.captcha(TAG, "验证码文本仍然存在 (在对话框中找到)。")
+            Log.record(TAG, "验证码文本仍然存在 (在对话框中找到)。")
             false
         }
     }
@@ -235,7 +229,7 @@ abstract class BaseCaptchaHandler {
           //  Log.captcha(TAG, "尝试通过 XPath 查找滑动验证文本: $SLIDE_VERIFY_TEXT_XPATH")
             SimplePageManager.tryGetTopView(SLIDE_VERIFY_TEXT_XPATH)
         } catch (e: Exception) {
-            Log.captcha(TAG, "由于异常导致查找验证码文本失败: ${e.stackTraceToString()}")
+            Log.record(TAG, "由于异常导致查找验证码文本失败: ${e.stackTraceToString()}")
             null
         }
     }

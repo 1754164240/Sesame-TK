@@ -166,7 +166,7 @@ abstract class ModelTask : Model() {
                 if (e.javaClass.name.contains("CancellationException") || 
                     e.message?.contains("cancelled") == true ||
                     e.message?.contains("StandaloneCoroutine") == true) {
-                    Log.runtime("子任务协程被取消: $taskName-$childId - ${e.message}")
+                    Log.record("子任务协程被取消: $taskName-$childId - ${e.message}")
                     // 协程取消是正常现象，不需要打印堆栈
                 } else {
                     Log.printStackTrace("addChildTaskSuspend 子任务执行异常1: $taskName-$childId", e)
@@ -221,15 +221,15 @@ abstract class ModelTask : Model() {
         return taskScope!!.launch {
             executionMutex.withLock {
                 if (isRunning && !force) {
-                    Log.runtime(TAG, "任务 ${getName()} 正在运行，跳过启动")
+                    Log.record(TAG, "任务 ${getName()} 正在运行，跳过启动")
                     return@withLock
                 }
                 if (isRunning && force) {
-                    Log.runtime(TAG, "强制重启任务 ${getName()}")
+                    Log.record(TAG, "强制重启任务 ${getName()}")
                     stopTask()
                 }
                 if (!isEnable || check() != true) {
-                    Log.runtime(TAG, "任务 ${getName()} 不满足执行条件")
+                    Log.record(TAG, "任务 ${getName()} 不满足执行条件")
                     return@withLock
                 }
                 try {
@@ -239,7 +239,7 @@ abstract class ModelTask : Model() {
                     executeMultiRoundTask(rounds)
                 } catch (_: CancellationException) {
                     // 协程取消属于正常控制流程（如停止任务/切换用户），不视为错误
-                    Log.runtime(TAG, "任务被取消: ${getName()}")
+                    Log.record(TAG, "任务被取消: ${getName()}")
                 } catch (e: Exception) {
                     Log.printStackTrace("startTask err: ${getName()}", e)
                 } finally {
@@ -290,7 +290,7 @@ abstract class ModelTask : Model() {
         } catch (_: CancellationException) {
             // 本轮被取消，记录为跳过而非失败
             stats.recordSkipped("${getName()}-Round$round")
-            Log.runtime(TAG, "任务本轮被取消: ${getName()}-Round$round")
+            Log.record(TAG, "任务本轮被取消: ${getName()}-Round$round")
         } catch (e: Exception) {
             stats.recordTaskEnd("${getName()}-Round$round", false)
             throw e
@@ -448,7 +448,7 @@ abstract class ModelTask : Model() {
             } catch (_: CancellationException) {
                 // 任务被取消是正常的协程控制流程，记录日志但不需要打印堆栈
                 val parentTaskName = modelTask?.getName() ?: "未知任务"
-                Log.runtime("子任务被取消: $parentTaskName-$id")
+                Log.record("子任务被取消: $parentTaskName-$id")
                 // 不重新抛出异常，让任务正常结束
                 return
             } catch (e: Exception) {
@@ -457,7 +457,7 @@ abstract class ModelTask : Model() {
                 if (e.javaClass.name.contains("CancellationException") || 
                     e.message?.contains("cancelled") == true ||
                     e.message?.contains("StandaloneCoroutine") == true) {
-                    Log.runtime("子任务协程被取消: $parentTaskName-$id - ${e.message}")
+                    Log.record("子任务协程被取消: $parentTaskName-$id - ${e.message}")
                     // 协程取消是正常现象，不需要打印堆栈
                     return
                 } else {

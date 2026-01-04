@@ -717,47 +717,80 @@ object EnergyWaitingManager {
         }
     }
 
-    fun cleanExpiredTasks(enableRevalidation: Boolean = false) {
-        managerScope.launch {
-            taskMutex.withLock {
-                val currentTime = System.currentTimeMillis()
+    // 类成员变量区域
+    private var lastCleanTime: Long = 0 // 记录上次清理的时间
+    private const val CLEAN_COOLDOWN = 30 * 60 * 1000L // 冷却时间：30分钟 (如果你想要30秒，改成 30 * 1000L)
 
-                // 1. 找出已经成熟超过2分钟但未执行的任务（可能是僵尸任务）
+    /**
+     * 清理过期任务
+     * @param enableRevalidation 是否强制执行全面验证（如果是true，将忽略冷却时间）
+     */
+    fun cleanExpiredTasks(enableRevalidation: Boolean = false) {
+        val currentTime = System.currentTimeMillis()
+
+        // --- 冷却检查 ---
+        // 如果不是强制验证，且距离上次清理不足冷却时间，直接返回
+        if (!enableRevalidation && currentTime - lastCleanTime < CLEAN_COOLDOWN) {
+            // Log.verbose(TAG, "清理任务处于冷却中，跳过执行")
+            return
+        }
+
+        // 更新最后清理时间（防止并在发调用）
+        lastCleanTime = currentTime
+
+        managerScope.launch {
+            // 获取锁，确保线程安全
+            taskMutex.withLock {
+                val now = System.currentTimeMillis()
+
+                // 1. 找出已经成熟超过2分钟但未执行的任务（僵尸任务检测）
+                // 逻辑：保护期结束时间 或 产出时间 已经过去很久了，但任务还在列表中
                 val matureTasks = waitingTasks.filter { (_, task) ->
                     val protectionEndTime = task.getProtectionEndTime()
-                    val collectTime = if (protectionEndTime > currentTime) protectionEndTime else task.produceTime
-                    currentTime > collectTime + 2 * 60 * 1000L // 成熟超过2分钟
+                    // 取保护结束时间和产出时间中较大的一个作为“应该收取的时间”
+                    val collectTime = if (protectionEndTime > now) protectionEndTime else task.produceTime
+                    now > collectTime + 2 * 60 * 1000L // 晚了2分钟以上
                 }
 
-                // 重新触发已成熟任务
+                // 重新触发已成熟任务（尝试唤醒僵尸任务）
                 if (matureTasks.isNotEmpty()) {
                     val taskNames = matureTasks.values.map { it.userName }.take(3).joinToString(",")
                     val moreText = if (matureTasks.size > 3) "等${matureTasks.size}个" else ""
                     Log.record(TAG, "🔄 重新触发蹲点：[${taskNames}${moreText}]已成熟但未执行")
+
                     matureTasks.forEach { (_, task) ->
+                        // 重新启动倒计时协程
                         startPreciseWaitingCoroutine(task)
                     }
                 }
 
                 // 2. 找出真正过期的任务（成熟超过1小时）
+                // 逻辑：这种任务通常已经失效或无法收取，需要从内存中移除
                 val expiredTasks = waitingTasks.filter { (_, task) ->
-                    currentTime > task.produceTime + 60 * 60 * 1000L // 超过成熟时间1小时
+                    now > task.produceTime + 60 * 60 * 1000L // 超过产出时间1小时
                 }
 
                 if (expiredTasks.isNotEmpty()) {
                     val taskNames = expiredTasks.values.map { it.userName }.take(3).joinToString(",")
                     val moreText = if (expiredTasks.size > 3) "等${expiredTasks.size}个" else ""
+
                     Log.record(TAG, "🧹 清理过期蹲点：[${taskNames}${moreText}]")
+
+                    // 执行移除
                     expiredTasks.forEach { (taskId, _) ->
                         waitingTasks.remove(taskId)
                     }
-                    EnergyWaitingPersistence.saveTasks(waitingTasks) // 保存更新
+
+                    // 持久化保存更改
+                    EnergyWaitingPersistence.saveTasks(waitingTasks)
                 } else {
-                    Log.debug(TAG, "定期清理检查：无过期任务")
+                    // 仅在手动调试或强制模式下打印此日志，避免刷屏
+                    if (enableRevalidation) {
+                        Log.debug(TAG, "定期清理检查：无过期任务")
+                    }
                 }
 
                 // 3. 手动触发全面验证（仅在手动启用时执行）
-                // 注意：已改为倒计时前2分钟自动验证，不再需要定期验证
                 if (enableRevalidation) {
                     if (waitingTasks.isNotEmpty()) {
                         Log.record(TAG, "🔍 手动全面验证：开始检查所有蹲点任务保护罩状态...")
@@ -765,11 +798,14 @@ object EnergyWaitingManager {
                     }
                 }
 
-                // 减少日志输出：仅在调试模式下记录状态
+                // 日志摘要
                 if (waitingTasks.isNotEmpty()) {
-                    Log.debug(TAG, "定期清理完成，当前活跃蹲点${waitingTasks.size}个")
+                    // 如果是定时任务且没有做任何操作，可以考虑降低日志级别或不打印
+                    if (matureTasks.isNotEmpty() || expiredTasks.isNotEmpty() || enableRevalidation) {
+                        Log.debug(TAG, "清理维护完成，当前活跃蹲点${waitingTasks.size}个")
+                    }
                 } else {
-                    Log.debug(TAG, "定期清理完成，当前无活跃蹲点任务")
+                    Log.debug(TAG, "清理维护完成，当前无活跃蹲点任务")
                 }
             }
         }

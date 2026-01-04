@@ -1,6 +1,5 @@
 package fansirsqi.xposed.sesame.hook.server
 
-import com.fasterxml.jackson.databind.ObjectMapper
 import fansirsqi.xposed.sesame.hook.server.handlers.HttpHandler
 import fansirsqi.xposed.sesame.hook.server.handlers.DebugHandler
 import fansirsqi.xposed.sesame.util.Log
@@ -28,7 +27,7 @@ class ModuleHttpServer(
     }
 
     private fun register(path: String, handler: HttpHandler) {
-        Log.runtime(tag, "Registering handler : $pathDescriptions[$path]")
+        Log.record(tag, "Registering handler : $pathDescriptions[$path]")
         routes[path] = handler
     }
 

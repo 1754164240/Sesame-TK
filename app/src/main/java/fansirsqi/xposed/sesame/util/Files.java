@@ -179,9 +179,9 @@ public class Files {
         if (!targetFile.exists()) {
             try {
                 if (targetFile.createNewFile()) {
-                    Log.runtime(TAG, targetFile.getName() + " created successfully");
+                    Log.record(TAG, targetFile.getName() + " created successfully");
                 } else {
-                    Log.runtime(TAG, targetFile.getName() + " creation failed");
+                    Log.record(TAG, targetFile.getName() + " creation failed");
                 }
             } catch (IOException e) {
                 Log.error(TAG, "Failed to create file: " + targetFile.getName());
@@ -191,14 +191,14 @@ public class Files {
             // 检查文件权限
             boolean canRead = targetFile.canRead();
             boolean canWrite = targetFile.canWrite();
-            Log.system(TAG, fullTargetFileName + " permissions: r=" + canRead + "; w=" + canWrite);
+            Log.record(TAG, fullTargetFileName + " permissions: r=" + canRead + "; w=" + canWrite);
 
             // 如果文件存在但没有写入权限，尝试设置权限
             if (!canWrite) {
                 if (targetFile.setWritable(true)) {
-                    Log.runtime(TAG, targetFile.getName() + " write permission set successfully");
+                    Log.record(TAG, targetFile.getName() + " write permission set successfully");
                 } else {
-                    Log.runtime(TAG, targetFile.getName() + " write permission set failed");
+                    Log.record(TAG, targetFile.getName() + " write permission set failed");
                 }
             }
         }
@@ -217,9 +217,9 @@ public class Files {
         if (!targetFile.exists()) {
             try {
                 if (targetFile.createNewFile()) {
-                    Log.runtime(TAG, "File created successfully: " + targetFile.getAbsolutePath());
+                    Log.record(TAG, "File created successfully: " + targetFile.getAbsolutePath());
                 } else {
-                    Log.runtime(TAG, "File creation failed: " + targetFile.getAbsolutePath());
+                    Log.record(TAG, "File creation failed: " + targetFile.getAbsolutePath());
                 }
             } catch (IOException e) {
                 Log.error(TAG, "Failed to create file: " + targetFile.getAbsolutePath());
@@ -229,14 +229,14 @@ public class Files {
             // 如果文件存在，检查权限
             boolean canRead = targetFile.canRead();
             boolean canWrite = targetFile.canWrite();
-            Log.system(TAG, "File permissions for " + targetFile.getAbsolutePath() + ": r=" + canRead + "; w=" + canWrite);
+            Log.record(TAG, "File permissions for " + targetFile.getAbsolutePath() + ": r=" + canRead + "; w=" + canWrite);
 
             // 如果文件没有写入权限，尝试设置权限
             if (!canWrite) {
                 if (targetFile.setWritable(true)) {
-                    Log.runtime(TAG, "Write permission set successfully for file: " + targetFile.getAbsolutePath());
+                    Log.record(TAG, "Write permission set successfully for file: " + targetFile.getAbsolutePath());
                 } else {
-                    Log.runtime(TAG, "Write permission set failed for file: " + targetFile.getAbsolutePath());
+                    Log.record(TAG, "Write permission set failed for file: " + targetFile.getAbsolutePath());
                 }
             }
         }
@@ -356,7 +356,7 @@ public class Files {
         File logFile = new File(Files.LOG_DIR, logFileName);
         if (logFile.exists() && logFile.isDirectory()) {
             if (logFile.delete()) {
-                Log.system(TAG, "日志" + logFile.getName() + "目录存在，删除成功！");
+                Log.record(TAG, "日志" + logFile.getName() + "目录存在，删除成功！");
             } else {
                 Log.error(TAG, "日志" + logFile.getName() + "目录存在，删除失败！");
             }
@@ -364,7 +364,7 @@ public class Files {
         if (!logFile.exists()) {
             try {
                 if (logFile.createNewFile()) {
-                    Log.system(TAG, "日志" + logFile.getName() + "文件不存在，创建成功！");
+                    Log.record(TAG, "日志" + logFile.getName() + "文件不存在，创建成功！");
                 } else {
                     Log.error(TAG, "日志" + logFile.getName() + "文件不存在，创建失败！");
                 }
@@ -690,7 +690,7 @@ public class Files {
                 return true;
             }
             retryCount--;
-            Log.runtime(TAG, "删除失败，重试中: " + file.getAbsolutePath());
+            Log.record(TAG, "删除失败，重试中: " + file.getAbsolutePath());
             CoroutineUtils.sleepCompat(500); // 等待 500ms 后重试
         }
         Log.error(TAG, "删除失败: " + file.getAbsolutePath());

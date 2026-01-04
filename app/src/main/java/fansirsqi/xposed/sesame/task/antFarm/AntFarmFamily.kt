@@ -228,7 +228,7 @@ data object AntFarmFamily {
 
                 // 如果该用户已经记录今日上限 → 跳过
                 if (Status.hasFlagToday(flagKey)) {
-                    Log.runtime("[$userId] 今日喂鸡次数已达上限（已记录）🥣，跳过")
+                    Log.record("[$userId] 今日喂鸡次数已达上限（已记录）🥣，跳过")
                     continue
                 }
 
@@ -242,7 +242,7 @@ data object AntFarmFamily {
                     if (code == "391") {
                         // 记录该用户今日不能再喂
                         Status.setFlagToday(flagKey)
-                        Log.runtime("[$userId] 今日帮喂次数已达上限🥣，已记录为当日限制")
+                        Log.record("[$userId] 今日帮喂次数已达上限🥣，已记录为当日限制")
                     } else {
                         Log.error(TAG, "喂食失败 user=$userId code=$code msg=${jo.optString("memo")}")
                     }
@@ -575,7 +575,7 @@ data object AntFarmFamily {
                 return
             }
 
-            Log.runtime(TAG, "inviteList: $inviteList")
+            Log.record(TAG, "inviteList: $inviteList")
 
             val jo = JSONObject(AntFarmRpcCall.inviteFriendVisitFamily(inviteList))
             if (ResChecker.checkRes(TAG, jo)) {

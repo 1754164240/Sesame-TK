@@ -217,7 +217,7 @@ public class AntForestRpcCall {
             JSONObject arg = new JSONObject();
             arg.put("bizNo", bizNo + UUID.randomUUID().toString());
             arg.put("energyId", energyId);
-            arg.put("extendInfo", new JSONObject().put("sendChat", notifyFriend ? "Y" : "N"));
+            arg.put("extInfo", new JSONObject().put("sendChat", notifyFriend ? "Y" : "N"));
             arg.put("from", "friendIndex");
             arg.put("source", "chInfo_ch_appcenter__chsub_9patch");
             arg.put("targetUser", targetUser);

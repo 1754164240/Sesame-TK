@@ -49,7 +49,7 @@ object UserMap {
     @JvmStatic
     @Synchronized
     fun setCurrentUserId(userId: String?) {
-        Log.runtime(TAG, "setCurrentUserId: $userId")
+        Log.record(TAG, "setCurrentUserId: $userId")
         currentUid = if (userId.isNullOrEmpty()) null else userId
     }
 
@@ -69,7 +69,7 @@ object UserMap {
     @JvmStatic
     fun getMaskName(userId: String?): String? {
         if (userId == null) {
-            Log.runtime(TAG, "getMaskName: userId is null")
+            Log.record(TAG, "getMaskName: userId is null")
             return null
         } // 关键修复：防止 userMap.get(null) 崩溃
         return userMap[userId]?.maskName
@@ -202,11 +202,11 @@ object UserMap {
     @JvmStatic
     @Synchronized
     fun saveSelf(userEntity: UserEntity?) {
-        Log.runtime(TAG, "saveSelf: $userEntity")
+        Log.record(TAG, "saveSelf: $userEntity")
         if (userEntity != null) {
             // 2. 直接存入对象！DataStore 会自动转 JSON 并写入文件
             DataStore.put("activedUser", userEntity)
-            Log.runtime(TAG, "已更新当前用户信息到 DataStore")
+            Log.record(TAG, "已更新当前用户信息到 DataStore")
         }
         val body = JsonUtil.formatJson(userEntity)
         Files.write2File(body, Files.getSelfIdFile(userEntity?.userId))

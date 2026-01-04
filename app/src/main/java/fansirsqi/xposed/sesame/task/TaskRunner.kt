@@ -162,7 +162,7 @@ class CoroutineTaskRunner(allModels: List<Model>) {
                 executeTaskWithTimeout(task, round)
                 // 任务执行完成（白名单任务可能在后台继续运行），继续下一个
                 if (index < enabledTasksInRound.size - 1) {
-                    Log.runtime(TAG, "➡️ 任务[$taskName]处理完成，准备执行下一任务...")
+                    Log.record(TAG, "➡️ 任务[$taskName]处理完成，准备执行下一任务...")
                 }
             }
             
@@ -306,7 +306,7 @@ class CoroutineTaskRunner(allModels: List<Model>) {
     ) {
         // 如果配置为无限等待，直接执行任务
         if (taskTimeout == -1L) {
-            Log.runtime(TAG, "🔄 任务[$taskId]配置为无限等待，直接执行...")
+            Log.record(TAG, "🔄 任务[$taskId]配置为无限等待，直接执行...")
             executeTask(task, round)
             return
         }
@@ -330,11 +330,11 @@ class CoroutineTaskRunner(allModels: List<Model>) {
             }
             
             // 非白名单任务：检查是否还在运行，决定是否给宽限期
-            Log.runtime(TAG, "⚠️ 任务[$taskId]达到基础超时(${runningTime}ms)，检查是否可以继续等待...")
+            Log.record(TAG, "⚠️ 任务[$taskId]达到基础超时(${runningTime}ms)，检查是否可以继续等待...")
             if (task.isRunning) {
                 // 给任务额外30秒的宽限期
                 val gracePeriod = 30_000L
-                Log.runtime(TAG, "🕐 任务[$taskId]仍在运行，给予${gracePeriod/1000}秒宽限期...")
+                Log.record(TAG, "🕐 任务[$taskId]仍在运行，给予${gracePeriod/1000}秒宽限期...")
                 try {
                     withTimeout(gracePeriod) {
                         // 等待任务自然完成
@@ -345,7 +345,7 @@ class CoroutineTaskRunner(allModels: List<Model>) {
                             val now = System.currentTimeMillis()
                             // 优化：使用时间差判断，避免模运算
                             if (now - lastLogTime >= 10000) { // 每10秒输出一次
-                                Log.runtime(TAG, "⏳ 任务[$taskId]宽限期运行中... ${currentRunningTime/1000}秒")
+                                Log.record(TAG, "⏳ 任务[$taskId]宽限期运行中... ${currentRunningTime/1000}秒")
                                 lastLogTime = now
                             }
                         }
@@ -358,7 +358,7 @@ class CoroutineTaskRunner(allModels: List<Model>) {
                 }
             } else {
                 // 任务已经不在运行了，重新抛出超时异常
-                Log.runtime(TAG, "🔍 任务[$taskId]已停止运行，执行超时处理")
+                Log.record(TAG, "🔍 任务[$taskId]已停止运行，执行超时处理")
                 throw e
             }
         }
@@ -441,19 +441,19 @@ class CoroutineTaskRunner(allModels: List<Model>) {
             val isRunning = task.isRunning
             val taskName = task.getName()
 
-            Log.runtime(TAG, "📊 任务[$taskId]状态信息:")
-            Log.runtime(TAG, "  - 任务名称: $taskName")
-            Log.runtime(TAG, "  - 是否启用: $isEnabled")
-            Log.runtime(TAG, "  - 是否运行中: $isRunning")
+            Log.record(TAG, "📊 任务[$taskId]状态信息:")
+            Log.record(TAG, "  - 任务名称: $taskName")
+            Log.record(TAG, "  - 是否启用: $isEnabled")
+            Log.record(TAG, "  - 是否运行中: $isRunning")
 
             // 尝试获取更多状态信息
             try {
                 val runCents = task.runCents
                 val taskScope = if (task.isRunning) "运行中" else "已停止"
-                Log.runtime(TAG, "  - 运行次数: $runCents")
-                Log.runtime(TAG, "  - 任务状态: $taskScope")
+                Log.record(TAG, "  - 运行次数: $runCents")
+                Log.record(TAG, "  - 任务状态: $taskScope")
             } catch (e: Exception) {
-                Log.runtime(TAG, "  - 任务状态: 获取失败(${e.message})")
+                Log.record(TAG, "  - 任务状态: 获取失败(${e.message})")
             }
             
         } catch (e: Exception) {
@@ -512,34 +512,34 @@ class CoroutineTaskRunner(allModels: List<Model>) {
         }
         
         // 性能监控指标
-        Log.runtime(TAG, "⚡ 性能指标:")
-        Log.runtime(TAG, "  - 协程创建次数: ${coroutineCreationCount.get()}")
-        Log.runtime(TAG, "  - 日志记录次数: ${logRecordCount.get()}")
+        Log.record(TAG, "⚡ 性能指标:")
+        Log.record(TAG, "  - 协程创建次数: ${coroutineCreationCount.get()}")
+        Log.record(TAG, "  - 日志记录次数: ${logRecordCount.get()}")
         
         // 任务执行时间分析
         if (taskExecutionTimes.isNotEmpty()) {
             val avgTime = taskExecutionTimes.values.average()
             val maxTime = taskExecutionTimes.values.maxOrNull() ?: 0L
             val minTime = taskExecutionTimes.values.minOrNull() ?: 0L
-            Log.runtime(TAG, "  - 任务平均耗时: ${String.format("%.1f", avgTime)}ms")
-            Log.runtime(TAG, "  - 最长任务耗时: ${maxTime}ms")
-            Log.runtime(TAG, "  - 最短任务耗时: ${minTime}ms")
+            Log.record(TAG, "  - 任务平均耗时: ${String.format("%.1f", avgTime)}ms")
+            Log.record(TAG, "  - 最长任务耗时: ${maxTime}ms")
+            Log.record(TAG, "  - 最短任务耗时: ${minTime}ms")
             
             // 找出最慢的3个任务
             val slowestTasks = taskExecutionTimes.entries
                 .sortedByDescending { it.value }
                 .take(3)
             if (slowestTasks.isNotEmpty()) {
-                Log.runtime(TAG, "  - 最慢的任务:")
+                Log.record(TAG, "  - 最慢的任务:")
                 slowestTasks.forEach { (taskId, time) ->
-                    Log.runtime(TAG, "    * $taskId: ${time}ms")
+                    Log.record(TAG, "    * $taskId: ${time}ms")
                 }
             }
         }
         
         // 性能分析
         if (totalTime > 60000) { // 超过1分钟
-            Log.runtime(TAG, "⚠️ 执行时间较长，建议检查任务配置或网络状况")
+            Log.record(TAG, "⚠️ 执行时间较长，建议检查任务配置或网络状况")
         }
         
         Log.record(TAG, "================================")

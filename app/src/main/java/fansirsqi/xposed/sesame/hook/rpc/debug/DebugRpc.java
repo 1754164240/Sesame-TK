@@ -77,10 +77,10 @@ public class DebugRpc {
                     queryTreeForExchange(projectId);
                 }
             } else {
-                Log.runtime(TAG, jo.getString("resultDesc"));
+                Log.record(TAG, jo.getString("resultDesc"));
             }
         } catch (Throwable t) {
-            Log.runtime(TAG, "getTreeItems err:");
+            Log.record(TAG, "getTreeItems err:");
             Log.printStackTrace(TAG, t);
         }
     }
@@ -121,11 +121,11 @@ public class DebugRpc {
             }
         } catch (JSONException e) {
             // 处理JSON解析异常
-            Log.runtime(TAG, "JSON解析错误:");
+            Log.record(TAG, "JSON解析错误:");
             Log.printStackTrace(TAG, e);
         } catch (Throwable t) {
             // 处理其他可能的异常
-            Log.runtime(TAG, "查询树木交换信息过程中发生错误:");
+            Log.record(TAG, "查询树木交换信息过程中发生错误:");
             Log.printStackTrace(TAG, t);
         }
     }
@@ -159,15 +159,15 @@ public class DebugRpc {
                 }
             } else {
                 // 如果RPC调用失败，记录错误描述
-                Log.runtime(TAG, jo.getString("resultDesc"));
+                Log.record(TAG, jo.getString("resultDesc"));
             }
         } catch (JSONException e) {
             // 处理JSON解析异常
-            Log.runtime(TAG, "JSON解析错误:");
+            Log.record(TAG, "JSON解析错误:");
             Log.printStackTrace(TAG, e);
         } catch (Throwable t) {
             // 处理其他可能的异常
-            Log.runtime(TAG, "获取树木项目列表过程中发生错误:");
+            Log.record(TAG, "获取树木项目列表过程中发生错误:");
             Log.printStackTrace(TAG, t);
         }
     }
@@ -198,11 +198,11 @@ public class DebugRpc {
             }
         } catch (JSONException e) {
             // 处理JSON解析异常
-            Log.runtime(TAG, "JSON解析错误:");
+            Log.record(TAG, "JSON解析错误:");
             Log.printStackTrace(TAG, e);
         } catch (Throwable t) {
             // 处理其他可能的异常
-            Log.runtime(TAG, "查询树木交换信息过程中发生错误:");
+            Log.record(TAG, "查询树木交换信息过程中发生错误:");
             Log.printStackTrace(TAG, t);
         }
     }
@@ -267,11 +267,11 @@ public class DebugRpc {
             }
         } catch (JSONException e) {
             // 处理JSON解析异常
-            Log.runtime(TAG, "JSON解析错误:");
+            Log.record(TAG, "JSON解析错误:");
             Log.printStackTrace(TAG, e);
         } catch (Throwable t) {
             // 处理其他可能的异常
-            Log.runtime(TAG, "行走网格过程中发生错误:");
+            Log.record(TAG, "行走网格过程中发生错误:");
             Log.printStackTrace(TAG, t);
         }
     }
@@ -293,7 +293,7 @@ public class DebugRpc {
                 }
             }
         } catch (Throwable t) {
-            Log.runtime(TAG, "queryAreaTrees err:");
+            Log.record(TAG, "queryAreaTrees err:");
             Log.printStackTrace(TAG, t);
         }
     }
@@ -317,7 +317,7 @@ public class DebugRpc {
                 }
             }
         } catch (Throwable t) {
-            Log.runtime(TAG, "getUnlockTreeItems err:");
+            Log.record(TAG, "getUnlockTreeItems err:");
             Log.printStackTrace(TAG, t);
         }
     }
