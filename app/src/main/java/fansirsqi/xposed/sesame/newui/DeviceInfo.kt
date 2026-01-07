@@ -79,6 +79,7 @@ object DeviceInfoUtil {
         return CommandUtil.executeCommand(context, "getprop $prop")?.trim() ?: ""
     }
 
+
     private suspend fun getDeviceName(context: Context): String {
         val candidates = listOf("ro.product.marketname", "ro.product.model")
         for (prop in candidates) {
@@ -88,7 +89,11 @@ object DeviceInfoUtil {
         return "${Build.BRAND} ${Build.MODEL}"
     }
 
-    suspend fun showInfo(vid: String, context: Context): Map<String, String> = withContext(Dispatchers.IO) {
+    private suspend fun getSn(context: Context): String {
+        return getProp(context, "ro.serialno")
+    }
+
+    suspend fun showInfo(context: Context): Map<String, String> = withContext(Dispatchers.IO) {
         val currentShellType = CommandUtil.getShellType(context)
 
         val permissionStatus = when (currentShellType) {
@@ -103,7 +108,7 @@ object DeviceInfoUtil {
             "Product" to "${Build.MANUFACTURER} ${Build.PRODUCT}",
             "Device" to getDeviceName(context),
             "Android Version" to "${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})",
-            "Verify ID" to vid,
+            "Verify ID" to getSn(context),
             "Captcha Permission" to permissionStatus,
             "Module Version" to "v${BuildConfig.VERSION_NAME} ${BuildConfig.VERSION_CODE}",
             "Module Build" to "${BuildConfig.BUILD_DATE} ${BuildConfig.BUILD_TIME}"

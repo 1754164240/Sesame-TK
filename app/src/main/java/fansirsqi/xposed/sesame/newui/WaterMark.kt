@@ -24,7 +24,7 @@ fun WatermarkLayer(
 ) {
     // 1. 获取 M3 主题颜色 (自动适配深浅模式)
     // 使用 onSurface (文字色) 并加上极低的透明度 (0.08~0.15)
-    val textColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f).toArgb()
+    val textColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f).toArgb()
 
     // 2. 准备水印文本内容 (使用 remember 缓存，避免重组时重复计算)
     val textLines = remember(verifuids) {
@@ -76,7 +76,7 @@ fun WatermarkLayer(
             // 密度与间距计算
             val densityFactor = 0.9f
             val horizontalSpacing = (maxLineWidth * 1.5f / densityFactor)
-            val verticalSpacing = (totalTextHeight * 3.0f / densityFactor)
+            val verticalSpacing = (totalTextHeight * 2.0f / densityFactor)
 
             // 旋转角度 (弧度)
             val rotationDegrees = -30f

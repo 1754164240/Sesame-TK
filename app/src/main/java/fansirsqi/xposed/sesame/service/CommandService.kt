@@ -1,77 +1,90 @@
 package fansirsqi.xposed.sesame.service
 
 import android.annotation.SuppressLint
-import android.app.*
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.app.Service
 import android.content.Intent
 import android.os.IBinder
-import android.util.Log
+import android.os.RemoteException
 import androidx.core.app.NotificationCompat
 import fansirsqi.xposed.sesame.ICallback
 import fansirsqi.xposed.sesame.ICommandService
 import fansirsqi.xposed.sesame.R
 import fansirsqi.xposed.sesame.ui.MainActivity
-import kotlinx.coroutines.*
+import fansirsqi.xposed.sesame.util.Log
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeout
 
 /**
  * 命令执行服务（前台服务）
- * 使用 cmd-android 库和 ShellManager 执行命令
+ * 负责通过 ShellManager 执行底层命令
  */
 class CommandService : Service() {
 
     companion object {
         private const val TAG = "CommandService"
         private const val NOTIFICATION_ID = 1001
-        private const val CHANNEL_ID = "CommandServiceChannel"
-        private const val CHANNEL_NAME = "滑块命令执行服务"
+
+        // 统一 ID 和 名称
+        private const val CHANNEL_ID = "SesameCommandChannel"
+        private const val CHANNEL_NAME = "后台命令服务"
+        private const val NOTIFICATION_TITLE = "后台命令服务"
+        private const val NOTIFICATION_CONTENT = "服务正在运行，等待执行指令..."
 
         // 设置命令执行超时时间，例如 15 秒
         private const val COMMAND_TIMEOUT_MS = 15000L
     }
 
-    private val serviceScope = CoroutineScope(Dispatchers.IO + Job())
+    // 使用 SupervisorJob，确保单个任务崩溃不影响整个作用域
+    private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val commandMutex = Mutex()
-    
+
     // ShellManager 实例
     private var shellManager: ShellManager? = null
 
     private val binder = object : ICommandService.Stub() {
         override fun executeCommand(command: String, callback: ICallback?) {
-            Log.d(TAG, "收到命令执行请求: $command")
+            Log.d(TAG, "收到请求: $command")
 
             serviceScope.launch {
+                // 使用 Mutex 确保命令串行执行（如果需要并行可移除此锁）
                 commandMutex.withLock {
                     try {
-                        // 初始化 ShellManager（如果尚未初始化）
-                        if (shellManager == null) {
-                            shellManager = ShellManager(applicationContext)
-                        }
+                        ensureShellManager()
 
-                        Log.d(TAG, "开始执行命令: $command")
+                        Log.d(TAG, "正在执行: $command")
 
-                        // 使用 ShellManager 执行命令，带超时
+                        // 使用 ShellManager 执行命令，带超时控制
                         val result = withTimeout(COMMAND_TIMEOUT_MS) {
                             shellManager!!.exec(command)
                         }
 
                         // 处理执行结果
                         if (result.isSuccess) {
-                            Log.d(TAG, "命令执行成功: $command (使用 ${shellManager!!.selectedName})")
-                            callback?.onSuccess(result.stdout.trim())
+                            Log.d(TAG, "执行成功: $command")
+                            safeCallbackSuccess(callback, result.stdout.trim())
                         } else {
-                            Log.e(TAG, "命令执行失败: $command (使用 ${shellManager!!.selectedName}), 退出码: ${result.exitCode}, 错误: ${result.stderr}")
-                            callback?.onError("退出码: ${result.exitCode}, 错误: ${result.stderr}")
+                            val errorMsg = "退出码: ${result.exitCode}, 错误: ${result.stderr}"
+                            Log.e(TAG, "执行失败: $command, $errorMsg")
+                            safeCallbackError(callback, errorMsg)
                         }
 
                     } catch (_: TimeoutCancellationException) {
-                        Log.e(TAG, "命令执行超时 (${COMMAND_TIMEOUT_MS}ms): $command")
-                        callback?.onError("命令执行超时")
+                        Log.e(TAG, "执行超时 (${COMMAND_TIMEOUT_MS}ms): $command")
+                        safeCallbackError(callback, "命令执行超时")
                     } catch (e: Exception) {
-                        Log.e(TAG, "执行命令异常: $command, 错误: ${e.message}")
-                        callback?.onError(e.message ?: "未知错误")
-                    } finally {
-                        Log.d(TAG, "命令执行流程结束: $command")
+                        Log.e(TAG, "执行异常: $command, ${e.message}")
+                        safeCallbackError(callback, e.message ?: "未知错误")
                     }
                 }
             }
@@ -85,39 +98,69 @@ class CommandService : Service() {
     @SuppressLint("ForegroundServiceType")
     override fun onCreate() {
         super.onCreate()
-        Log.d(TAG, "CommandService onCreate 被调用")
+        Log.d(TAG, "CommandService onCreate")
+
+        // 初始化 ShellManager
+        ensureShellManager()
+
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, createNotification())
-        Log.i(TAG, "CommandService 已启动为前台服务")
     }
 
     override fun onBind(intent: Intent?): IBinder {
-        Log.d(TAG, "CommandService onBind 被调用")
-        // 初始化 ShellManager 实例
-        shellManager = ShellManager(applicationContext)
-        Log.i(TAG, "ShellManager 已初始化, 当前 Shell: ${shellManager?.selectedName}")
+        Log.d(TAG, "CommandService onBind")
         return binder
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Log.d(TAG, "CommandService onStartCommand 被调用")
-        // 如果服务被杀死，自动重启
+        // 如果服务被异常杀死，尝试重启
         return START_STICKY
-    }
-
-    override fun onUnbind(intent: Intent?): Boolean {
-        Log.d(TAG, "CommandService 解绑")
-        return super.onUnbind(intent)
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        // 停止前台服务
+        Log.d(TAG, "CommandService onDestroy")
         stopForeground(STOP_FOREGROUND_REMOVE)
-        // 清理资源
         shellManager = null
         serviceScope.cancel() // 销毁时取消所有协程任务
-        Log.d(TAG, "CommandService 销毁")
+    }
+
+    /**
+     * 确保 ShellManager 已初始化
+     */
+    private fun ensureShellManager() {
+        if (shellManager == null) {
+            try {
+                shellManager = ShellManager(applicationContext)
+                Log.i(TAG, "ShellManager 初始化完成: ${shellManager?.selectedName}")
+            } catch (e: Exception) {
+                Log.e(TAG, "ShellManager 初始化失败", e)
+            }
+        }
+    }
+
+    /**
+     * 安全回调 Success，处理 DeadObjectException
+     */
+    private fun safeCallbackSuccess(callback: ICallback?, result: String) {
+        if (callback == null) return
+        try {
+            callback.onSuccess(result)
+        } catch (e: RemoteException) {
+            Log.w(TAG, "回调失败(客户端已死亡): ${e.message}")
+        }
+    }
+
+    /**
+     * 安全回调 Error，处理 DeadObjectException
+     */
+    private fun safeCallbackError(callback: ICallback?, error: String) {
+        if (callback == null) return
+        try {
+            callback.onError(error)
+        } catch (e: RemoteException) {
+            Log.w(TAG, "回调失败(客户端已死亡): ${e.message}")
+        }
     }
 
     /**
@@ -127,9 +170,9 @@ class CommandService : Service() {
         val channel = NotificationChannel(
             CHANNEL_ID,
             CHANNEL_NAME,
-            NotificationManager.IMPORTANCE_LOW
+            NotificationManager.IMPORTANCE_LOW // 低优先级，不发出声音
         ).apply {
-            description = "用于执行 Shell 命令的前台服务"
+            description = "用于维持后台命令执行服务的运行"
             setShowBadge(false)
         }
         val notificationManager = getSystemService(NotificationManager::class.java)
@@ -137,27 +180,27 @@ class CommandService : Service() {
     }
 
     /**
-     * 创建通知
+     * 创建前台服务通知
      */
     private fun createNotification(): Notification {
-        val intent = Intent(this, MainActivity::class.java)
-        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-        val pendingIntent =
-            PendingIntent.getActivity(
-                this,
-                0,
-                intent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
+        val intent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            0,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Shell命令执行服务")
-            .setContentText("正在运行，等待执行命令...")
-            .setSmallIcon(R.drawable.ic_launcher_christmas)
+            .setContentTitle(NOTIFICATION_TITLE)
+            .setContentText(NOTIFICATION_CONTENT)
+            .setSmallIcon(R.drawable.title_logo)
             .setContentIntent(pendingIntent)
             .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setOngoing(true)
+            .setOngoing(true) // 禁止用户侧滑删除
             .build()
     }
-
 }

@@ -71,7 +71,7 @@ public class AntOcean extends ModelTask {
     }
 
     private static final String TAG = AntOcean.class.getSimpleName();
-
+    private static boolean shouldSkipSwitch = false;
 
     @Override
     public String getName() {
@@ -173,6 +173,7 @@ public class AntOcean extends ModelTask {
     protected void runJava() {
         try {
             Log.record(TAG, "执行开始-" + getName());
+            shouldSkipSwitch = false; // 每次运行重置标记
 
             if (!queryOceanStatus()) {
                 return;
@@ -313,9 +314,14 @@ public class AntOcean extends ModelTask {
 
     private static void queryMiscInfo() {
         try {
+            if (shouldSkipSwitch) {
+                Log.record(TAG, "检测到进行中的限时挑战，跳过切换海域检查");
+                return;
+            }
+
             String s = AntOceanRpcCall.queryMiscInfo();
             JSONObject jo = new JSONObject(s);
-            if (ResChecker.checkRes(TAG, jo)) {
+            if (ResChecker.checkRes(TAG + "查询海洋杂项信息失败:", jo)) {
                 JSONObject miscHandlerVOMap = jo.getJSONObject("miscHandlerVOMap");
                 JSONObject homeTipsRefresh = miscHandlerVOMap.getJSONObject("HOME_TIPS_REFRESH");
                 if (homeTipsRefresh.optBoolean("fishCanBeCombined") || homeTipsRefresh.optBoolean("canBeRepaired")) {
@@ -397,14 +403,19 @@ public class AntOcean extends ModelTask {
         }
     }
 
-    private static void combineFish(String fishId) {
+    private static void combineFish(String fishId, String logType) {
         try {
             String s = AntOceanRpcCall.combineFish(fishId);
             JSONObject jo = new JSONObject(s);
-            if (ResChecker.checkRes(TAG, jo)) {
+            if (ResChecker.checkRes(TAG + "合成海洋鱼类失败:", jo)) {
                 JSONObject fishDetailVO = jo.getJSONObject("fishDetailVO");
                 String name = fishDetailVO.getString("name");
-                Log.forest("神奇海洋🌊[" + name + "]合成成功");
+
+                if ("EXTRA_COLLECT".equals(logType)) {
+                    Log.forest("限时挑战🌊[" + name + "]合成成功");
+                } else {
+                    Log.forest("神奇海洋🌊[" + name + "]合成成功");
+                }
             } else {
                 Log.record(TAG, jo.getString("resultDesc"));
             }
@@ -431,7 +442,7 @@ public class AntOcean extends ModelTask {
                     }
                     if (canCombine && reward.optBoolean("unlock", false)) {
                         String fishId = reward.getString("id");
-                        combineFish(fishId);
+                        combineFish(fishId, "");
                     }
                 }
             }
@@ -556,22 +567,59 @@ public class AntOcean extends ModelTask {
         try {
             String s = AntOceanRpcCall.querySeaAreaDetailList();
             JSONObject jo = new JSONObject(s);
-            if (ResChecker.checkRes(TAG, jo)) {
+            if (ResChecker.checkRes(TAG + "查询海洋区域详情失败:", jo)) {
                 int seaAreaNum = jo.getInt("seaAreaNum");
                 int fixSeaAreaNum = jo.getInt("fixSeaAreaNum");
                 int currentSeaAreaIndex = jo.getInt("currentSeaAreaIndex");
                 if (currentSeaAreaIndex < fixSeaAreaNum && seaAreaNum > fixSeaAreaNum) {
                     queryOceanPropList();
                 }
+                if (jo.optBoolean("awardSeaAreaCanCreateExtraCollect", false)) {
+                    shouldSkipSwitch = true;
+                    Log.record(TAG, "发现限时挑战待接取，已暂停海域切换，正在自动接取...");
+
+                    String createRet = AntOceanRpcCall.createSeaAreaExtraCollect();
+                    if (ResChecker.checkRes(TAG + "接取限时挑战:", new JSONObject(createRet))) {
+                        Log.forest("限时挑战🌊接取成功");
+                        querySeaAreaDetailList();
+                        return;
+                    }
+                }
+
                 JSONArray seaAreaVOs = jo.getJSONArray("seaAreaVOs");
                 for (int i = 0; i < seaAreaVOs.length(); i++) {
                     JSONObject seaAreaVO = seaAreaVOs.getJSONObject(i);
-                    JSONArray fishVOs = seaAreaVO.getJSONArray("fishVO");
-                    for (int j = 0; j < fishVOs.length(); j++) {
-                        JSONObject fishVO = fishVOs.getJSONObject(j);
-                        if (!fishVO.getBoolean("unlock") && "COMPLETED".equals(fishVO.getString("status"))) {
-                            String fishId = fishVO.getString("id");
-                            combineFish(fishId);
+
+                    // 1. 普通鱼类
+                    JSONArray fishVOs = seaAreaVO.optJSONArray("fishVO");
+                    if (fishVOs != null) {
+                        for (int j = 0; j < fishVOs.length(); j++) {
+                            JSONObject fishVO = fishVOs.getJSONObject(j);
+                            if (!fishVO.getBoolean("unlock") && "COMPLETED".equals(fishVO.getString("status"))) {
+                                String fishId = fishVO.getString("id");
+                                combineFish(fishId, "");
+                            }
+                        }
+                    }
+
+                    // 2. 限时挑战鱼类
+                    JSONObject seaAreaExtraCollectVO = seaAreaVO.optJSONObject("seaAreaExtraCollectVO");
+                    if (seaAreaExtraCollectVO != null) {
+                        if (!"FINISHED".equals(seaAreaExtraCollectVO.optString("status"))) {
+                            shouldSkipSwitch = true;
+                        }
+
+                        JSONArray extraFishVOs = seaAreaExtraCollectVO.optJSONArray("fishVO");
+                        if (extraFishVOs != null) {
+                            for (int j = 0; j < extraFishVOs.length(); j++) {
+                                JSONObject fishVO = extraFishVOs.getJSONObject(j);
+                                if (!fishVO.getBoolean("unlock") && "COMPLETED".equals(fishVO.optString("status"))) {
+                                    String fishId = fishVO.getString("id");
+                                    String name = fishVO.optString("name", "未知鱼类");
+                                    Log.record(TAG, "发现限时挑战鱼类可合成: " + name);
+                                    combineFish(fishId, "EXTRA_COLLECT");
+                                }
+                            }
                         }
                     }
                 }
@@ -598,11 +646,11 @@ public class AntOcean extends ModelTask {
             }
             String s = AntOceanRpcCall.queryFriendPage(userId);
             JSONObject jo = new JSONObject(s);
-            if (ResChecker.checkRes(TAG, jo)) {
+            if (ResChecker.checkRes(TAG + "查询好友海洋页面失败:", jo)) {
                 s = AntOceanRpcCall.cleanFriendOcean(userId);
                 jo = new JSONObject(s);
                 Log.forest("神奇海洋🌊[帮助:" + UserMap.getMaskName(userId) + "清理海域]");
-                if (ResChecker.checkRes(TAG, jo)) {
+                if (ResChecker.checkRes(TAG + "清理好友海洋失败:", jo)) {
                     JSONArray cleanRewardVOS = jo.getJSONArray("cleanRewardVOS");
                     checkReward(cleanRewardVOS);
                 } else {

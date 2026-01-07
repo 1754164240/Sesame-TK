@@ -12,7 +12,7 @@ import com.fasterxml.jackson.core.type.TypeReference
 import fansirsqi.xposed.sesame.BuildConfig
 import fansirsqi.xposed.sesame.R
 import fansirsqi.xposed.sesame.entity.ExtendFunctionItem
-//import fansirsqi.xposed.sesame.newui.WatermarkView
+import fansirsqi.xposed.sesame.model.CustomSettings
 import fansirsqi.xposed.sesame.newutil.DataStore
 import fansirsqi.xposed.sesame.ui.compose.WatermarkInjector
 import fansirsqi.xposed.sesame.ui.widget.ExtendFunctionAdapter
@@ -55,6 +55,8 @@ class ExtendActivity : BaseActivity() {
 
     @SuppressLint("NotifyDataSetChanged")
     private fun populateExtendFunctions() {
+        extendFunctions.clear()
+
         extendFunctions.add(
             ExtendFunctionItem(getString(R.string.query_the_remaining_amount_of_saplings)) {
                 sendItemsBroadcast("getTreeItems")
@@ -98,6 +100,16 @@ class ExtendActivity : BaseActivity() {
                     .show()
             }
         )
+
+        // 单次运行模块
+        extendFunctions.add(
+            ExtendFunctionItem("每日单次运行设置") {
+                CustomSettings.showSingleRunMenu(this) {
+                    populateExtendFunctions()
+                }
+            }
+        )
+
         //调试功能往里加
         if (BuildConfig.DEBUG) {
             // 新增：RPC 调试入口（Method + requestData）

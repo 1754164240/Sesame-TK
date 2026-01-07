@@ -426,7 +426,7 @@ class Status {
             }
             try {
                 val statusFile = Files.getStatusFile(currentUid)
-                if (statusFile.exists()) {
+                if (statusFile!!.exists()) {
                     Log.record(TAG, "加载 status.json")
                     val json = Files.readFromFile(statusFile)
                     if (!json.trim().isEmpty()) {
@@ -474,7 +474,7 @@ class Status {
         private fun resetAndSaveConfig() {
             try {
                 JsonUtil.copyMapper().updateValue(INSTANCE, Status())
-                Files.write2File(JsonUtil.formatJson(INSTANCE), Files.getStatusFile(UserMap.currentUid))
+                Files.write2File(JsonUtil.formatJson(INSTANCE), Files.getStatusFile(UserMap.currentUid)!!)
             } catch (e: JsonMappingException) {
                 Log.printStackTrace(TAG, e)
                 throw RuntimeException("重置配置失败", e)
@@ -511,7 +511,7 @@ class Status {
             val lastSaveTime = INSTANCE.saveTime
             try {
                 INSTANCE.saveTime = System.currentTimeMillis()
-                Files.write2File(JsonUtil.formatJson(INSTANCE), Files.getStatusFile(currentUid))
+                Files.write2File(JsonUtil.formatJson(INSTANCE), Files.getStatusFile(currentUid)!!)
             } catch (e: Exception) {
                 INSTANCE.saveTime = lastSaveTime
                 throw e

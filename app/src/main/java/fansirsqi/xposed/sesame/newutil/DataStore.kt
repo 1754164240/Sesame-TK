@@ -20,7 +20,7 @@ import kotlin.concurrent.write
 import kotlin.math.abs
 
 object DataStore {
-    private const val TAG = "SesameDataStore"
+    private const val TAG = "DataStore"
     private const val FILE_NAME = "DataStore.json"
 
     // 配置 Jackson：忽略未知的属性，防止版本升级导致崩溃
@@ -39,7 +39,6 @@ object DataStore {
 
     private var onChangeListener: (() -> Unit)? = null
 
-    @Suppress("unused")
     fun setOnChangeListener(listener: () -> Unit) {
         onChangeListener = listener
     }
@@ -140,7 +139,7 @@ object DataStore {
             Map::class.java, java.util.Map::class.java -> LinkedHashMap<String, Any>() as T
             String::class.java -> "" as T
             Boolean::class.java, java.lang.Boolean::class.java -> false as T
-            Int::class.java, java.lang.Integer::class.java -> 0 as T
+            Int::class.java, Integer::class.java -> 0 as T
             Long::class.java, java.lang.Long::class.java -> 0L as T
             else -> {
                 try {
@@ -225,43 +224,47 @@ object DataStore {
 
     private fun saveToDisk() {
         if (!::storageFile.isInitialized) return
-
-        lock.read { // 写文件时只需要读取内存数据的“读锁”，不需要阻塞其他读操作？不，Jackson序列化可能耗时，还是安全起见
-            // 但为了防止并发修改导致ConcurrentModificationException（虽然用了ConcurrentMap），
-            // jackson序列化整个Map是线程安全的。
-            try {
-                val tempFile = File(storageFile.parentFile, storageFile.name + ".tmp")
-
-                // 写入临时文件
-                mapper.writer(prettyPrinter).writeValue(tempFile, data)
-
-                // 设置临时文件权限，否则 rename 后权限可能丢失
-                setWorldReadableWritable(tempFile)
-
-                // 记录写入时间
-                lastWriteTime.set(System.currentTimeMillis())
-
-//                // 原子重命名
-//                if (storageFile.exists()) {
-//                    // Android 上 renameTo 有时不能覆盖已存在文件，需先删除
-//                    // 注意：这里有极小的竞态窗口，但在 Android 文件系统中通常是原子或安全的
-//                }
-
-                if (tempFile.renameTo(storageFile)) {
-                    // 更新加载时间，避免 Watcher 再次触发加载
-                    lastLoadedTime.set(storageFile.lastModified())
-                } else {
-                    // 如果 rename 失败（跨分区或权限），尝试复制+删除
-                    storageFile.delete() // 强制删除旧文件
-                    if (tempFile.renameTo(storageFile)) {
-                        lastLoadedTime.set(storageFile.lastModified())
-                    } else {
-                        Log.e(TAG, "Failed to rename temp file to storage file")
-                    }
+        try {
+            val tempFile = File(storageFile.parentFile, storageFile.name + ".tmp")
+            // 1. 写入临时文件
+            mapper.writer(prettyPrinter).writeValue(tempFile, data)
+            // 2. 设置临时文件权限 (关键：确保 .tmp 也是 666)
+            setWorldReadableWritable(tempFile)
+            // 3. 记录写入时间
+            lastWriteTime.set(System.currentTimeMillis())
+            // 4. 尝试原子重命名 (Atomic Rename)
+            var renameSuccess = tempFile.renameTo(storageFile)
+            // 5. 如果重命名失败 (常见于目标文件已存在或不同挂载点)
+            if (!renameSuccess) {
+                // 尝试先删除旧文件
+                if (storageFile.exists()) {
+                    storageFile.delete()
                 }
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to save config", e)
+                // 再次尝试重命名
+                renameSuccess = tempFile.renameTo(storageFile)
             }
+            // 6. 如果依然失败，使用流复制 (Copy Stream) 作为最终手段
+            if (!renameSuccess) {
+                Log.w(TAG, "renameTo failed, falling back to copy stream.")
+                try {
+                    // 强制复制内容
+                    tempFile.copyTo(storageFile, overwrite = true)
+                    // 复制成功后删除临时文件
+                    tempFile.delete()
+                    renameSuccess = true
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to copy temp file to storage file", e)
+                }
+            }
+            if (renameSuccess) {
+                // 7. 再次确保最终文件的权限 (防止 copy 后权限丢失)
+                setWorldReadableWritable(storageFile)
+
+                // 更新加载时间，避免 Watcher 再次触发加载
+                lastLoadedTime.set(storageFile.lastModified())
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to save config", e)
         }
     }
 

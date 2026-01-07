@@ -77,7 +77,7 @@ object AntOrchardRpcCall {
     fun orchardListTask(): String {
         return RequestManager.requestString(
             "com.alipay.antfarm.orchardListTask",
-            "[{\"plantHiddenMMC\":\"false\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"ch_appcenter__chsub_9patch\",\"version\":\"$VERSION\"}]"
+            "[{\"plantHiddenMMC\":\"false\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"zhifujianglizhitiao1000\",\"version\":\"$VERSION\"}]"
         )
     }
 

@@ -3,8 +3,8 @@ package fansirsqi.xposed.sesame.hook.internal
 import android.os.Handler
 import android.os.Looper
 import de.robv.android.xposed.XposedHelpers
-import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.newutil.DataStore
+import fansirsqi.xposed.sesame.util.Log
 import org.json.JSONObject
 
 object LocationHelper {
@@ -24,13 +24,17 @@ object LocationHelper {
 
     /**
      * 从 DataStore 获取缓存的位置信息
-     * @return 位置信息 JSONObject，如果未缓存则返回 null
      */
     @JvmStatic
     fun getLocation(): JSONObject? {
         return try {
-            DataStore.get<String>(LOCATION_KEY, String::class.java)?.let { jsonString ->
-                JSONObject(jsonString)
+            // ✅ 改动1：直接读取为 Map，而不是 String
+            val map = DataStore.get(LOCATION_KEY, Map::class.java)
+            if (map != null) {
+                // 将 Map 转回 JSONObject
+                JSONObject(map)
+            } else {
+                null
             }
         } catch (e: Exception) {
             Log.error(TAG, "从 DataStore 读取位置信息失败: ${e.message}")
@@ -43,12 +47,10 @@ object LocationHelper {
         Thread {
             try {
                 if (classLoader == null) {
-                    val errorLocation = JSONObject().apply {
-                        put("status", "ClassLoader 未初始化")
-                    }
-                    saveLocationToDataStore(errorLocation)
+                    val errorMap = mapOf("status" to "ClassLoader 未初始化")
+                    saveLocationToDataStore(errorMap)
                     mainHandler.post {
-                        callback.onLocationResult(errorLocation)
+                        callback.onLocationResult(JSONObject(errorMap))
                     }
                     return@Thread
                 }
@@ -57,30 +59,28 @@ object LocationHelper {
                 val latitude = XposedHelpers.callStaticMethod(lnsctrUtilsClass, "getLatitude") as? Double
                 val longitude = XposedHelpers.callStaticMethod(lnsctrUtilsClass, "getLongitude") as? Double
 
-                val location = if (latitude != null && longitude != null) {
-                    JSONObject().apply {
-                        put("latitude", latitude)
-                        put("longitude", longitude)
-                    }
+                // ✅ 改动2：构建 Map 而不是 JSONObject
+                val locationMap: Map<String, Any> = if (latitude != null && longitude != null) {
+                    mapOf(
+                        "latitude" to latitude,
+                        "longitude" to longitude
+                    )
                 } else {
-                    JSONObject().apply {
-                        put("status", "等待支付宝初始化中...")
-                    }
+                    mapOf("status" to "等待支付宝初始化中...")
                 }
 
-                saveLocationToDataStore(location)
-                
+                saveLocationToDataStore(locationMap)
+
                 mainHandler.post {
-                    callback.onLocationResult(location)
+                    // 回调仍然返回 JSONObject 保持兼容性
+                    callback.onLocationResult(JSONObject(locationMap))
                 }
             } catch (e: Throwable) {
                 Log.error(TAG, "获取经纬度失败: ${e.message}")
-                val errorLocation = JSONObject().apply {
-                    put("status", "获取经纬度失败: ${e.message}")
-                }
-                saveLocationToDataStore(errorLocation)
+                val errorMap = mapOf("status" to "获取经纬度失败: ${e.message}")
+                saveLocationToDataStore(errorMap)
                 mainHandler.post {
-                    callback.onLocationResult(errorLocation)
+                    callback.onLocationResult(JSONObject(errorMap))
                 }
             }
         }.start()
@@ -88,14 +88,14 @@ object LocationHelper {
 
     /**
      * 保存位置信息到 DataStore
-     * @param location 要保存的位置信息 JSONObject
+     * ✅ 改动3：接收 Map 类型
      */
-    private fun saveLocationToDataStore(location: JSONObject) {
+    private fun saveLocationToDataStore(locationMap: Map<String, Any>) {
         try {
-            DataStore.put(LOCATION_KEY, location.toString())
+            // 直接存 Map，Jackson 会将其序列化为嵌套的 JSON 对象，不会转义
+            DataStore.put(LOCATION_KEY, locationMap)
         } catch (e: Exception) {
             Log.error(TAG, "保存位置信息到 DataStore 失败: ${e.message}")
         }
     }
-
 }

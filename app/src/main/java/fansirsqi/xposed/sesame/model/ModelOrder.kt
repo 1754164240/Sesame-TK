@@ -11,9 +11,9 @@ import fansirsqi.xposed.sesame.task.antOcean.AntOcean
 import fansirsqi.xposed.sesame.task.antOrchard.AntOrchard
 import fansirsqi.xposed.sesame.task.antSports.AntSports
 import fansirsqi.xposed.sesame.task.antStall.AntStall
-import fansirsqi.xposed.sesame.task.reserve.Reserve
-
 import fansirsqi.xposed.sesame.task.greenFinance.GreenFinance
+import fansirsqi.xposed.sesame.task.other.OtherTask
+import fansirsqi.xposed.sesame.task.reserve.Reserve
 
 object ModelOrder {
     private val array = arrayOf(
@@ -30,9 +30,9 @@ object ModelOrder {
         EcoProtection::class.java,     // 古树
         GreenFinance::class.java,  // 绿色经营
         Reserve::class.java,       // 保护地
+        OtherTask::class.java,      // 其他
         AnswerAI::class.java         // AI答题
-        //ConsumeGold::class.java,   // 消费金
-        //OmegakoiTown::class.java,  // 小镇
+
     )
 
     val allConfig: List<Class<out Model>> = array.toList()

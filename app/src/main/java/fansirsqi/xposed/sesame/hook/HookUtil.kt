@@ -57,7 +57,21 @@ object HookUtil {
                 object : XC_MethodHook() {
                     override fun beforeHookedMethod(param: MethodHookParam) {
                         val args = param.args
-                        if (args.size > 15) {
+                        if (args.size > 15) {// 参数校验
+                            // 1. 获取方法名
+                            val methodName = args[0] as? String ?: return
+                            // 2. 获取参数 (这是一个反射得到的 com.alibaba.fastjson.JSONObject 对象)
+                            val rawParams = args[4]
+
+                            // 3. 这里的 rawParams 是阿里内部的 JSON 对象，不是 org.json.JSONObject
+                            // 需要转换一下。最稳妥的方法是 toString() 然后再转 org.json.JSONObject
+                            if (rawParams != null) {
+                                val jsonString = rawParams.toString()
+                                val jsonObject = JSONObject(jsonString)
+                                // ✅✅✅ 关键：把拦截到的数据扔给 VIPHook 进行分发
+                                TokenHooker.handleRpc(methodName, jsonObject)
+                            }
+
                             val callback = args[15]
                             val recordArray = arrayOfNulls<Any>(4).apply {
                                 this[0] = System.currentTimeMillis()
@@ -245,7 +259,6 @@ object HookUtil {
 
     fun hookUser(classLoader: ClassLoader) {
         runCatching {
-            Log.record(TAG, "loading userCache from target app")
             UserMap.unload()
             val selfId = getUserId(classLoader)
             UserMap.setCurrentUserId(selfId) //有些地方要用到 要set一下

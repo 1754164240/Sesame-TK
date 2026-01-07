@@ -32,12 +32,10 @@ object ModuleHttpServerManager {
     ): Boolean {
         // 仅主进程启动，避免子进程重复创建导致端口占用
         if (processName != packageName) {
-            Log.record(TAG, "非主进程，无需启动内置 HTTP 服务: $processName")
             return false
         }
 
         if (server != null) {
-            Log.record(TAG, "HTTP 服务已在运行，跳过重复创建")
             return true
         }
 

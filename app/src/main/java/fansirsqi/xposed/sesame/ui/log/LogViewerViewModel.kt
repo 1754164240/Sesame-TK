@@ -394,6 +394,7 @@ class LogViewerViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun toggleAutoScroll(enabled: Boolean) {
+        if (_uiState.value.autoScroll == enabled) return
         _uiState.update { it.copy(autoScroll = enabled) }
         if (enabled) viewModelScope.launch {
             val size = _uiState.value.mappingList.size
