@@ -15,6 +15,8 @@ import fansirsqi.xposed.sesame.hook.keepalive.SmartSchedulerManager;
 import fansirsqi.xposed.sesame.hook.server.ModuleHttpServerManager;
 import fansirsqi.xposed.sesame.hook.simple.SimplePageManager;
 import fansirsqi.xposed.sesame.hook.internal.LocationHelper;
+import fansirsqi.xposed.sesame.newutil.ModuleStatus;
+import fansirsqi.xposed.sesame.newutil.StatusManager;
 import fansirsqi.xposed.sesame.util.*;
 import kotlin.Unit;
 import lombok.Setter;
@@ -305,12 +307,22 @@ public class ApplicationHook {
         }
     }
 
+    /**
+     * lsposed 入口
+     *
+     * @param lpparam PackageLoadedParam
+     */
     public void loadPackage(XposedModuleInterface.PackageLoadedParam lpparam) {
         if (!General.PACKAGE_NAME.equals(lpparam.getPackageName())) return;
         classLoader = lpparam.getClassLoader();
         handleHookLogic(classLoader, lpparam.getPackageName(), lpparam.getApplicationInfo().sourceDir, lpparam);
     }
 
+    /**
+     * xp 82 入口
+     *
+     * @param lpparam PackageLoadedParam
+     */
     public void loadPackageCompat(XC_LoadPackage.LoadPackageParam lpparam) {
         if (!General.PACKAGE_NAME.equals(lpparam.packageName)) return;
         classLoader = lpparam.classLoader;
@@ -330,6 +342,8 @@ public class ApplicationHook {
         }
         finalProcessName = processName;
 
+
+
         // 2. 【关键修复】进程过滤
         // 判断是否为主进程
         boolean isMainProcess = General.PACKAGE_NAME.equals(processName);
@@ -346,6 +360,10 @@ public class ApplicationHook {
         DataStore.INSTANCE.init(Files.CONFIG_DIR);
         if (hooked) return;
         hooked = true;
+
+        // framework Check
+        String frameworkName = ModuleStatus.INSTANCE.detectFramework(classLoader);
+        StatusManager.INSTANCE.updateStatus(frameworkName, packageName);
 
 
         VersionHook.installHook(classLoader);
@@ -412,18 +430,7 @@ public class ApplicationHook {
                         }
                     }
 
-                    if (BuildConfig.DEBUG) {
-                        try {
-                            ModuleHttpServerManager.INSTANCE.startIfNeeded(
-                                    8080,
-                                    "ET3vB^#td87sQqKaY*eMUJXP",
-                                    XposedEnv.processName,
-                                    General.PACKAGE_NAME
-                            );
-                        } catch (Throwable e) {
-                            // ignore
-                        }
-                    }
+
                     super.afterHookedMethod(param);
                 }
             });
@@ -544,10 +551,6 @@ public class ApplicationHook {
                                 return;
                             Notify.updateStatusText("支付宝前台服务被销毁");
                             destroyHandler();
-                            try {
-                                ModuleHttpServerManager.INSTANCE.stopIfRunning();
-                            } catch (Throwable ignore) {
-                            }
                             restartByBroadcast();
                         }
                     });
@@ -614,7 +617,18 @@ public class ApplicationHook {
     private static synchronized Boolean initHandler() {
         try {
             if (init) destroyHandler();
-
+            if (BuildConfig.DEBUG) {
+                try {
+                    ModuleHttpServerManager.INSTANCE.startIfNeeded(
+                            8080,
+                            "ET3vB^#td87sQqKaY*eMUJXP",
+                            XposedEnv.processName,
+                            General.PACKAGE_NAME
+                    );
+                } catch (Throwable e) {
+                    // ignore
+                }
+            }
             ensureScheduler();
             Model.initAllModel();
             if (service == null) return false;
@@ -808,12 +822,13 @@ public class ApplicationHook {
         @Override
         public void onReceive(Context context, Intent intent) {
             try {
+                String action = intent.getAction();
                 // 优化建议：显式过滤
                 if (finalProcessName != null && finalProcessName.endsWith(":widgetProvider")) {
-                    Log.record(TAG, "小组件进程收到广播，保持活跃");
+                    Log.record(TAG, "小组件进程收到广播[" + action + "]保持活跃");
                     return;
                 }
-                String action = intent.getAction();
+
                 if (action != null) {
                     switch (action) {
                         case BroadcastActions.RESTART:

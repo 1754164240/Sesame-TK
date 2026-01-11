@@ -553,6 +553,10 @@ class Status {
             }
         }
 
+        /**
+         * ## 设置今日已运行状态
+         * @param flag tagName::done
+         */
         @JvmStatic
         fun hasFlagToday(flag: String): Boolean {
             return INSTANCE.flagList.contains(flag)

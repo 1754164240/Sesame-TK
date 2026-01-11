@@ -1,5 +1,6 @@
 package fansirsqi.xposed.sesame.util
 
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.util.Log
@@ -8,61 +9,65 @@ import kotlinx.coroutines.runBlocking
 
 /**
  * 滑动操作工具类
- * 通过 AIDL 调用 CommandService 执行 Shizuku 命令
  */
 object SwipeUtil {
 
     private const val TAG = "SwipeUtil"
 
     /**
-     * 使用shell命令启动支付宝，支持自动获取用户ID
-     * 首先尝试不带用户ID的启动命令，失败后备份到带用户ID的命令，
-     * 最后回退到scheme启动方式
+     * 启动支付宝
+     * 供 Java 调用，使用 runBlocking 保证同步返回
      */
     @JvmStatic
-    fun startAlipayWithShellCommand(context: Context): Boolean {
-        return runBlocking {
-            var launchSuccess = false
-            try {
-                val firstCommand = "am start com.eg.android.AlipayGphone/com.eg.android.AlipayGphone.AlipayLogin"
-                val firstResult = CommandUtil.executeCommand(context, firstCommand)
-                if (firstResult != null) {
-                    launchSuccess = true
-                } else {
-                    Log.d(TAG, "不带用户ID启动失败，尝试带用户ID的启动命令")
-                    val userId = "999"
-                    val fallbackCommand = "am start --user $userId com.eg.android.AlipayGphone/com.eg.android.AlipayGphone.AlipayLogin"
-                    val fallbackResult = CommandUtil.executeCommand(context, fallbackCommand)
-                    if (fallbackResult != null) {
-                        launchSuccess = true
-                    } else {
-                        Log.d(TAG, "带用户ID启动失败，尝试Intent启动")
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "执行支付宝启动命令失败: ${e.message}")
+    fun startAlipay(context: Context): Boolean = runBlocking {
+        // 1. 尝试 Shell 启动 (仅当是 Root 或 Shizuku 时)
+        if (tryStartWithShell(context)) {
+            return@runBlocking true
+        }
+
+        // 2. 降级：Intent 启动
+        Log.d(TAG, "Shell启动失败或无权限，尝试Intent启动")
+        if (startByIntent(context)) {
+            return@runBlocking true
+        }
+
+        // 3. 降级：Scheme 启动
+        Log.d(TAG, "Intent启动失败，尝试Scheme启动")
+        return@runBlocking startBySchemeSync(context)
+    }
+
+    private suspend fun tryStartWithShell(context: Context): Boolean {
+        try {
+            // 优化：先获取当前 Shell 类型
+            val shellType = CommandUtil.getShellType(context)
+            Log.d(TAG, "当前 Shell 类型: $shellType")
+
+            // 如果不是 Root 或 Shizuku，直接放弃 Shell 启动，避免无意义的尝试
+            if (shellType.contains("no_executor") || shellType.contains("UserShell") || shellType.contains("未连接")) {
+                return false
             }
-            if (!launchSuccess) {
-                Log.d(TAG, "shell命令启动失败，尝试Intent启动")
-                launchSuccess = startByIntent(context)
-            }
-            if (!launchSuccess) {
-                Log.d(TAG, "Intent启动失败，回退到scheme启动方式")
-                return@runBlocking startBySchemeSync(context)
-            }
-            true
+
+            // 优化命令：使用 --user current 兼容分身
+            val cmd = "am start --user current -n com.eg.android.AlipayGphone/com.eg.android.AlipayGphone.AlipayLogin"
+            val result = CommandUtil.executeCommand(context, cmd)
+
+            return !result.isNullOrBlank()
+        } catch (e: Exception) {
+            Log.e(TAG, "Shell 启动异常: ${e.message}")
+            return false
         }
     }
 
     @JvmStatic
     fun startByIntent(context: Context): Boolean {
         return try {
-            val intent = Intent()
-            intent.component = android.content.ComponentName(
-                "com.eg.android.AlipayGphone",
-                "com.eg.android.AlipayGphone.AlipayLogin"
-            )
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            val intent = Intent().apply {
+                component = ComponentName(
+                    "com.eg.android.AlipayGphone",
+                    "com.eg.android.AlipayGphone.AlipayLogin"
+                )
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
             context.startActivity(intent)
             Log.d(TAG, "Intent 启动成功")
             true
@@ -75,8 +80,9 @@ object SwipeUtil {
     @JvmStatic
     fun startBySchemeSync(context: Context): Boolean {
         return try {
-            val intent = Intent(Intent.ACTION_VIEW, "alipays://platformapi/startapp?appId=".toUri())
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            val intent = Intent(Intent.ACTION_VIEW, "alipays://platformapi/startapp?appId=".toUri()).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
             context.startActivity(intent)
             Log.d(TAG, "Scheme 启动成功")
             true

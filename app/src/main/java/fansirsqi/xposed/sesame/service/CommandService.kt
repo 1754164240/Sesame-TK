@@ -18,7 +18,6 @@ import fansirsqi.xposed.sesame.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -54,61 +53,71 @@ class CommandService : Service() {
 
     private val binder = object : ICommandService.Stub() {
         override fun executeCommand(command: String, callback: ICallback?) {
-            Log.d(TAG, "收到请求: $command")
-
             serviceScope.launch {
-                // 使用 Mutex 确保命令串行执行（如果需要并行可移除此锁）
                 commandMutex.withLock {
                     try {
                         ensureShellManager()
 
-                        Log.d(TAG, "正在执行: $command")
+                        // 优化: 如果 ShellManager 依然没有 Shell，尝试重置一下（应对 Shizuku 刚授权的情况）
+                        if (shellManager?.selectedName == "no_executor") {
+                            shellManager?.reset()
+                        }
 
-                        // 使用 ShellManager 执行命令，带超时控制
+                        // 执行
                         val result = withTimeout(COMMAND_TIMEOUT_MS) {
                             shellManager!!.exec(command)
                         }
 
-                        // 处理执行结果
                         if (result.isSuccess) {
-                            Log.d(TAG, "执行成功: $command")
                             safeCallbackSuccess(callback, result.stdout.trim())
                         } else {
-                            val errorMsg = "退出码: ${result.exitCode}, 错误: ${result.stderr}"
-                            Log.e(TAG, "执行失败: $command, $errorMsg")
+                            // 优化错误信息返回，区分是 Shell 找不到还是命令执行错
+                            val errorMsg = if (result.exitCode == -1 && result.stderr.contains("No valid")) {
+                                "无 Root/Shizuku 权限"
+                            } else {
+                                "Code:${result.exitCode}, Err:${result.stderr}"
+                            }
                             safeCallbackError(callback, errorMsg)
                         }
-
-                    } catch (_: TimeoutCancellationException) {
-                        Log.e(TAG, "执行超时 (${COMMAND_TIMEOUT_MS}ms): $command")
-                        safeCallbackError(callback, "命令执行超时")
                     } catch (e: Exception) {
-                        Log.e(TAG, "执行异常: $command, ${e.message}")
-                        safeCallbackError(callback, e.message ?: "未知错误")
+                        // ... 异常处理 ...
+                        Log.e(TAG, "执行异常", e)
+                        safeCallbackError(callback, e.message ?: "Service Error")
                     }
                 }
             }
         }
 
         override fun getShellType(): String {
-            return shellManager?.selectedName ?: "未初始化"
+            // 尝试初始化以便获取最新状态
+            if (shellManager == null) {
+                // 不要在主线程初始化 ShellManager，这里仅返回当前状态
+                return "Initializing..."
+            }
+            return shellManager?.selectedName ?: "Uninitialized"
         }
     }
-
     @SuppressLint("ForegroundServiceType")
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "CommandService onCreate")
 
-        // 初始化 ShellManager
-        ensureShellManager()
-
+        // 立即启动前台服务，避免超时
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, createNotification())
+
+        // 延迟初始化 ShellManager（不阻塞前台服务启动）
+        serviceScope.launch {
+            try {
+                ensureShellManager()
+            } catch (e: Exception) {
+                Log.e(TAG, "ShellManager 初始化失败", e)
+            }
+        }
     }
 
     override fun onBind(intent: Intent?): IBinder {
-        Log.d(TAG, "CommandService onBind")
+//        Log.d(TAG, "CommandService onBind")
         return binder
     }
 
@@ -119,7 +128,7 @@ class CommandService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
-        Log.d(TAG, "CommandService onDestroy")
+//        Log.d(TAG, "CommandService onDestroy")
         stopForeground(STOP_FOREGROUND_REMOVE)
         shellManager = null
         serviceScope.cancel() // 销毁时取消所有协程任务
@@ -132,9 +141,8 @@ class CommandService : Service() {
         if (shellManager == null) {
             try {
                 shellManager = ShellManager(applicationContext)
-                Log.i(TAG, "ShellManager 初始化完成: ${shellManager?.selectedName}")
             } catch (e: Exception) {
-                Log.e(TAG, "ShellManager 初始化失败", e)
+                Log.e(TAG, "ShellManager init error", e)
             }
         }
     }

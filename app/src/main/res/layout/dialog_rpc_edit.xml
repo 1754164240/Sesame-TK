@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <!-- 名称输入 -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="功能名称（可选）"
+            android:textSize="12sp"
+            android:textColor="?android:attr/textColorSecondary"
+            android:paddingBottom="4dp" />
+
+        <EditText
+            android:id="@+id/et_name"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="留空则显示 method"
+            android:singleLine="true"
+            android:padding="12dp"
+            android:background="@android:drawable/edit_text" />
+
+        <!-- JSON 输入 -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="JSON 数据（必填）"
+            android:textSize="12sp"
+            android:textColor="?android:attr/textColorSecondary"
+            android:paddingBottom="4dp" />
+
+        <EditText
+            android:id="@+id/et_json"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minLines="8"
+            android:maxLines="20"
+            android:gravity="top|start"
+            android:scrollbars="vertical"
+            android:fontFamily="monospace"
+            android:textSize="12sp"
+            android:padding="12dp"
+            android:background="@android:drawable/edit_text"
+            android:hint="粘贴 JSON 数据" />
+
+        <!-- 格式说明 -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="📝 支持的字段格式"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:textColor="?android:attr/textColorPrimary"
+            android:paddingBottom="4dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="• Name / name - 功能名称（可选）\n• Method / method / methodName - RPC 方法（必填）\n• requestData / RequestData - 请求数据（必填）"
+            android:textSize="11sp"
+            android:textColor="?android:attr/textColorSecondary"
+            android:lineSpacingExtra="2dp"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp" />
+
+        <!-- 格式示例 1 -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="💡 示例 1：标准格式"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:textColor="?android:attr/textColorPrimary"
+            android:paddingBottom="4dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="{\n  &quot;Name&quot;: &quot;签到&quot;,\n  &quot;Method&quot;: &quot;alipay.xxx&quot;,\n  &quot;requestData&quot;: [{}]\n}"
+            android:textSize="11sp"
+            android:textColor="#2E7D32"
+            android:fontFamily="monospace"
+            android:padding="8dp"
+            android:background="#E8F5E9"
+            android:lineSpacingExtra="2dp" />
+
+        <!-- 格式示例 2 -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="💡 示例 2：带 Params 格式(抓包)"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:textColor="?android:attr/textColorPrimary"
+            android:paddingBottom="4dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="{\n  &quot;Method&quot;: &quot;xxx&quot;,\n  &quot;Params&quot;: {\n    &quot;requestData&quot;: [{}]\n  }\n}"
+            android:textSize="11sp"
+            android:textColor="#1565C0"
+            android:fontFamily="monospace"
+            android:padding="8dp"
+            android:background="#E3F2FD"
+            android:lineSpacingExtra="2dp" />
+
+    </LinearLayout>
+</ScrollView>
+

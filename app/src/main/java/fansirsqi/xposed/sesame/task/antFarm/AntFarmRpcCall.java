@@ -256,6 +256,10 @@ public class AntFarmRpcCall {
             return RequestManager.requestString("com.alipay.antfarm.initFarmGame",
                     "[{\"gameType\":\"flyGame\",\"requestType\":\"RPC\",\"sceneCode\":\"FLAYGAME\"," +
                             "\"source\":\"FARM_game_yundongfly\",\"toolTypes\":\"ACCELERATETOOL,SHARETOOL,NONE\",\"version\":\"\"}]");
+        } else if ("hitGame".equals(gameType)) {
+            return RequestManager.requestString("com.alipay.antfarm.initFarmGame",
+                    "[{\"gameType\":\"hitGame\",\"requestType\":\"RPC\",\"sceneCode\":\"HITGAME\"," +
+                            "\"source\":\"FARM_game_zouxiaoji\",\"toolTypes\":\"ACCELERATETOOL,SHARETOOL,NONE\",\"version\":\"\"}]");
         }
         return RequestManager.requestString("com.alipay.antfarm.initFarmGame",
                 "[{\"gameType\":\"" + gameType
@@ -285,6 +289,12 @@ public class AntFarmRpcCall {
             return RequestManager.requestString("com.alipay.antfarm.recordFarmGame",
                     "[{\"foodCount\":" + foodCount + ",\"gameType\":\"flyGame\",\"md5\":\"" + md5String
                             + "\",\"requestType\":\"RPC\",\"sceneCode\":\"FLAYGAME\",\"score\":" + score
+                            + ",\"source\":\"ANTFARM\",\"toolTypes\":\"ACCELERATETOOL,SHARETOOL,NONE\",\"uuid\":\"" + uuid
+                            + "\",\"version\":\"\"}]");
+        } else if ("hitGame".equals(gameType)) {
+            return RequestManager.requestString("com.alipay.antfarm.recordFarmGame",
+                    "[{\"gameType\":\"hitGame\",\"md5\":\"" + md5String
+                            + "\",\"requestType\":\"RPC\",\"sceneCode\":\"HITGAME\",\"score\":" + score
                             + ",\"source\":\"ANTFARM\",\"toolTypes\":\"ACCELERATETOOL,SHARETOOL,NONE\",\"uuid\":\"" + uuid
                             + "\",\"version\":\"\"}]");
         }
@@ -1045,6 +1055,34 @@ public class AntFarmRpcCall {
         // 生成16位随机长整型数字（正数）
         long randomNum = (long) ((Math.random() * 9 + 1) * Math.pow(10, 15));
         return timestamp + "_" + randomNum;
+    }
+
+    public static String FlyGameListFarmTask() {
+        String args = "[{"
+                + "\"bizKey\":\"SHANGYEHUA_GAME_TIMES\","
+                + "\"gameType\":\"flyGame\","
+                + "\"requestType\":\"RPC\","
+                + "\"sceneCode\":\"FLAYGAME\","
+                + "\"signSceneCode\":\"\","
+                + "\"source\":\"ANTFARM\","
+                + "\"taskSceneCode\":\"ANTFARM_GAME_TIMES_TASK\","
+                + "\"version\":\"\""
+                + "}]";
+        return RequestManager.requestString("com.alipay.antfarm.listFarmTask", args);
+    }
+
+    public static String HitGameListFarmTask() {
+        String args = "[{"
+                + "\"bizKey\":\"SHANGYEHUA_HIT_ANIMAL\","
+                + "\"gameType\":\"hitGame\","
+                + "\"requestType\":\"RPC\","
+                + "\"sceneCode\":\"HITGAME\","
+                + "\"signSceneCode\":\"\","
+                + "\"source\":\"ANTFARM\","
+                + "\"taskSceneCode\":\"ANTFARM_GAME_TIMES_TASK\","
+                + "\"version\":\"\""
+                + "}]";
+        return RequestManager.requestString("com.alipay.antfarm.listFarmTask", args);
     }
 
 

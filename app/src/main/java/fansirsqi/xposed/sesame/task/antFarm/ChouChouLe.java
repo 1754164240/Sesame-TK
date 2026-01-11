@@ -46,33 +46,37 @@ public class ChouChouLe {
 
     /**
      * 抽抽乐主入口
+     * 返回值判断是否真的完成任务，是否全部执行完毕且无剩余（任务已做、奖励已领、抽奖已完）
      */
-    void chouchoule() {
+    public boolean chouchoule() {
+        boolean allFinished = true;
         try {
             String response = AntFarmRpcCall.queryLoveCabin(UserMap.INSTANCE.getCurrentUid());
             JSONObject jo = new JSONObject(response);
             if (!ResChecker.checkRes(TAG, jo)) {
-                return;
+                return false;
             }
 
             JSONObject drawMachineInfo = jo.optJSONObject("drawMachineInfo");
             if (drawMachineInfo == null) {
                 Log.error(TAG, "抽抽乐🎁[获取抽抽乐活动信息失败]");
-                return;
+                return false;
             }
 
             // 执行普通抽抽乐
             if (drawMachineInfo.has("dailyDrawMachineActivityId")) {
-                doChouchoule("dailyDraw");
+                allFinished &= doChouchoule("dailyDraw");
             }
 
             // 执行IP抽抽乐
             if (drawMachineInfo.has("ipDrawMachineActivityId")) {
-                doChouchoule("ipDraw");
+                allFinished &= doChouchoule("ipDraw");
             }
 
+            return allFinished;
         } catch (Throwable t) {
             Log.printStackTrace("chouchoule err:", t);
+            return false;
         }
     }
 
@@ -80,16 +84,17 @@ public class ChouChouLe {
      * 执行抽抽乐
      *
      * @param drawType "dailyDraw" 或 "ipDraw"
+     * 返回是否该类型已全部完成
      */
-    private void doChouchoule(String drawType) {
+    private boolean doChouchoule(String drawType) {
         boolean doubleCheck;
-        do {
-            doubleCheck = false;
-            try {
+        try {
+            do {
+                doubleCheck = false;
                 JSONObject jo = new JSONObject(AntFarmRpcCall.chouchouleListFarmTask(drawType));
                 if (!ResChecker.checkRes(TAG, jo)) {
                     Log.error(TAG, drawType.equals("ipDraw") ? "IP抽抽乐任务列表获取失败" : "抽抽乐任务列表获取失败");
-                    continue;
+                    return false;
                 }
 
                 JSONArray farmTaskList = jo.getJSONArray("farmTaskList");
@@ -98,11 +103,11 @@ public class ChouChouLe {
                 for (TaskInfo task : tasks) {
                     if (TaskStatus.FINISHED.name().equals(task.taskStatus)) {
                         // 检查饲料上限
-                        if (task.awardType.equals("ALLPURPOSE") &&
-                                task.awardCount + AntFarm.foodStock > AntFarm.foodStockLimit) {
-                            Log.record(TAG, "抽抽乐任务[" + task.title + "]的奖励领取后会使饲料超出上限，暂不领取");
-                            continue;
-                        }
+//                        if (task.awardType.equals("ALLPURPOSE") &&
+//                                task.awardCount + AntFarm.foodStock > AntFarm.foodStockLimit) {
+//                            Log.record(TAG, "抽抽乐任务[" + task.title + "]的奖励领取后会使饲料超出上限，暂不领取");
+//                            continue;
+//                        }
                         if (receiveTaskAward(drawType, task.taskId)) {
                             GlobalThreadPools.sleepCompat(300L);
                             doubleCheck = true;
@@ -115,16 +120,62 @@ public class ChouChouLe {
                         }
                     }
                 }
-            } catch (Throwable t) {
-                Log.printStackTrace("doChouchoule err:", t);
-            }
-        } while (doubleCheck);
+            } while (doubleCheck);
+        } catch (Throwable t) {
+            Log.printStackTrace("doChouchoule err:", t);
+            return false;
+        }
 
         // 执行抽奖
+        boolean drawSuccess;
         if ("ipDraw".equals(drawType)) {
-            handleIpDraw();
+            drawSuccess = handleIpDraw();
         } else {
-            handleDailyDraw();
+            drawSuccess = handleDailyDraw();
+        }
+
+        if (!drawSuccess) return false;
+
+        // 最后校验是否真的全部完成
+        return verifyFinished(drawType);
+    }
+
+    /*
+     校验是否还有未完成的任务或抽奖
+     */
+    private boolean verifyFinished(String drawType) {
+        try {
+            // 校验任务
+            JSONObject jo = new JSONObject(AntFarmRpcCall.chouchouleListFarmTask(drawType));
+            if (!ResChecker.checkRes(TAG, jo)) return false;
+
+            JSONArray farmTaskList = jo.getJSONArray("farmTaskList");
+            List<TaskInfo> tasks = parseTasks(farmTaskList);
+            for (TaskInfo task : tasks) {
+                if (TaskStatus.FINISHED.name().equals(task.taskStatus)) {
+                    return false;
+                } else if (TaskStatus.TODO.name().equals(task.taskStatus)) {
+                    // 还有剩余次数且不是捐赠任务
+                    if (task.getRemainingTimes() > 0 && !"DONATION".equals(task.innerAction)) {
+                        return false;
+                    }
+                }
+            }
+
+            // 校验抽奖次数
+            JSONObject drawJo;
+            if ("ipDraw".equals(drawType)) {
+                drawJo = new JSONObject(AntFarmRpcCall.queryDrawMachineActivity_New("ipDrawMachine", "dailyDrawMachine"));
+            } else {
+                drawJo = new JSONObject(AntFarmRpcCall.queryDrawMachineActivity_New("dailyDrawMachine", "ipDrawMachine"));
+            }
+            if (!ResChecker.checkRes(TAG, drawJo)) return false;
+            int drawTimes = drawJo.optInt("drawTimes", 0);
+            if (drawTimes > 0) return false;
+
+            return true;
+        } catch (Throwable t) {
+            return false;
         }
     }
 
@@ -153,7 +204,7 @@ public class ChouChouLe {
     /**
      * 执行任务
      */
-    private Boolean doChouTask(String drawType, TaskInfo task) {
+    private boolean doChouTask(String drawType, TaskInfo task) {
         try {
             String taskName = drawType.equals("ipDraw") ? "IP抽抽乐" : "抽抽乐";
 
@@ -164,6 +215,12 @@ public class ChouChouLe {
             }
 
             // 普通任务
+            if (task.title.equals("消耗饲料换机会")) {
+                if (AntFarm.foodStock < 90) {
+                    Log.record(TAG, "饲料余量(" + AntFarm.foodStock + "g)少于90g，跳过任务: " + task.title);
+                    return false; // 返回 false 避免 doubleCheck，且不执行后续 RPC
+                }
+            }
             String s = AntFarmRpcCall.chouchouleDoFarmTask(drawType, task.taskId);
             JSONObject jo = new JSONObject(s);
             if (ResChecker.checkRes(TAG, jo)) {
@@ -185,7 +242,7 @@ public class ChouChouLe {
     /**
      * 处理广告任务
      */
-    private Boolean handleAdTask(String drawType, TaskInfo task) {
+    private boolean handleAdTask(String drawType, TaskInfo task) {
         try {
             String referToken = AntFarm.loadAntFarmReferToken();
             String taskSceneCode = drawType.equals("ipDraw") ?
@@ -236,7 +293,7 @@ public class ChouChouLe {
     /**
      * 处理猜一猜任务
      */
-    private Boolean handleGuessTask(String drawType, TaskInfo task,
+    private boolean handleGuessTask(String drawType, TaskInfo task,
                                     JSONArray adList, JSONObject playingResult) {
         try {
             // 找到正确价格
@@ -300,7 +357,9 @@ public class ChouChouLe {
         try {
             String s = AntFarmRpcCall.chouchouleReceiveFarmTaskAward(drawType, taskId);
             JSONObject jo = new JSONObject(s);
-            return ResChecker.checkRes(TAG, jo);
+            if (ResChecker.checkRes(TAG, jo)) {
+                return true;
+            }
         } catch (Throwable t) {
             Log.printStackTrace("receiveFarmTaskAward err:", t);
         }
@@ -310,60 +369,65 @@ public class ChouChouLe {
     /**
      * 执行IP抽抽乐抽奖
      */
-    private void handleIpDraw() {
+    private boolean handleIpDraw() {
         try {
             JSONObject jo = new JSONObject(AntFarmRpcCall.queryDrawMachineActivity_New(
                     "ipDrawMachine", "dailyDrawMachine"));
             if (!ResChecker.checkRes(TAG, jo)) {
-                return;
+                return false;
             }
 
-            JSONObject activity = jo.getJSONObject("drawMachineActivity");
-            long endTime = activity.getLong("endTime");
-            if (System.currentTimeMillis() > endTime) {
+            JSONObject activity = jo.optJSONObject("drawMachineActivity");
+            if (activity == null) return true;
+            long endTime = activity.optLong("endTime", 0);
+            if (endTime > 0 && System.currentTimeMillis() > endTime) {
                 Log.record(TAG, "该[" + activity.optString("activityId") + "]抽奖活动已结束");
-                return;
+                return true;
             }
 
             int drawTimes = jo.optInt("drawTimes", 0);
+            boolean allSuccess = true;
             for (int i = 0; i < drawTimes; i++) {
-                drawPrize("IP抽抽乐", AntFarmRpcCall.drawMachineIP());
+                allSuccess &= drawPrize("IP抽抽乐", AntFarmRpcCall.drawMachineIP());
                 GlobalThreadPools.sleepCompat(300L);
             }
-
+            return allSuccess;
         } catch (Throwable t) {
             Log.printStackTrace("handleIpDraw err:", t);
+            return false;
         }
     }
 
     /**
      * 执行普通抽抽乐抽奖
      */
-    private void handleDailyDraw() {
+    private boolean handleDailyDraw() {
         try {
             JSONObject jo = new JSONObject(AntFarmRpcCall.queryDrawMachineActivity_New(
                     "dailyDrawMachine", "ipDrawMachine"));
             if (!ResChecker.checkRes(TAG, jo)) {
-                return;
+                return false;
             }
 
-            JSONObject activity = jo.getJSONObject("drawMachineActivity");
-            long endTime = activity.getLong("endTime");
-            if (System.currentTimeMillis() > endTime) {
+            JSONObject activity = jo.optJSONObject("drawMachineActivity");
+            if (activity == null) return true;
+            long endTime = activity.optLong("endTime", 0);
+            if (endTime > 0 && System.currentTimeMillis() > endTime) {
                 Log.record(TAG, "该[" + activity.optString("activityId") + "]抽奖活动已结束");
-                return;
+                return true;
             }
 
-            String activityId = activity.getString("activityId");
+            String activityId = activity.optString("activityId");
             int drawTimes = jo.optInt("drawTimes", 0);
-
+            boolean allSuccess = true;
             for (int i = 0; i < drawTimes; i++) {
-                drawPrize("日常抽抽乐", AntFarmRpcCall.drawMachineDaily(activityId));
+                allSuccess &= drawPrize("日常抽抽乐", AntFarmRpcCall.drawMachineDaily(activityId));
                 GlobalThreadPools.sleepCompat(300L);
             }
-
+            return allSuccess;
         } catch (Throwable t) {
             Log.printStackTrace("handleDailyDraw err:", t);
+            return false;
         }
     }
 
@@ -372,8 +436,9 @@ public class ChouChouLe {
      *
      * @param prefix 抽奖类型前缀
      * @param response 服务器返回的结果
+     * 返回是否领取成功
      */
-    private void drawPrize(String prefix, String response) {
+    private boolean drawPrize(String prefix, String response) {
         try {
             JSONObject jo = new JSONObject(response);
             if (ResChecker.checkRes(TAG, jo)) {
@@ -382,13 +447,15 @@ public class ChouChouLe {
                 if (prize != null) {
                     String title = prize.optString("title",
                             prize.optString("prizeName", "未知奖品"));
-                    //  int prizeNum = prize.optInt("awardCount", 1);
-
-                    Log.farm(prefix + "🎁[领取: " + title  +"]");
+                    Log.farm(prefix + "🎁[领取: " + title +"]");
                 } else {
                     Log.farm(prefix + "🎁[领取: 未知奖品]"+response);
                 }
+                return true;
             }
-        } catch (Exception ignored) {}
+        } catch (Throwable t) {
+            Log.printStackTrace("drawPrize err:", t);
+        }
+        return false;
     }
 }

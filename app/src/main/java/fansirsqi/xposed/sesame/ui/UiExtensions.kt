@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
+import android.net.Uri
 import android.text.InputType
 import android.view.View
 import android.widget.EditText
@@ -19,8 +20,6 @@ import fansirsqi.xposed.sesame.entity.UserEntity
 import fansirsqi.xposed.sesame.util.Detector
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.ToastUtil
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
 
 /**
  * 扩展函数：打开浏览器
@@ -111,79 +110,43 @@ private fun Context.showPasswordDialog(onSuccess: () -> Unit) {
     dialog.show()
 }
 
-/**
- * 扩展函数：跳转到设置页面
- */
-fun Context.navigateToSettings(userEntity: UserEntity) {
-    if (Detector.loadLibrary("checker")) {
-        Log.record("载入用户配置 ${userEntity.showName}")
-        val targetActivity = fansirsqi.xposed.sesame.data.UIConfig.INSTANCE.targetActivityClass
-        val intent = Intent(this, targetActivity).apply {
-            putExtra("userId", userEntity.userId)
-            putExtra("userName", userEntity.showName)
+fun joinQQGroup(context: Context) {
+    val intent = Intent()
+//    intent.data = Uri.parse("mqqopensdkapi://bizAgent/qm/qr?url=http%3A%2F%2Fqm.qq.com%2Fcgi-bin%2Fqm%2Fqr%3Ffrom%3Dapp%26p%3Dandroid%26jump_from%3Dwebapi%26k%3D$key")
+    // 或者使用更通用的协议：
+    intent.data = Uri.parse("mqqapi://card/show_pslcard?src_type=internal&version=1&card_type=group&uin=1002616652")
+//    intent.data = Uri.parse("mqqapi://card/show_pslcard?src_type=internal&version=1&uin=1002616652&card_type=group&source=qrcode")
+
+    try {
+        context.startActivity(intent)
+    } catch (e: Exception) {
+        // 如果没安装 QQ 或唤起失败，回退到打开网页
+        try {
+            val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://qm.qq.com/q/Aj0Xby6AGQ")) // 这里的 URL 结构可能需要根据实际生成的链接调整
+            context.startActivity(webIntent)
+        } catch (e2: Exception) {
+            Toast.makeText(context, "无法打开链接", Toast.LENGTH_SHORT).show()
         }
-        startActivity(intent)
+    }
+}
+
+
+fun Context.performNavigationToSettings(user: UserEntity) {
+    // 这里是你提供的原有逻辑
+    if (Detector.loadLibrary("checker")) {
+        Log.record("载入用户配置 ${user.showName}")
+        try {
+            val targetActivity = fansirsqi.xposed.sesame.data.UIConfig.INSTANCE.targetActivityClass
+            val intent = Intent(this, targetActivity).apply {
+                putExtra("userId", user.userId)
+                putExtra("userName", user.showName)
+            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            ToastUtil.showToast(this, "无法启动设置页面: ${e.message}")
+        }
     } else {
         Detector.tips(this, "缺少必要依赖！")
     }
 }
 
-/**
- * 扩展函数：显示用户选择弹窗
- * 封装了原本复杂的 StringDialog 调用逻辑
- */
-fun Context.showUserSelectionDialog(
-    userList: List<UserEntity>,
-    onUserSelected: (UserEntity) -> Unit
-) {
-    if (userList.isEmpty()) {
-        ToastUtil.showToast(this, "暂无用户配置")
-        return
-    }
-
-    // 构造显示名称数组
-    val names = userList.map {
-        if (it.account != null) "${it.showName}: ${it.account}" else it.showName
-    }.toTypedArray()
-
-    val latch = CountDownLatch(1)
-
-    // 注意：这里假设 StringDialog 是你项目中已有的工具类
-    // 如果 StringDialog 也是你写的，可以考虑把它也改成更现代的写法
-    val dialog = StringDialog.showSelectionDialog(
-        this,
-        "📌 请选择配置",
-        names,
-        { d, which ->
-            onUserSelected(userList[which])
-            d.dismiss()
-            latch.countDown()
-        },
-        "返回",
-        { d ->
-            d.dismiss()
-            latch.countDown()
-        }
-    )
-
-    // 自动选择逻辑 (保留原代码逻辑)
-    if (userList.size in 1..2) {
-        Thread {
-            try {
-                if (!latch.await(800, TimeUnit.MILLISECONDS)) {
-                    // 需要切回主线程操作 UI
-                    if (this is android.app.Activity) {
-                        this.runOnUiThread {
-                            if (dialog.isShowing) {
-                                onUserSelected(userList.last())
-                                dialog.dismiss()
-                            }
-                        }
-                    }
-                }
-            } catch (_: InterruptedException) {
-                Thread.currentThread().interrupt()
-            }
-        }.start()
-    }
-}

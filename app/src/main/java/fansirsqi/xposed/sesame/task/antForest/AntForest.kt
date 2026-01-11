@@ -755,6 +755,14 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             tc.countDebug("使用自己道具卡")
 
             // -------------------------------
+            // 收好友能量
+            // -------------------------------
+            // 先尝试使用找能量功能快速定位有能量的好友（协程）
+            Log.record(TAG, "🚀 执行找能量功能（协程）")
+            collectEnergyByTakeLook()
+            tc.countDebug("找能量收取（协程）")
+
+            // -------------------------------
             // 收PK好友能量
             // -------------------------------
             Log.record(TAG, "🚀 异步执行PK好友能量收取")
@@ -780,13 +788,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 obj
             }
 
-            // -------------------------------
-            // 收好友能量
-            // -------------------------------
-            // 先尝试使用找能量功能快速定位有能量的好友（协程）
-            Log.record(TAG, "🚀 执行找能量功能（协程）")
-            collectEnergyByTakeLook()
-            tc.countDebug("找能量收取（协程）")
+
 
             // 然后执行传统的好友排行榜收取（协程）
             Log.record(TAG, "🚀 执行好友能量收取（协程）")

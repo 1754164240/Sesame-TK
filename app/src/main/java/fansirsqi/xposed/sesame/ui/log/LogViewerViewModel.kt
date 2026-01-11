@@ -22,13 +22,18 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.io.IOException
 import java.io.RandomAccessFile
 import java.nio.charset.StandardCharsets
 import java.util.ArrayDeque
+import java.util.concurrent.atomic.AtomicLong
+
 
 /**
  * 日志 UI 状态
@@ -44,7 +49,7 @@ data class LogUiState(
 
 /**
  * 日志查看器 ViewModel
- * ✨ V5 版：修复协程在临界区挂起的死锁风险。
+ * ✨ 使用防抖 + 原子操作彻底解决重复问题
  */
 class LogViewerViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -62,10 +67,13 @@ class LogViewerViewModel(application: Application) : AndroidViewModel(applicatio
     private val _scrollEvent = Channel<Int>(Channel.BUFFERED)
     val scrollEvent = _scrollEvent.receiveAsFlow()
 
+    // 新增：文件更新信号通道 (CONFLATED 表示如果处理不过来，只保留最新的信号)
+    private val fileUpdateChannel = Channel<Unit>(Channel.CONFLATED)
     private var fileObserver: FileObserver? = null
     private var currentFilePath: String? = null
     private var searchJob: Job? = null
     private var loadJob: Job? = null
+    private var updateJob: Job? = null // ✅ 新增:文件更新任务
 
     // --- 核心数据结构 ---
     private var raf: RandomAccessFile? = null
@@ -73,13 +81,27 @@ class LogViewerViewModel(application: Application) : AndroidViewModel(applicatio
     private var displayLineOffsets: List<Long> = emptyList()
     private val lineCache = LruCache<Long, String>(200)
 
-    private var lastKnownFileSize = 0L
+    // ✅ 使用 AtomicLong 保证线程安全
+    private val lastKnownFileSize = AtomicLong(0L)
     private val maxLines = 200_000
+
+    // ✅ 用于防抖的互斥锁
+    private val updateMutex = Mutex()
 
     fun loadLogs(path: String) {
         if (currentFilePath == path && loadJob?.isActive == true) return
         currentFilePath = path
+
         loadJob?.cancel()
+        updateJob?.cancel()
+
+        updateJob = viewModelScope.launch {
+            fileUpdateChannel.receiveAsFlow()
+                .debounce(200)
+                .collectLatest {
+                    handleFileUpdate()
+                }
+        }
 
         loadJob = viewModelScope.launch {
             closeFile()
@@ -88,9 +110,6 @@ class LogViewerViewModel(application: Application) : AndroidViewModel(applicatio
             val file = File(path)
             if (!file.exists() || !file.canRead()) {
                 _uiState.update { it.copy(isLoading = false) }
-                if (file.exists()) {
-                    ToastUtil.showToast(getApplication(), "文件不可读")
-                }
                 return@launch
             }
 
@@ -99,41 +118,66 @@ class LogViewerViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+
+
     private suspend fun indexFileContent(file: File) = withContext(Dispatchers.IO) {
         try {
             val localRaf = RandomAccessFile(file, "r")
             raf = localRaf
 
-            lastKnownFileSize = localRaf.length()
-            val buffer = ArrayDeque<Long>(maxLines)
-            val varCurrentOffset: Long
-
-            val totalLines = countLines(localRaf)
-            if (totalLines > maxLines) {
-                val estimatedPosition = localRaf.length() * (totalLines - maxLines) / totalLines
-                localRaf.seek(estimatedPosition)
-                localRaf.readLine()
-                varCurrentOffset = localRaf.filePointer
-            } else {
-                localRaf.seek(0)
-                varCurrentOffset = localRaf.filePointer
+            val fileSize = localRaf.length()
+            lastKnownFileSize.set(fileSize)
+            // ✅ 如果文件大小为 0，直接清空并返回
+            if (fileSize == 0L) {
+                synchronized(allLineOffsets) { allLineOffsets.clear() }
+                lineCache.evictAll()
+                refreshList()
+                return@withContext
             }
 
-            var currentOffset = varCurrentOffset
+            // ✅ 优化:一次扫描同时完成计数和索引
+            val buffer = ArrayDeque<Long>(maxLines)
+            val readBuffer = ByteArray(8192)
+            var currentOffset = 0L
+            var lineStartOffset = 0L
+            var totalLines = 0L
 
-            while (localRaf.readLine() != null) {
+            localRaf.seek(0)
+
+            // 第一遍:快速扫描,只记录换行符位置
+            val allOffsets = mutableListOf<Long>()
+            allOffsets.add(0L) // 第一行从 0 开始
+
+            while (true) {
                 ensureActive()
-                if (buffer.size >= maxLines) {
-                    buffer.removeFirst()
+                val bytesRead = localRaf.read(readBuffer)
+                if (bytesRead == -1) break
+
+                for (i in 0 until bytesRead) {
+                    currentOffset++
+                    if (readBuffer[i] == '\n'.code.toByte()) {
+                        totalLines++
+                        // 记录下一行的起始位置
+                        if (currentOffset < fileSize) {
+                            allOffsets.add(currentOffset)
+                        }
+                    }
                 }
-                buffer.addLast(currentOffset)
-                currentOffset = localRaf.filePointer
+            }
+
+            // ✅ 根据总行数决定保留哪些行
+            val finalOffsets = if (totalLines > maxLines) {
+                // 只保留最后 maxLines 行
+                allOffsets.takeLast(maxLines)
+            } else {
+                allOffsets
             }
 
             synchronized(allLineOffsets) {
                 allLineOffsets.clear()
-                allLineOffsets.addAll(buffer)
+                allLineOffsets.addAll(finalOffsets)
             }
+
             lineCache.evictAll()
             refreshList()
 
@@ -147,8 +191,6 @@ class LogViewerViewModel(application: Application) : AndroidViewModel(applicatio
             }
         }
     }
-
-    @Throws(IOException::class)
     private fun countLines(raf: RandomAccessFile): Long {
         val originalPos = raf.filePointer
         raf.seek(0)
@@ -232,15 +274,15 @@ class LogViewerViewModel(application: Application) : AndroidViewModel(applicatio
     private fun startFileObserver(path: String) {
         val file = File(path)
         val parentPath = file.parent ?: return
-
         fileObserver?.stopWatching()
-
         val eventMask = FileObserver.MODIFY or FileObserver.CREATE
         val observerFile = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) file else File(parentPath)
+
         val onFileEvent: (String?) -> Unit = { p ->
             val eventFileName = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) null else p
             if (eventFileName == null || eventFileName == file.name) {
-                viewModelScope.launch { handleFileUpdate() }
+                // ✅ 触发防抖更新
+                triggerDebouncedUpdate()
             }
         }
 
@@ -257,48 +299,72 @@ class LogViewerViewModel(application: Application) : AndroidViewModel(applicatio
         fileObserver?.startWatching()
     }
 
+    private fun triggerDebouncedUpdate() {
+        fileUpdateChannel.trySend(Unit)
+    }
+
     private suspend fun handleFileUpdate() {
         val path = currentFilePath ?: return
         val file = File(path)
         if (!file.exists()) return
 
-        try {
-            val currentSize = file.length()
-            when {
-                currentSize > lastKnownFileSize -> appendNewLines()
-                currentSize < lastKnownFileSize -> withContext(Dispatchers.Main) { loadLogs(path) }
+        // ✅ 使用互斥锁确保同一时刻只有一个更新在执行
+        updateMutex.withLock {
+            try {
+                val currentSize = file.length()
+                val lastSize = lastKnownFileSize.get()
+
+                when {
+                    currentSize > lastSize -> appendNewLines(currentSize)
+                    currentSize < lastSize -> {
+                        withContext(Dispatchers.Main) { loadLogs(path) }
+                    }
+                }
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e // 重新抛出，让协程正常结束
+                Log.printStackTrace(tag, "handleFileUpdate failed", e)
             }
-            lastKnownFileSize = currentSize
-        } catch (e: Exception) {
-            Log.printStackTrace(tag, "handleFileUpdate failed", e)
         }
     }
 
-    private suspend fun appendNewLines() = withContext(Dispatchers.IO) {
+    private suspend fun appendNewLines(currentFileSize: Long) = withContext(Dispatchers.IO) {
         val localRaf = raf ?: return@withContext
 
         try {
-            val newOffsets = mutableListOf<Long>()
-            synchronized(localRaf) {
-                localRaf.seek(lastKnownFileSize)
-                var currentOffset = lastKnownFileSize
+            val startPosition = lastKnownFileSize.get()
 
-                while (localRaf.readLine() != null) {
+            // ✅ 再次验证,防止并发问题
+            if (currentFileSize <= startPosition) {
+                return@withContext
+            }
+
+            val newOffsets = mutableListOf<Long>()
+
+            synchronized(localRaf) {
+                localRaf.seek(startPosition)
+                var currentOffset = startPosition
+
+                while (currentOffset < currentFileSize) {
                     ensureActive()
+                    val line = localRaf.readLine()
+                    if (line == null) break
+
                     newOffsets.add(currentOffset)
                     currentOffset = localRaf.filePointer
                 }
             }
 
             if (newOffsets.isNotEmpty()) {
-                // ✨ 核心修复：锁的范围仅限于列表修改
+                // ✅ 先更新文件大小,再修改列表
+                lastKnownFileSize.set(currentFileSize)
+
                 synchronized(allLineOffsets) {
                     allLineOffsets.addAll(newOffsets)
                     while (allLineOffsets.size > maxLines) {
                         allLineOffsets.removeAt(0)
                     }
                 }
-                // 在锁之外调用挂起函数
+
                 refreshList()
             }
         } catch (e: Exception) {
@@ -311,7 +377,7 @@ class LogViewerViewModel(application: Application) : AndroidViewModel(applicatio
         _uiState.update { it.copy(searchQuery = query, isSearching = true) }
         searchJob = viewModelScope.launch {
             if (query.isNotEmpty()) {
-                delay(300) // Debounce
+                delay(300)
             }
             refreshList()
         }
@@ -404,6 +470,7 @@ class LogViewerViewModel(application: Application) : AndroidViewModel(applicatio
 
     private fun closeFile() {
         try {
+            // updateJob?.cancel()
             raf?.close()
             raf = null
             fileObserver?.stopWatching()
@@ -418,5 +485,6 @@ class LogViewerViewModel(application: Application) : AndroidViewModel(applicatio
         closeFile()
         loadJob?.cancel()
         searchJob?.cancel()
+        updateJob?.cancel()
     }
 }

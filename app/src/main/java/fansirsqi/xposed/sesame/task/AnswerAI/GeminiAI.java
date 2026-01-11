@@ -31,7 +31,7 @@ public class GeminiAI implements AnswerAIInterface {
 
     @Setter
     @Getter
-    private String modelName = "gemini-1.5-flash";
+    private String modelName = "gemini-2.5-flash";
     private final String token;
 
     public GeminiAI(String token) {

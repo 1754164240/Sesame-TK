@@ -268,7 +268,7 @@ public class AntSportsRpcCall {
      */
     // 查询用户
     public static String queryUser() {
-        return RequestManager.requestString("com.alipay.sportsplay.biz.rpc.walk.theme.queryThemeList",
+        return RequestManager.requestString("com.alipay.sportsplay.biz.rpc.walk.queryUser",
                 "[{"
                         + "\"apiVersion\":\"energy\","
                         + "\"chInfo\":\"medical_health\","
@@ -312,7 +312,6 @@ public class AntSportsRpcCall {
     }
     // 查询路线
     public static String queryPath(String date, String pathId) {
-        // 建议将 timeZone 也作为参数或者定义为常量
 
         return RequestManager.requestString("com.alipay.sportsplay.biz.rpc.walk.queryPath",
                 "[{"

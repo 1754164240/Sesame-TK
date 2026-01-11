@@ -311,7 +311,7 @@ public class NewRpcBridge implements RpcBridge {
                                                 "为了保障您的操作安全，请进行验证后继续,自动启动支付宝进行滑块中..."
                                         );
                                         // 使用增强的shell命令启动支付宝，
-                                        SwipeUtil.startAlipayWithShellCommand(ApplicationHook.getAppContext());
+                                        SwipeUtil.startAlipay(ApplicationHook.getAppContext());
                                     }
                                 }
                             }

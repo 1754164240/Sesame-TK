@@ -58,6 +58,8 @@
         <activity android:name="fansirsqi.xposed.sesame.ui.WebSettingsActivity" />
         <activity android:name="fansirsqi.xposed.sesame.ui.SettingActivity" />
         <activity android:name="fansirsqi.xposed.sesame.ui.HtmlViewerActivity" />
+        <!-- RPC 调试 Activity -->
+        <activity android:name="fansirsqi.xposed.sesame.ui.RpcDebugActivity" />
         <!-- 高性能日志查看器 (Compose) -->
         <!-- theme 必须设置为 NoActionBar，因为 Compose 自带了 TopAppBar -->
         <activity
@@ -93,6 +95,8 @@
         </activity-alias>
 
         <!-- CommandService 用于执行 root/Shizuku 命令 -->
+        <!-- exported=true 允许跨进程绑定 -->
+        <!-- process=":command" 运行在独立进程中 -->
         <service
             android:name="fansirsqi.xposed.sesame.service.CommandService"
             android:enabled="true"

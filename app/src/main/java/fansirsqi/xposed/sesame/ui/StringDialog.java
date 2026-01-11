@@ -25,18 +25,12 @@ public class StringDialog {
     private static ModelField<?> modelField;
 
     public static void showEditDialog(Context c, CharSequence title, ModelField<?> modelField) {
-        showEditDialog(c, title, modelField, null);
-    }
-
-    public static void showEditDialog(Context c, CharSequence title, ModelField<?> modelField, String msg) {
         StringDialog.modelField = modelField;
         AlertDialog editDialog = getEditDialog(c);
-        if (msg != null) {
-            editDialog.setMessage(msg);
-        }
         editDialog.setTitle(title);
         editDialog.show();
     }
+
 
     private static AlertDialog getEditDialog(Context c) {
         EditText edt = new EditText(c);
@@ -106,9 +100,6 @@ public class StringDialog {
                 .create();
     }
 
-    public static void showAlertDialog(Context c, String title, String msg) {
-        showAlertDialog(c, title, msg, "确定");
-    }
 
     public static void showAlertDialog(Context c, String title, String msg, String positiveButton) {
         CharSequence parsedMsg = HtmlCompat.fromHtml(msg, HtmlCompat.FROM_HTML_MODE_LEGACY);

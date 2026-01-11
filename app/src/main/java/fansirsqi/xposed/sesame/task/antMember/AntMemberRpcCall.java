@@ -444,6 +444,37 @@ public class AntMemberRpcCall {
         return RequestManager.requestString("com.alipay.alipaymember.biz.rpc.exchange.h5.exchangeBenefit", data);
     }
 
+    /**
+     * 查询芝麻粒兑换商品列表
+     * 对应接口: com.antgroup.zmxy.zmmemberop.biz.rpc.award.AwardRpcManager.queryListV2
+     *
+     * @param page     页码
+     * @param pageSize 每页数量
+     */
+    public static String queryExchangeList(int page, int pageSize) {
+        // 参数构造参考抓包: [{"currentPage":1,"formDelivery":"false","pageSize":20,"privilegeSource":"","privilegeTab":"","tabList":[]}]
+        String args = "[{\"currentPage\":" + page + ",\"formDelivery\":\"false\",\"pageSize\":" + pageSize + ",\"privilegeSource\":\"\",\"privilegeTab\":\"\",\"tabList\":[]}]";
+        return RequestManager.requestString(
+                "com.antgroup.zmxy.zmmemberop.biz.rpc.award.AwardRpcManager.queryListV2",
+                args
+        );
+    }
+
+    /**
+     * 执行芝麻粒兑换
+     * 对应接口: com.antgroup.zmxy.zmmemberop.biz.rpc.award.AwardRpcManager.obtainAward
+     *
+     * @param templateId 商品ID (awardTemplateId)
+     */
+    public static String obtainAward(String templateId) {
+        // 参数构造参考抓包: [{"awardTemplateId":"245213012"}]
+        String args = "[{\"awardTemplateId\":\"" + templateId + "\"}]";
+        return RequestManager.requestString(
+                "com.antgroup.zmxy.zmmemberop.biz.rpc.award.AwardRpcManager.obtainAward",
+                args
+        );
+    }
+
     // ================= 年度回顾（任务中心） =================
     public static final String ANNUAL_REVIEW_OPERATION_IDENTIFY =
             "independent_component_program2025111803036407";
@@ -774,11 +805,19 @@ public class AntMemberRpcCall {
         }
     }
 
+
     /**
-     * 查询可领取的贴纸列表
+     * @brief 查询当月是否有可领取的贴纸
+     * @param year 年份
+     * @param month 月份
      */
     public static String queryStickerCanReceive(String year, String month) {
-        String data = "[{\"isFirstShow\":\"false\",\"month\":\"" + month + "\",\"year\":\"" + year + "\"}]";
+        String data = "[{" +
+                "\"isFirstShow\":\"false\"," +
+                "\"month\":\"" + month + "\"," +
+                "\"scene\":\"\"," +
+                "\"year\":\"" + year + "\"" +
+                "}]";
         return RequestManager.requestString("alipay.memberasset.sticker.queryStickerCanReceive", data);
     }
 

@@ -26,7 +26,6 @@ class SesameApplication : Application() {
         Log.init(this)
         val processName = getCurrentProcessName()
         Log.record(TAG, "🚀 应用启动 | 进程: $processName | PID: ${Process.myPid()}")
-        // 启动 CommandService
         startCommandService()
     }
 
@@ -39,7 +38,7 @@ class SesameApplication : Application() {
             startService(intent)
             Log.record(TAG, "✅ CommandService 已启动")
         } catch (e: Exception) {
-            Log.record(TAG, "❌ CommandService 启动失败: ${e.message}")
+            Log.printStackTrace(TAG, "❌ CommandService 启动失败:",e)
         }
     }
 

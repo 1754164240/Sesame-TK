@@ -6,6 +6,7 @@ import com.fasterxml.jackson.module.kotlin.readValue
 object JsonHelper {
     val mapper = jacksonObjectMapper()
 
+
     inline fun <reified T> fromJson(json: String): T {
         return mapper.readValue(json)
     }

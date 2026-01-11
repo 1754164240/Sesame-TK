@@ -1,15 +1,19 @@
 package fansirsqi.xposed.sesame.util
 
+import android.annotation.SuppressLint
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
+import android.os.Build
 import android.os.IBinder
 import android.os.RemoteException
+import android.util.Log
 import fansirsqi.xposed.sesame.ICallback
 import fansirsqi.xposed.sesame.ICommandService
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -19,6 +23,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 /**
  * 命令服务客户端工具类
  * 负责与 CommandService 建立连接并通过 AIDL 发送指令
+ * 支持从宿主应用（支付宝）进程跨进程绑定到模块的 Service
  */
 object CommandUtil {
 
@@ -26,7 +31,7 @@ object CommandUtil {
     private const val ACTION_BIND = "fansirsqi.xposed.sesame.action.BIND_COMMAND_SERVICE"
     private const val PACKAGE_NAME = "fansirsqi.xposed.sesame"
 
-    private const val BIND_TIMEOUT_MS = 3000L      // 绑定超时时间
+    private const val BIND_TIMEOUT_MS = 5000L      // 绑定超时时间（增加到5秒）
     private const val EXEC_TIMEOUT_MS = 15000L     // 命令执行超时时间
 
     // AIDL 接口实例
@@ -39,7 +44,7 @@ object CommandUtil {
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
-            Log.d(TAG, "✅ CommandService 已连接")
+            Log.i(TAG, "✅ CommandService 已连接: $name")
             try {
                 commandService = ICommandService.Stub.asInterface(service)
                 // 监听服务端死亡（例如服务进程崩溃）
@@ -57,7 +62,7 @@ object CommandUtil {
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
-            Log.d(TAG, "❌ CommandService 已断开连接")
+            Log.w(TAG, "❌ CommandService 已断开连接: $name")
             handleServiceLost()
         }
     }
@@ -70,7 +75,9 @@ object CommandUtil {
 
     /**
      * 绑定服务 (线程安全)
+     * 支持跨进程绑定：从支付宝进程绑定模块的 CommandService
      */
+    @SuppressLint("ObsoleteSdkInt")
     private suspend fun ensureServiceBound(context: Context): Boolean {
         // 快速检查：如果已经绑定且服务对象有效
         if (isBound.get() && commandService?.asBinder()?.isBinderAlive == true) {
@@ -82,43 +89,99 @@ object CommandUtil {
             if (isBound.get() && commandService?.asBinder()?.isBinderAlive == true) {
                 return@withLock true
             }
-
-            Log.d(TAG, "正在尝试绑定 CommandService...")
-
             // 重置状态
             handleServiceLost()
             connectionDeferred = CompletableDeferred()
-
-            val intent = Intent(ACTION_BIND).apply {
+            // 构建 Intent
+            val intent = Intent().apply {
+                action = ACTION_BIND
                 setPackage(PACKAGE_NAME)
+                component = ComponentName(
+                    PACKAGE_NAME,
+                    "fansirsqi.xposed.sesame.service.CommandService"
+                )
             }
 
+            Log.i(TAG, "Intent 配置:")
+            Log.i(TAG, "  - action: ${intent.action}")
+            Log.i(TAG, "  - package: ${intent.`package`}")
+            Log.i(TAG, "  - component: ${intent.component}")
+
             try {
+                // 步骤1: 先尝试启动服务（确保服务进程存在）
+                try {
+                    Log.i(TAG, "步骤1: 尝试启动 Service...")
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        context.applicationContext.startForegroundService(intent)
+                    } else {
+                        context.applicationContext.startService(intent)
+                    }
+                    Log.i(TAG, "✓ startService 调用成功")
+                } catch (e: SecurityException) {
+                    Log.w(TAG, "✗ startService 失败 (SecurityException): ${e.message}")
+                } catch (e: Exception) {
+                    Log.w(TAG, "✗ startService 失败: ${e.message}")
+                }
+
+                // 等待服务启动
+                delay(800)
+
+                // 步骤2: 绑定服务
+                Log.i(TAG, "步骤2: 尝试绑定 Service...")
                 val bindResult = context.applicationContext.bindService(
                     intent,
                     serviceConnection,
-                    Context.BIND_AUTO_CREATE
+                    Context.BIND_AUTO_CREATE or Context.BIND_IMPORTANT
                 )
 
+                Log.i(TAG, "bindService 返回: $bindResult")
+
                 if (!bindResult) {
-                    Log.e(TAG, "bindService 返回 false，可能是服务未注册或权限不足")
+                    Log.e(TAG, "❌ bindService 返回 false")
+                    Log.e(TAG, "可能的原因:")
+                    Log.e(TAG, "  1. 模块 APK 未安装或被禁用")
+                    Log.e(TAG, "  2. Service 未在 AndroidManifest.xml 中正确注册")
+                    Log.e(TAG, "  3. Android 系统阻止跨应用绑定（SELinux/权限策略）")
+                    Log.e(TAG, "  4. 目标应用版本不匹配或签名问题")
+                    
+                    // 尝试检查模块是否安装
+                    try {
+                        val pm = context.packageManager
+                        val appInfo = pm.getApplicationInfo(PACKAGE_NAME, 0)
+                        Log.i(TAG, "模块已安装: ${appInfo.enabled}")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "模块未安装或无法访问: ${e.message}")
+                    }
+                    
                     return@withLock false
                 }
 
-                // 等待连接结果
+                // 步骤3: 等待连接回调
+                Log.i(TAG, "步骤3: 等待连接回调...")
                 val success = withTimeoutOrNull(BIND_TIMEOUT_MS) {
                     connectionDeferred?.await()
                 } ?: false
 
                 if (!success) {
-                    Log.e(TAG, "绑定服务超时或失败")
-                    // 超时后清理一下
-                    context.applicationContext.unbindService(serviceConnection)
+                    Log.e(TAG, "❌ 绑定超时或失败")
+                    // 超时后清理
+                    try {
+                        context.applicationContext.unbindService(serviceConnection)
+                    } catch (_: Exception) {
+                        // 忽略解绑异常
+                    }
+                } else {
+                    Log.i(TAG, "✅ Service 绑定成功！")
                 }
 
+                Log.i(TAG, "========== 绑定流程结束 ==========")
                 return@withLock success
+            } catch (e: SecurityException) {
+                Log.e(TAG, "❌ 绑定服务失败 (SecurityException): ${e.message}", e)
+                Log.e(TAG, "这通常意味着权限不足或 SELinux 策略阻止")
+                return@withLock false
             } catch (e: Exception) {
-                Log.e(TAG, "绑定服务异常", e)
+                Log.e(TAG, "❌ 绑定服务异常: ${e.message}", e)
                 return@withLock false
             }
         }
@@ -139,6 +202,7 @@ object CommandUtil {
 
         val callback = object : ICallback.Stub() {
             override fun onSuccess(output: String) {
+                Log.i(TAG, "命令执行成功")
                 resultDeferred.complete(output)
             }
 
@@ -149,6 +213,7 @@ object CommandUtil {
         }
 
         try {
+            Log.i(TAG, "发送命令: $command")
             service.executeCommand(command, callback)
 
             // 等待结果
@@ -194,7 +259,7 @@ object CommandUtil {
         if (isBound.compareAndSet(true, false)) {
             try {
                 context.applicationContext.unbindService(serviceConnection)
-                Log.d(TAG, "已主动解绑服务")
+                Log.i(TAG, "已主动解绑服务")
             } catch (e: Exception) {
                 Log.w(TAG, "解绑失败: ${e.message}")
             } finally {

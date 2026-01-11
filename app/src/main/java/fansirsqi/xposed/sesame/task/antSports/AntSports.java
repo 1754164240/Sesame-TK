@@ -628,6 +628,7 @@ public class AntSports extends ModelTask {
         try {
             JSONObject user = new JSONObject(AntSportsRpcCall.queryUser());
             if (!ResChecker.checkRes(TAG,user)) {
+                Log.error(TAG,"查询用户失败: " + user);
                 return;
             }
             String joinedPathId = user.getJSONObject("data").getString("joinedPathId");
@@ -639,8 +640,8 @@ public class AntSports extends ModelTask {
                 joinPath(pathId);
                 return;
             }
-            int minGoStepCount = path.getJSONObject("path").getInt("minGoStepCount");
-            int pathStepCount = path.getJSONObject("path").getInt("pathStepCount");
+            int minGoStepCount = path.getJSONObject("path").getInt("minGoStepCount");   //最小走路步数
+            int pathStepCount = path.getJSONObject("path").getInt("pathStepCount");     //路径所需步数
             int forwardStepCount = userPathStep.getInt("forwardStepCount");
             int remainStepCount = userPathStep.getInt("remainStepCount");
             int needStepCount = pathStepCount - forwardStepCount;
@@ -659,8 +660,10 @@ public class AntSports extends ModelTask {
             @SuppressLint("SimpleDateFormat") SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
             JSONObject jo = new JSONObject(AntSportsRpcCall.walkGo( sdf.format(date), pathId, useStepCount));
             if (ResChecker.checkRes(TAG, jo)) {
-                Log.record(TAG, "行走路线🚶🏻‍♂️路线[" + pathName + "]#前进了" + useStepCount + "步");
+                Log.other(TAG, "行走路线🚶🏻‍♂️路线[" + pathName + "]#前进了" + useStepCount + "步");
                 queryPath(pathId);
+            }else {
+                Log.error(TAG,"walkGo失败： [pathId: " + pathId + "]: " +jo);
             }
         } catch (Throwable t) {
             Log.printStackTrace(TAG, "walkGo err:",t);
@@ -671,8 +674,10 @@ public class AntSports extends ModelTask {
         JSONObject theme = null;
         try {
             JSONObject jo = new JSONObject(AntSportsRpcCall.queryWorldMap(themeId));
-            if (ResChecker.checkRes(TAG, jo)) {
+            if (ResChecker.checkRes(TAG+"queryWorldMap失败： [ThemeID: " + themeId + "]: " , jo)) {
                 theme = jo.getJSONObject("data");
+            }else {
+                Log.error(TAG,"queryWorldMap失败： [ThemeID: " + themeId + "]: " +jo);
             }
         } catch (Throwable t) {
             Log.printStackTrace(TAG, "queryWorldMap err:",t);
@@ -680,12 +685,20 @@ public class AntSports extends ModelTask {
         return theme;
     }
 
+
+    /**
+     * @brief 查询指定城市的路线详情
+     * @param cityId 城市唯一标识符 (通过 queryWorldMap 获取)
+     * @return JSONObject 包含城市路径信息的对象，失败返回 null
+     */
     private JSONObject queryCityPath(String cityId) {
         JSONObject city = null;
         try {
             JSONObject jo = new JSONObject(AntSportsRpcCall.queryCityPath(cityId));
             if (ResChecker.checkRes(TAG, jo)) {
                 city = jo.getJSONObject("data");
+            }else {
+                Log.error(TAG,"queryCityPath失败： [CityID: " + cityId + "]"+jo);
             }
         } catch (Throwable t) {
             Log.printStackTrace(TAG, "queryCityPath err:",t);
@@ -702,10 +715,13 @@ public class AntSports extends ModelTask {
             if (ResChecker.checkRes(TAG, jo)) {
                 path = jo.getJSONObject("data");
                 JSONArray ja = jo.getJSONObject("data").getJSONArray("treasureBoxList");
+                //如果有宝箱则收取宝箱
                 for (int i = 0; i < ja.length(); i++) {
                     JSONObject treasureBox = ja.getJSONObject(i);
                     receiveEvent(treasureBox.getString("boxNo"));
                 }
+            }else {
+                Log.error(TAG,"queryPath失败： " +jo);
             }
         } catch (Throwable t) {
             Log.printStackTrace(TAG, "queryPath err:",t);
@@ -729,6 +745,7 @@ public class AntSports extends ModelTask {
         }
     }
 
+    //根据主题返回可以行走路径
     private String queryJoinPath(String themeId) {
         if (walkCustomPath.getValue()) {
             return walkCustomPathId.getValue();
@@ -736,7 +753,8 @@ public class AntSports extends ModelTask {
         String pathId = null;
         try {
             JSONObject theme = queryWorldMap(walkPathThemeId);
-            if (theme == null) {
+            if (theme==null) {
+                Log.error(TAG,"queryJoinPath-> theme 失败："+theme);
                 return null;
             }
             JSONArray cityList = theme.getJSONArray("cityList");
@@ -779,21 +797,22 @@ public class AntSports extends ModelTask {
         }
     }
 
+    /**
+     * &#064;brief  根据配置索引同步更新路线主题 ID
+     * * @details 从 ChoiceModelField 获取用户选择的索引值，并从 @link WalkPathTheme#themeIds @endlink
+     * 映射表中取得对应的接口字符串。
+     * * @return void
+     */
     private void getWalkPathThemeIdOnConfig() {
-        if (walkPathTheme.getValue() == WalkPathTheme.DA_MEI_ZHONG_GUO) {
-            walkPathThemeId = "M202308082226";
-        }
-        if (walkPathTheme.getValue() == WalkPathTheme.GONG_YI_YI_XIAO_BU) {
-            walkPathThemeId = "M202401042147";
-        }
-        if (walkPathTheme.getValue() == WalkPathTheme.DENG_DING_ZHI_MA_SHAN) {
-            walkPathThemeId = "V202405271625";
-        }
-        if (walkPathTheme.getValue() == WalkPathTheme.WEI_C_DA_TIAO_ZHAN) {
-            walkPathThemeId = "202404221422";
-        }
-        if (walkPathTheme.getValue() == WalkPathTheme.LONG_NIAN_QI_FU) {
-            walkPathThemeId = "WF202312050200";
+        int index = walkPathTheme.getValue();
+
+        // 检查索引是否在有效范围内 [0, themeIds.length - 1]
+        if (index >= 0 && index < WalkPathTheme.themeIds.length) {
+            this.walkPathThemeId = WalkPathTheme.themeIds[index];
+        } else {
+            // 索引异常处理：记录日志并回退到默认值（大美中国）
+            Log.error(TAG, "非法的路线主题索引: " + index + "，已回退至默认主题");
+            this.walkPathThemeId = WalkPathTheme.themeIds[WalkPathTheme.DA_MEI_ZHONG_GUO];
         }
     }
 
@@ -2748,13 +2767,33 @@ private boolean handleLightTask(JSONObject task, String title, String jumpLink) 
                         // 因为一旦 break，任务就结束了。如果想立刻处理，需要重构方法。
                         //break;
                     }
+                    // 获取建造前后的数据
+                    JSONObject before = buildData.optJSONObject("beforeStageInfo");
+                    JSONObject end = buildData.optJSONObject("endStageInfo");
 
-                    // 更新状态和日志记录
-                    int newLeftEnergy = buildData.optInt("leftCount", -1);
-                    if (newLeftEnergy >= 0) {
-                        leftEnergy = newLeftEnergy;
+                    int actualUsedEnergy = 0;
+
+                    if (before != null && end != null) {
+                        int bIdxBefore = before.optInt("buildingIndex");
+                        int bIdxEnd = end.optInt("buildingIndex");
+
+                        if (bIdxEnd > bIdxBefore) {
+                            // 情况 A: (B3 -> B4)
+                            // 消耗 = (B3的总进度 - B3开始时的进度) + B4当前的进度
+                            actualUsedEnergy = (before.optInt("buildingEnergyFinal") - before.optInt("buildingEnergyProcess"))
+                                    + end.optInt("buildingEnergyProcess");
+                        } else {
+                            // 情况 B: 还在同一个建筑
+                            actualUsedEnergy = end.optInt("buildingEnergyProcess") - before.optInt("buildingEnergyProcess");
+                        }
+                    } else {
+                        // 保底：按倍数扣除
+                        actualUsedEnergy = multiNum * 5;
                     }
+                    
 
+
+                    leftEnergy -= actualUsedEnergy;
                     int stepIncrease = calculateBuildSteps(buildData, multiNum);
                     int totalSteps = recordStepIncrease(stepIncrease);
                     remainSteps -= stepIncrease;
@@ -2859,13 +2898,36 @@ private boolean handleLightTask(JSONObject task, String title, String jumpLink) 
 //        }
     }
 
+
+    /**
+     * @file WalkPathTheme
+     * @brief 蚂蚁运动路线主题常量与映射表
+     */
+
     public interface WalkPathTheme {
-        int DA_MEI_ZHONG_GUO = 0;
-        int GONG_YI_YI_XIAO_BU = 1;
-        int DENG_DING_ZHI_MA_SHAN = 2;
-        int WEI_C_DA_TIAO_ZHAN = 3;
-        int LONG_NIAN_QI_FU = 4;
-        String[] nickNames = {"大美中国", "公益一小步", "登顶芝麻山", "维C大挑战", "龙年祈福"};
+        int DA_MEI_ZHONG_GUO = 0;      ///< 大美中国 (默认)
+        int GONG_YI_YI_XIAO_BU = 1;    ///< 公益一小步
+        int DENG_DING_ZHI_MA_SHAN = 2; ///< 登顶芝麻山
+        int WEI_C_DA_TIAO_ZHAN = 3;    ///< 维C大挑战
+        int LONG_NIAN_QI_FU = 4;       ///< 龙年祈福
+        int SHOU_HU_TI_YU_MENG = 5;    ///< 守护体育梦
+
+        /** @brief 界面显示的名称列表 */
+        String[] nickNames = {
+                "大美中国", "公益一小步", "登顶芝麻山", "维C大挑战", "龙年祈福", "守护体育梦"
+        };
+
+        /** * @brief 对应支付宝接口的 ThemeID 映射表
+         * @note 数组顺序必须与上方常量定义保持严格一致
+         */
+        String[] themeIds = {
+                "M202308082226", ///< [0] 大美中国
+                "M202401042147", ///< [1] 公益一小步
+                "V202405271625", ///< [2] 登顶芝麻山
+                "202404221422",  ///< [3] 维C大挑战
+                "WF202312050200",///< [4] 龙年祈福
+                "V202409061650"  ///< [5] 守护体育梦
+        };
     }
 
     public interface DonateCharityCoinType {

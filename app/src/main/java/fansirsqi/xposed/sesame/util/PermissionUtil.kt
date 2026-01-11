@@ -15,6 +15,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import fansirsqi.xposed.sesame.hook.ApplicationHook
+import fansirsqi.xposed.sesame.ui.MainActivity
 
 /**
  * 权限工具类，用于检查和请求所需权限。
@@ -52,7 +53,7 @@ object PermissionUtil {
     /**
      * 请求文件存储权限
      */
-    fun checkOrRequestFilePermissions(activity: AppCompatActivity): Boolean {
+    fun checkOrRequestFilePermissions(activity: MainActivity): Boolean {
         if (checkFilePermissions(activity)) return true
 
         try {

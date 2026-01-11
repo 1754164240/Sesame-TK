@@ -262,7 +262,6 @@ object HookUtil {
             UserMap.unload()
             val selfId = getUserId(classLoader)
             UserMap.setCurrentUserId(selfId) //有些地方要用到 要set一下
-
             val clsUserIndependentCache = classLoader.loadClass("com.alipay.mobile.socialcommonsdk.bizdata.UserIndependentCache")
             val clsAliAccountDaoOp = classLoader.loadClass("com.alipay.mobile.socialcommonsdk.bizdata.contact.data.AliAccountDaoOp")
             val aliAccountDaoOp = XposedHelpers.callStaticMethod(clsUserIndependentCache, "getCacheObj", clsAliAccountDaoOp)

@@ -40,6 +40,7 @@ object ModuleHttpServerManager {
         }
 
         return try {
+            stopIfRunning()
             val s = ModuleHttpServer(port, secretToken)
             // 使用与原逻辑一致的启动方式
             s.start(NanoHTTPD.SOCKET_READ_TIMEOUT, false)

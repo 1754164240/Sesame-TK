@@ -1,5 +1,6 @@
 package fansirsqi.xposed.sesame.ui.theme
 
+import android.app.Activity
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
@@ -9,8 +10,12 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 
 
 private val lightScheme = lightColorScheme(
@@ -268,6 +273,27 @@ fun AppTheme(
 
         darkTheme -> darkScheme
         else -> lightScheme
+    }
+
+    // 👇👇👇 必须加上这段代码 👇👇👇
+    val view = LocalView.current
+    if (!view.isInEditMode) {
+        SideEffect {
+            val window = (view.context as Activity).window
+
+            // 1. 设置背景透明 (为了兼容 Android 14 及以下版本)
+            // 虽然 Android 15 弃用了，但写了也没事，旧版本必须要有这句
+            window.statusBarColor = Color.Transparent.toArgb()
+
+            // 2. 🔥 核心修复：控制图标颜色的“开关”
+            // WindowCompat 是 AndroidX 库，它会自动处理不同安卓版本的兼容性
+            val insetsController = WindowCompat.getInsetsController(window, view)
+
+            // 如果是浅色模式(!darkTheme) -> 设置为 true (状态栏文字变黑)
+            // 如果是深色模式(darkTheme)  -> 设置为 false (状态栏文字变白)
+            insetsController.isAppearanceLightStatusBars = !darkTheme
+        }
+        // 👆👆👆 结束 👆👆👆
     }
 
     MaterialTheme(

@@ -2,6 +2,7 @@ package fansirsqi.xposed.sesame.ui
 
 import android.annotation.SuppressLint
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.widget.EditText
 import android.widget.Toast
@@ -20,6 +21,7 @@ import fansirsqi.xposed.sesame.util.Detector.getApiUrl
 import fansirsqi.xposed.sesame.util.FansirsqiUtil
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.ToastUtil
+import rikka.shizuku.Shizuku
 
 /**
  * 扩展功能页面
@@ -112,55 +114,14 @@ class ExtendActivity : BaseActivity() {
 
         //调试功能往里加
         if (BuildConfig.DEBUG) {
-            // 新增：RPC 调试入口（Method + requestData）
+            // RPC 调试 - 跳转到独立 Activity
             extendFunctions.add(
                 ExtendFunctionItem("RPC调试") {
-                    // 构建包含两个输入框的自定义视图
-                    val container = android.widget.LinearLayout(this).apply {
-                        orientation = android.widget.LinearLayout.VERTICAL
-                        setPadding(48, 24, 48, 0)
-                    }
-                    val etMethod = EditText(this).apply {
-                        hint = "Method 例如：alipay.antforest.forest.h5.queryMiscInfo"
-                        setText("")
-                    }
-                    val etRequestData = EditText(this).apply {
-                        hint = "requestData 例如：[{}]"
-                        setText("")
-                        minLines = 4
-                        maxLines = 8
-                        setHorizontallyScrolling(false)
-                    }
-                    container.addView(etMethod)
-                    container.addView(etRequestData)
-                    val dialog = AlertDialog.Builder(this)
-                        .setTitle("RPC调试")
-                        .setView(container)
-                        .setPositiveButton(R.string.ok, null) // 设置为null，稍后手动设置点击事件
-                        .setNegativeButton(R.string.cancel) { dialog, _ -> dialog.dismiss() }
-                        .create()
-                    
-                    dialog.show()
-                    
-                    // 手动设置确认按钮的点击事件，这样可以控制是否关闭对话框
-                    dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                        val method = etMethod.text?.toString()?.trim().orEmpty()
-                        val requestData = etRequestData.text?.toString()?.trim().orEmpty()
-                        if (method.isEmpty() || requestData.isEmpty()) {
-                            ToastUtil.showToast(this, "Method 和 requestData 不能为空")
-                            return@setOnClickListener // 不关闭对话框
-                        }
-                        // 通过广播交由支付宝进程执行，避免本进程无 rpcBridge 的问题
-                        val intent = Intent("com.eg.android.AlipayGphone.sesame.rpctest")
-                        intent.putExtra("method", method)
-                        intent.putExtra("data", requestData)
-                        intent.putExtra("type", "Rpc")
-                        sendBroadcast(intent)
-                        ToastUtil.showToast(this, "已发送，请在调试日志查看结果")
-                        // 不调用 dialog.dismiss()，保持对话框打开
-                    }
+                    val intent = Intent(this, RpcDebugActivity::class.java)
+                    startActivity(intent)
                 }
             )
+
             extendFunctions.add(
                 ExtendFunctionItem("写入光盘") {
                     AlertDialog.Builder(this)
@@ -238,7 +199,7 @@ class ExtendActivity : BaseActivity() {
 
             extendFunctions.add(
                 ExtendFunctionItem("TestShow") {
-                    ToastUtil.showToast(this, "测试Toast")
+                    ToastUtil.showToast(this, isShizukuReady().toString())
                 }
             )
         }
@@ -258,4 +219,19 @@ class ExtendActivity : BaseActivity() {
         sendBroadcast(intent) // 发送广播
         Log.debug(TAG, "扩展工具主动调用广播查询📢：$type")
     }
+
+    fun isShizukuReady(): Boolean {
+        return try {
+            val isBinderAlive = Shizuku.pingBinder()
+            val hasPermission = if (isBinderAlive) Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED else false
+
+            Log.d(TAG, "Shizuku检查: Binder活着? $isBinderAlive, 有权限? $hasPermission, 进程PID: ${android.os.Process.myPid()}")
+
+            return isBinderAlive && hasPermission
+        } catch (e: Exception) {
+            Log.e(TAG, "isShizukuReady", e)
+            false
+        }
+    }
 }
+
