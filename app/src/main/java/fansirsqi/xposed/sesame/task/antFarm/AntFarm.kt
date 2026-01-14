@@ -13,7 +13,6 @@ import fansirsqi.xposed.sesame.entity.OtherEntityProvider.farmFamilyOption
 import fansirsqi.xposed.sesame.entity.ParadiseCoinBenefit
 import fansirsqi.xposed.sesame.hook.Toast
 import fansirsqi.xposed.sesame.hook.rpc.intervallimit.RpcIntervalLimit.addIntervalLimit
-import fansirsqi.xposed.sesame.model.BaseModel
 import fansirsqi.xposed.sesame.model.ModelFields
 import fansirsqi.xposed.sesame.model.ModelGroup
 import fansirsqi.xposed.sesame.model.modelFieldExt.BooleanModelField
@@ -27,7 +26,6 @@ import fansirsqi.xposed.sesame.newutil.DataStore
 import fansirsqi.xposed.sesame.newutil.TaskBlacklist
 import fansirsqi.xposed.sesame.task.AnswerAI.AnswerAI
 import fansirsqi.xposed.sesame.task.ModelTask
-import fansirsqi.xposed.sesame.task.TaskCommon
 import fansirsqi.xposed.sesame.task.antFarm.AntFarmFamily.familyClaimRewardList
 import fansirsqi.xposed.sesame.task.antFarm.AntFarmFamily.familySign
 import fansirsqi.xposed.sesame.task.antForest.TaskTimeChecker
@@ -56,6 +54,7 @@ import java.util.Locale
 import java.util.Objects
 import java.util.Random
 import kotlin.math.min
+
 @Suppress("unused", "EnumEntryName", "EnumEntryName", "EnumEntryName", "EnumEntryName")
 class AntFarm : ModelTask() {
     private var ownerFarmId: String? = null
@@ -591,27 +590,6 @@ class AntFarm : ModelTask() {
         addIntervalLimit("com.alipay.antfarm.enterFarm", 2000)
     }
 
-    override fun check(): Boolean {
-        if (TaskCommon.IS_ENERGY_TIME) {
-            Log.record(
-                TAG,
-                "⏸ 当前为只收能量时间【" + BaseModel.energyTime
-                    .value + "】，停止执行" + name + "任务！"
-            )
-            return false
-        } else if (TaskCommon.IS_MODULE_SLEEP_TIME) {
-            Log.record(
-                TAG,
-                "💤 模块休眠时间【" + BaseModel.modelSleepTime
-                    .value + "】停止执行" + name + "任务！"
-            )
-            return false
-        } else {
-            return true
-        }
-    }
-
-
     override suspend fun runSuspend() {
         try {
             val tc = TimeCounter(TAG)
@@ -1123,6 +1101,23 @@ class AntFarm : ModelTask() {
      * 自动喂鸡
      */
     private suspend fun handleAutoFeedAnimal(isChildTask: Boolean = false) {
+
+//        val sleepTimeStr = sleepTime!!.value
+//        if (sleepTimeStr != "-1") {
+//            val now = TimeUtil.getNow()
+//            val sleepCal = TimeUtil.getTodayCalendarByTimeStr(sleepTimeStr)
+//            // 如果当前时间在睡觉时间之前，且差距小于 30 分钟
+//            if (now.before(sleepCal) && (sleepCal.timeInMillis - now.timeInMillis) < 30 * 60 * 1000) {
+//                Log.record(TAG, "马上要睡觉了，暂不投喂，让它饿着吧")
+//                return
+//            }
+//            // 如果已经过了睡觉时间，理论上也不应该喂，但原逻辑会在后面 animalSleepAndWake 处理睡觉
+//            if (now.after(sleepCal)) {
+//                Log.record(TAG, "已过睡觉时间，暂不投喂")
+//                return
+//            }
+//        }
+
         if (AnimalInteractStatus.HOME.name != ownerAnimal.animalInteractStatus) {
             return  // 小鸡不在家，不执行喂养逻辑
         }
@@ -1838,7 +1833,7 @@ class AntFarm : ModelTask() {
                     break
                 }
 
-                val remainingCount = joInit.optInt("remainingGameCount", 0)
+                val remainingCount = joInit.optInt("remainingGameCount", 1)
                 if (remainingCount > 0) {
                     val recordResult = AntFarmRpcCall.recordFarmGame(gameType.name)
                     val joRecord = JSONObject(recordResult)
@@ -2519,12 +2514,11 @@ class AntFarm : ModelTask() {
                              */
                             // 判断游戏改分还没完成。按照我的设计，其实这里不用判断，因为任务顺序就是先加速->游戏改分
                             if (!Status.hasFlagToday("farm::farmGameFinished")){
-                                // 饲料量比上限少超过了180g则领取饲料，在180g内则不领，留给飞行赛填补
-                                if (foodStock < foodStockLimit - 180) {
+                                if (foodStock < foodStockLimit - gameRewardMax!!.value) {
                                     Log.farm("加速后已喂食，领取饲料奖励")
                                     receiveFarmAwards()
                                 } else {
-                                    Log.farm("今天游戏改分还没有完成，预留180g的饲料剩余空间，目前饲料${foodStock}g，还差${foodStockLimit - foodStock}g满饲料")
+                                    Log.farm("今天游戏改分还没有完成，预留${gameRewardMax!!.value}g的饲料剩余空间，目前饲料${foodStock}g，差${foodStockLimit - foodStock}g满饲料")
                                 }
                             } else {
                                 Log.farm("加速后已喂食，领取饲料奖励")

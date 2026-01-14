@@ -1,9 +1,11 @@
 package fansirsqi.xposed.sesame.task
 
 import android.annotation.SuppressLint
+import fansirsqi.xposed.sesame.model.BaseModel
 import fansirsqi.xposed.sesame.model.Model
 import fansirsqi.xposed.sesame.model.ModelFields
 import fansirsqi.xposed.sesame.model.ModelType
+import fansirsqi.xposed.sesame.task.antForest.AntForest
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.Notify.setStatusTextExec
 import fansirsqi.xposed.sesame.util.Notify.updateNextExecText
@@ -108,8 +110,28 @@ abstract class ModelTask : Model() {
     /** 获取任务字段配置，子类必须实现  */
     abstract override fun getFields(): ModelFields?
 
-    /** 检查任务是否可以执行，子类必须实现  */
-    abstract fun check(): Boolean?
+    /** 检查任务是否可以执行  */
+    open fun check(): Boolean {
+        TaskCommon.update()
+
+        // 只有蚂蚁森林启用且当前不是蚂蚁森林任务时，才拦截能量时间
+        if (getName() != "蚂蚁森林") {
+            val antForest = getModel(AntForest::class.java)
+            if (antForest != null && antForest.isEnable) {
+                if (TaskCommon.IS_ENERGY_TIME) {
+                    Log.record(getName() ?: "Task", "⏸ 当前为只收能量时间【${BaseModel.energyTime.value}】，停止执行${getName()}任务！")
+                    return false
+                }
+            }
+        }
+
+        // 模块休眠检查
+        if (TaskCommon.IS_MODULE_SLEEP_TIME) {
+            Log.record(getName() ?: "Task", "💤 模块休眠时间【${BaseModel.modelSleepTime.value}】停止执行${getName()}任务！")
+            return false
+        }
+        return true
+    }
 
     /** 
      * 执行任务的具体逻辑（协程版本）

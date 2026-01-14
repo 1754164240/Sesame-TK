@@ -149,8 +149,6 @@ object Credit2101RpcCall {
         ]
     """.trimIndent()
 
-        Log.record("完成游戏参数:$data")
-
         return RequestManager.requestString(
             "com.alipay.innovationprod.biz.rpc.eventGameComplete",
             data
@@ -206,11 +204,7 @@ object Credit2101RpcCall {
 
     /** 查询黑色印记事件详情 */
     fun queryBlackMarkEvent(eventId: String): String {
-        val data = """[
-                {
-                  "eventId": "$eventId"
-                }
-            ]""".trimIndent()
+        val data = "[{\"eventId\":\"$eventId\"}]"
 
         return RequestManager.requestString(
             "com.alipay.innovationprod.biz.rpc.queryBlackMarkEvent",

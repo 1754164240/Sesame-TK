@@ -215,8 +215,6 @@ jobs:
           make_latest: true
           generate_release_notes: false
           body: |
-            ## ✨What's Changed
-
             > ## 下载说明
             <b>- arm64-v8a:</b> 适用于64位ARM设备 (主流新手机)
             <b>- armeabi-v7a:</b> 适用于32位ARM设备 (旧款手机)
@@ -242,11 +240,11 @@ jobs:
             CHECKSUMS-Sesame-universal-${{ steps.extract_info.outputs.version }}.apk.sha256
           tag_name: ${{ steps.extract_info.outputs.version}}
           draft: false
-          append_body: true
           make_latest: true
           body: |
-            📦 内容同步自源仓库 [Sesame-TK](https://github.com/${{ github.repository }})     
-            ## ✨What's Changed
+            📦 内容同步自源仓库 [Sesame-TK](https://github.com/${{ github.repository }})
+            
+            ${{ github.event.release.body }}
             
             > ## 下载说明
             <b>- arm64-v8a:</b> 适用于64位ARM设备 (主流新手机)

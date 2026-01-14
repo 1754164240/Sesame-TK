@@ -343,7 +343,6 @@ public class ApplicationHook {
         finalProcessName = processName;
 
 
-
         // 2. 【关键修复】进程过滤
         // 判断是否为主进程
         boolean isMainProcess = General.PACKAGE_NAME.equals(processName);
@@ -413,9 +412,11 @@ public class ApplicationHook {
                     loadNativeLibs(appContext, AssetUtil.INSTANCE.getCheckerDestFile());
                     loadNativeLibs(appContext, AssetUtil.INSTANCE.getDexkitDestFile());
 
-                    if (VersionHook.hasVersion() && "10.7.26.8100".equals(alipayVersion.getVersionString())) {
+                    if (VersionHook.hasVersion()
+                            && alipayVersion.compareTo(new AlipayVersion("10.7.26.8100")) == 0) {
                         HookUtil.INSTANCE.fuckAccounLimit(classLoader);
                     }
+
 
                     if (VersionHook.hasVersion() && alipayVersion.getVersionString() != null) {
                         String version = alipayVersion.getVersionString();
@@ -580,11 +581,13 @@ public class ApplicationHook {
         Calendar calendar = Calendar.getInstance();
         calendar.add(Calendar.DAY_OF_MONTH, 1);
         resetToMidnight(calendar);
-        long delayToMidnight = calendar.getTimeInMillis() - System.currentTimeMillis();
+        // 延迟 10 秒启动，以规避 Logback 跨天归档时的多进程竞争和日志错乱问题
+        long delayToMidnight = (calendar.getTimeInMillis() - System.currentTimeMillis());
 
         if (delayToMidnight > 0) {
             SmartSchedulerManager.INSTANCE.schedule(delayToMidnight, "每日0点任务", () -> {
                 Log.record(TAG, "⏰ 0点任务触发");
+                updateDay();
                 execHandler();
                 setWakenAtTimeAlarm(); // 递归设置明天的
                 return Unit.INSTANCE;

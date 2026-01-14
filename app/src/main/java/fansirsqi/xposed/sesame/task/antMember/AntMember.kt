@@ -213,18 +213,6 @@ class AntMember : ModelTask() {
         return modelFields
     }
 
-    override fun check(): Boolean {
-        if (TaskCommon.IS_ENERGY_TIME) {
-            record(TAG, "⏸ 当前为只收能量时间【" + energyTime.value + "】，停止执行" + name + "任务！")
-            return false
-        } else if (TaskCommon.IS_MODULE_SLEEP_TIME) {
-            record(TAG, "💤 模块休眠时间【" + modelSleepTime.value + "】停止执行" + name + "任务！")
-            return false
-        } else {
-            return true
-        }
-    }
-
     override fun runJava() {
         // 使用协程上下文运行
         runBlocking {

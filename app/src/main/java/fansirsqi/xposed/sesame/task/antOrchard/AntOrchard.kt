@@ -61,22 +61,6 @@ class AntOrchard : ModelTask() {
         return modelFields
     }
 
-    override fun check(): Boolean {
-        return when {
-            TaskCommon.IS_ENERGY_TIME -> {
-                Log.record(TAG, "⏸ 当前为只收能量时间停止执行${name}任务！")
-                false
-            }
-
-            TaskCommon.IS_MODULE_SLEEP_TIME -> {
-                Log.record(TAG, "💤 模块休眠时间停止执行${name}任务！")
-                false
-            }
-
-            else -> true
-        }
-    }
-
     override suspend fun runSuspend() {
         try {
             Log.record(TAG, "执行开始-$name")

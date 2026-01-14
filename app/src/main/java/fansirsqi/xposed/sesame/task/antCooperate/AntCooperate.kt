@@ -80,23 +80,6 @@ class AntCooperate : ModelTask() {
     }
 
     /**
-     * 检查任务是否可以执行
-     *
-     * @return 是否可以执行合种任务
-     */
-    override fun check(): Boolean {
-        if (TaskCommon.IS_ENERGY_TIME) {
-            Log.record(TAG, "⏸ 当前为只收能量时间【" + BaseModel.energyTime.value + "】，停止执行" + name + "任务！")
-            return false
-        } else if (TaskCommon.IS_MODULE_SLEEP_TIME) {
-            Log.record(TAG, "💤 模块休眠时间【" + BaseModel.modelSleepTime.value + "】停止执行" + name + "任务！")
-            return false
-        } else {
-            return true
-        }
-    }
-
-    /**
      * 执行合种任务的主要逻辑
      */
     override suspend fun runSuspend() {

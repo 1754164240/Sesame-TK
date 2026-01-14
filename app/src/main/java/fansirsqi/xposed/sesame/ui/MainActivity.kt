@@ -324,7 +324,7 @@ fun StatusCard(
                             Text(text = "Activated", style = MaterialTheme.typography.titleMedium)
                             Text(text = "Version: ${BuildConfig.VERSION_NAME} ${BuildConfig.VERSION_CODE}", style = MaterialTheme.typography.bodyMedium)
                             Spacer(Modifier.height(4.dp))
-                            Text(text = "Activated by ${status.frameworkName} ${status.frameworkVersion} API ${status.apiVersion}", style = MaterialTheme.typography.bodySmall)
+                            Text(text = "by ${status.frameworkName} ${status.frameworkVersion} API ${status.apiVersion}", style = MaterialTheme.typography.bodySmall)
                         }
                     }
 

@@ -303,14 +303,16 @@ class LogViewerViewModel(application: Application) : AndroidViewModel(applicatio
         fileUpdateChannel.trySend(Unit)
     }
 
-    private suspend fun handleFileUpdate() {
-        val path = currentFilePath ?: return
+    private suspend fun handleFileUpdate() = withContext(Dispatchers.IO) {
+        val path = currentFilePath ?: return@withContext
         val file = File(path)
-        if (!file.exists()) return
+        if (!file.exists()) return@withContext
 
         // ✅ 使用互斥锁确保同一时刻只有一个更新在执行
-        updateMutex.withLock {
-            try {
+        try {
+            updateMutex.withLock {
+                ensureActive() // 在获取锁后立即检查协程状态
+                
                 val currentSize = file.length()
                 val lastSize = lastKnownFileSize.get()
 
@@ -320,10 +322,14 @@ class LogViewerViewModel(application: Application) : AndroidViewModel(applicatio
                         withContext(Dispatchers.Main) { loadLogs(path) }
                     }
                 }
-            } catch (e: Exception) {
-                if (e is kotlinx.coroutines.CancellationException) throw e // 重新抛出，让协程正常结束
-                Log.printStackTrace(tag, "handleFileUpdate failed", e)
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // ✅ 协程取消异常不记录日志，直接静默处理
+            // 这是正常的协程生命周期管理，不需要打印错误
+            throw e // 重新抛出让协程框架处理
+        } catch (e: Exception) {
+            // ✅ 只记录真正的异常
+            Log.printStackTrace(tag, "handleFileUpdate failed", e)
         }
     }
 

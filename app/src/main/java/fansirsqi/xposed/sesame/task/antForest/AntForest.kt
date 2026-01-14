@@ -574,20 +574,12 @@ class AntForest : ModelTask(), EnergyCollectCallback {
     }
 
     override fun check(): Boolean {
+        if (!super.check()) return false
         val currentTime = System.currentTimeMillis()
-        // -----------------------------
-        // 先更新时间状态，保证 IS_ENERGY_TIME 正确
-        // -----------------------------
-        TaskCommon.update()
         // 1️⃣ 异常等待状态
         val forestPauseTime = RuntimeInfo.getInstance().getLong(RuntimeInfo.RuntimeInfoKey.ForestPauseTime)
         if (forestPauseTime > currentTime) {
             Log.record(name + "任务-异常等待中，暂不执行检测！")
-            return false
-        }
-        // 2️⃣ 模块休眠时间
-        if (TaskCommon.IS_MODULE_SLEEP_TIME) {
-            Log.record(TAG, "💤 模块休眠时间【" + BaseModel.modelSleepTime.value + "】停止执行" + name + "任务！")
             return false
         }
         // -----------------------------

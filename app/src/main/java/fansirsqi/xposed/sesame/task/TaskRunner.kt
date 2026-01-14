@@ -58,7 +58,10 @@ class CoroutineTaskRunner(allModels: List<Model>) {
     ) = coroutineScope { // 使用 coroutineScope 创建子作用域
         val startTime = System.currentTimeMillis()
 
-        if (isFirst) resetCounters()
+        if (isFirst) {
+            ApplicationHook.updateDay()
+            resetCounters()
+        }
 
         try {
             Log.record(TAG, "🚀 开始执行任务流程 (并发数: $MAX_CONCURRENCY)")
