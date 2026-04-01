@@ -197,7 +197,7 @@ jobs:
         if: github.event_name == 'release' && github.event.action == 'published'
         uses: softprops/action-gh-release@v2
         with:
-          name: ${{ github.event.release.tag_name || steps.extract_info.outputs.version }}
+          name: ${{ steps.extract_info.outputs.version }}
           files: |
             ${{ steps.extract_apks.outputs.signed_arm64 }}
             ${{ steps.extract_apks.outputs.signed_armv7 }}
@@ -226,7 +226,7 @@ jobs:
       - name: 🔁 Sync Release to Target Repository
         uses: softprops/action-gh-release@v2
         with:
-          name: ${{ github.event.release.tag_name || steps.extract_info.outputs.version }} # 发布的名称。默认为标签名称
+          name: ${{ steps.extract_info.outputs.version }} # 发布的名称。默认为标签名称
           files: |
             ${{ steps.extract_apks.outputs.signed_arm64 }}
             ${{ steps.extract_apks.outputs.signed_armv7 }}
