@@ -1,21 +1,10 @@
 package fansirsqi.xposed.sesame.ui.extension
 
-import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
-import android.graphics.Color
-import android.graphics.drawable.GradientDrawable
 import android.net.Uri
-import android.text.InputType
-import android.view.View
-import android.widget.EditText
-import android.widget.LinearLayout
-import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
-import androidx.core.graphics.toColorInt
 import androidx.core.net.toUri
-import fansirsqi.xposed.sesame.BuildConfig
 import fansirsqi.xposed.sesame.entity.UserEntity
 import fansirsqi.xposed.sesame.ui.SettingActivity
 import fansirsqi.xposed.sesame.ui.WebSettingsActivity
@@ -36,83 +25,6 @@ fun Context.openUrl(url: String) {
     } catch (_: Exception) {
         Toast.makeText(this, "未找到可用的浏览器", Toast.LENGTH_SHORT).show()
     }
-}
-
-/**
- * 扩展函数：带密码验证的执行器
- */
-fun Context.executeWithVerification(action: () -> Unit) {
-    if (BuildConfig.DEBUG) {
-        action()
-    } else {
-        showPasswordDialog(action)
-    }
-}
-
-/**
- * 扩展函数：显示密码对话框
- */
-@SuppressLint("SetTextI18n")
-private fun Context.showPasswordDialog(onSuccess: () -> Unit) {
-    val container = LinearLayout(this).apply {
-        orientation = LinearLayout.VERTICAL
-        setPadding(50, 30, 50, 10)
-    }
-
-    val label = TextView(this).apply {
-        text = "非必要情况无需查看异常日志\n（有困难联系闲鱼卖家帮你处理）"
-        textSize = 16f
-        setTextColor(Color.DKGRAY)
-        setPadding(0, 0, 0, 20)
-        textAlignment = View.TEXT_ALIGNMENT_CENTER
-    }
-
-    val editText = EditText(this).apply {
-        inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-        hint = "请输入密码"
-        setTextColor(Color.BLACK)
-        setHintTextColor(Color.GRAY)
-        setPadding(40, 30, 40, 30)
-        textAlignment = View.TEXT_ALIGNMENT_CENTER
-        background = GradientDrawable().apply {
-            setColor(Color.WHITE)
-            cornerRadii = floatArrayOf(60f, 60f, 60f, 60f, 60f, 60f, 60f, 60f)
-            setStroke(3, Color.LTGRAY)
-        }
-    }
-
-    container.addView(label)
-    container.addView(editText)
-
-    val dialog = AlertDialog.Builder(this)
-        .setTitle("🔐 防呆验证")
-        .setView(container)
-        .setPositiveButton("确定", null)
-        .setNegativeButton("取消") { d, _ -> d.dismiss() }
-        .create()
-
-    dialog.setOnShowListener {
-        dialog.window?.setBackgroundDrawable(GradientDrawable().apply {
-            setColor(Color.WHITE)
-            cornerRadius = 60f
-        })
-
-        dialog.getButton(AlertDialog.BUTTON_POSITIVE).apply {
-            setTextColor("#3F51B5".toColorInt())
-            setOnClickListener {
-                if (editText.text.toString() == "Sesame-TK") {
-                    ToastUtil.showToast(context, "验证成功😊")
-                    onSuccess()
-                    dialog.dismiss()
-                } else {
-                    ToastUtil.showToast(context, "密码错误😡")
-                    editText.text.clear()
-                }
-            }
-        }
-        dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(Color.DKGRAY)
-    }
-    dialog.show()
 }
 
 fun joinQQGroup(context: Context) {
@@ -163,4 +75,3 @@ val UiMode.targetActivity: Class<*>
         UiMode.Web -> WebSettingsActivity::class.java
         UiMode.New -> SettingActivity::class.java
     }
-

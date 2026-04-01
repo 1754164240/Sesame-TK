@@ -5,7 +5,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import fansirsqi.xposed.sesame.ui.extension.WatermarkLayer
 import fansirsqi.xposed.sesame.ui.screen.LogViewerScreen
 import fansirsqi.xposed.sesame.ui.theme.AppTheme
 import fansirsqi.xposed.sesame.ui.theme.ThemeManager
@@ -22,14 +21,12 @@ class LogViewerActivity : ComponentActivity() {
             AppTheme(
                 dynamicColor = isDynamicColor,
             ) {
-                WatermarkLayer {
-                    LogViewerScreen(
-                        filePath = path,
-                        onBackClick = {
-                            finish()
-                        }
-                    )
-                }
+                LogViewerScreen(
+                    filePath = path,
+                    onBackClick = {
+                        finish()
+                    }
+                )
             }
         }
     }

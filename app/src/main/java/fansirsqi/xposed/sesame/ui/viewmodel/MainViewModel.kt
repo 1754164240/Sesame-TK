@@ -52,7 +52,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     companion object {
         const val TAG = "MainViewModel"
-        var verifuids = FansirsqiUtil.getFolderList(Files.CONFIG_DIR.absolutePath)
     }
 
     // 1. 定义状态

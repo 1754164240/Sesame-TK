@@ -46,7 +46,6 @@ import fansirsqi.xposed.sesame.model.ModelFields;
 import fansirsqi.xposed.sesame.model.ModelGroup;
 import fansirsqi.xposed.sesame.model.SelectModelFieldFunc;
 import fansirsqi.xposed.sesame.task.ModelTask;
-import fansirsqi.xposed.sesame.ui.extension.WatermarkInjector;
 import fansirsqi.xposed.sesame.ui.dto.ModelDto;
 import fansirsqi.xposed.sesame.ui.dto.ModelFieldInfoDto;
 import fansirsqi.xposed.sesame.ui.dto.ModelFieldShowDto;
@@ -206,7 +205,6 @@ public class WebSettingsActivity extends BaseActivity {
         for (ModelGroup modelGroup : ModelGroup.values()) {
             groupList.add(new ModelGroupDto(modelGroup.getCode(), modelGroup.getName(), modelGroup.getIcon()));
         }
-        WatermarkInjector.inject(this);
     }
 
 

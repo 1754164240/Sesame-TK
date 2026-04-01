@@ -27,7 +27,6 @@ import fansirsqi.xposed.sesame.model.Model;
 import fansirsqi.xposed.sesame.model.ModelConfig;
 import fansirsqi.xposed.sesame.model.SelectModelFieldFunc;
 import fansirsqi.xposed.sesame.task.ModelTask;
-import fansirsqi.xposed.sesame.ui.extension.WatermarkInjector;
 import fansirsqi.xposed.sesame.ui.model.UiMode;
 import fansirsqi.xposed.sesame.ui.repository.ConfigRepository;
 import fansirsqi.xposed.sesame.ui.adapter.ContentPagerAdapter;
@@ -114,7 +113,6 @@ public class SettingActivity extends BaseActivity {
             setBaseSubtitle(getString(R.string.settings) + ": " + this.userName);
         }
         initializeTabs();
-        WatermarkInjector.inject(this);
     }
 
     private void initializeTabs() {

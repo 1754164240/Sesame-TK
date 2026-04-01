@@ -11,11 +11,9 @@ import fansirsqi.xposed.sesame.data.Config
 import fansirsqi.xposed.sesame.entity.UserEntity
 import fansirsqi.xposed.sesame.model.Model
 import fansirsqi.xposed.sesame.task.customTasks.CustomTask
-import fansirsqi.xposed.sesame.ui.extension.WatermarkLayer
 import fansirsqi.xposed.sesame.ui.screen.ManualTaskScreen
 import fansirsqi.xposed.sesame.ui.theme.AppTheme
 import fansirsqi.xposed.sesame.ui.theme.ThemeManager
-import fansirsqi.xposed.sesame.ui.viewmodel.MainViewModel
 import fansirsqi.xposed.sesame.util.DataStore
 import fansirsqi.xposed.sesame.util.Files
 import fansirsqi.xposed.sesame.util.ToastUtil
@@ -35,12 +33,10 @@ class ManualTaskActivity : ComponentActivity() {
         setContent {
             val isDynamicColor by ThemeManager.isDynamicColor.collectAsStateWithLifecycle()
             AppTheme(dynamicColor = isDynamicColor) {
-                WatermarkLayer(uidList = MainViewModel.verifuids) {
-                    ManualTaskScreen(
-                        onBackClick = { finish() },
-                        onTaskClick = { task, params -> runTask(task, params) }
-                    )
-                }
+                ManualTaskScreen(
+                    onBackClick = { finish() },
+                    onTaskClick = { task, params -> runTask(task, params) }
+                )
             }
         }
     }
@@ -84,7 +80,6 @@ class ManualTaskActivity : ComponentActivity() {
         startActivity(intent)
     }
 }
-
 
 
 
