@@ -3,10 +3,10 @@ package fansirsqi.xposed.sesame.service
 import android.content.Context
 import android.content.pm.PackageManager
 import android.util.Log
-import com.niki.cmd.RootShell
 import com.niki.cmd.Shell
 import com.niki.cmd.ShizukuShell
 import com.niki.cmd.model.bean.ShellResult
+import fansirsqi.xposed.sesame.service.patch.SafeRootShell
 import rikka.shizuku.Shizuku
 
 class ShellManager(context: Context) {
@@ -15,9 +15,11 @@ class ShellManager(context: Context) {
         private const val TAG = "ShellManager"
     }
 
+    var onStateChanged: ((String) -> Unit)? = null
+
     // 1. 移除 UserShell，只保留特权 Shell
     private val executors = listOf(
-        RootShell(),
+        SafeRootShell(),
         ShizukuShell(context)
     )
 
@@ -31,6 +33,13 @@ class ShellManager(context: Context) {
     val selectedName: String
         get() = selectedShell?.javaClass?.simpleName ?: "no_executor"
 
+
+    private fun notifyChange() {
+        val currentType = selectedName // 获取当前类型 (SafeRootShell/Shizuku/no_executor)
+        Log.d(TAG, "Shell状态变更 -> $currentType")
+        onStateChanged?.invoke(currentType)
+    }
+
     /**
      * 2. 新增 reset 方法
      * 用于强制重置选择状态（例如 Shizuku 授权后）
@@ -38,6 +47,7 @@ class ShellManager(context: Context) {
     fun reset() {
         selectedShell = null
         Log.d(TAG, "ShellManager 已重置，下次执行将重新选择 Executor")
+        notifyChange() // 🔥 通知：重置了
     }
 
     private suspend fun selectExecutor() {
@@ -58,6 +68,7 @@ class ShellManager(context: Context) {
 
                 if (shell.isAvailable()) {
                     selectedShell = shell
+                    notifyChange() // 🔥 通知：选中了新 Shell
                     Log.i(TAG, "✅ 成功选中 Shell: ${shell.javaClass.simpleName}")
                     return
                 }
@@ -67,6 +78,7 @@ class ShellManager(context: Context) {
         }
         // 如果都失败了，置空
         selectedShell = null
+        notifyChange() // 🔥 通知：变成 None 了
     }
 
     /**

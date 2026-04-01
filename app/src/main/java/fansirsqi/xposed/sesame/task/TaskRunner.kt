@@ -6,6 +6,7 @@ import fansirsqi.xposed.sesame.hook.ApplicationHook
 import fansirsqi.xposed.sesame.model.BaseModel
 import fansirsqi.xposed.sesame.model.CustomSettings
 import fansirsqi.xposed.sesame.model.Model
+import fansirsqi.xposed.sesame.task.customTasks.ManualTask
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.TimeUtil
 import kotlinx.coroutines.CancellationException
@@ -58,6 +59,12 @@ class CoroutineTaskRunner(allModels: List<Model>) {
     ) = coroutineScope { // 使用 coroutineScope 创建子作用域
         val startTime = System.currentTimeMillis()
 
+        // 【互斥检查】如果手动任务流正在运行，则跳过本次自动执行
+        if (ManualTask.isManualRunning) {
+            Log.record(TAG, "⏸ 检测到“手动庄园任务流”正在运行中，跳过本次自动任务调度")
+            return@coroutineScope
+        }
+
         if (isFirst) {
             ApplicationHook.updateDay()
             resetCounters()
@@ -76,7 +83,13 @@ class CoroutineTaskRunner(allModels: List<Model>) {
             }
 
             if (CustomSettings.onlyOnceDaily.value) {
-                Status.setFlagToday("OnceDaily::Finished")
+                // 确保时间状态是最新的
+                TaskCommon.update()
+                if (TaskCommon.IS_MODULE_SLEEP_TIME) {
+                    Log.record(TAG, "💤 当前处于模块休眠时间，不设置 OnceDaily::Finished 标记")
+                } else {
+                    Status.setFlagToday("OnceDaily::Finished")
+                }
             }
 
         } catch (e: CancellationException) {
@@ -113,6 +126,11 @@ class CoroutineTaskRunner(allModels: List<Model>) {
         // 创建所有任务的 Deferred 对象
         val deferreds = tasksToRun.map { task ->
             async {
+                // 【互斥检查】再次检查手动任务，防止并发启动
+                if (ManualTask.isManualRunning) {
+                     Log.record(TAG, "⏸ 任务 ${task.getName()} 因手动模式启动而中止")
+                     return@async
+                }
                 semaphore.withPermit {
                     executeSingleTask(task, round)
                 }
@@ -192,7 +210,7 @@ class CoroutineTaskRunner(allModels: List<Model>) {
 
     private fun scheduleNext() {
         try {
-            ApplicationHook.scheduleNextExecution()
+            ApplicationHook.scheduleNextExecutionInternal(ApplicationHook.lastExecTime)
             Log.record(TAG, "📅 已调度下次执行")
         } catch (e: Exception) {
             Log.printStackTrace(TAG, "调度失败", e)

@@ -404,7 +404,10 @@ class AntCooperate : ModelTask() {
          * @return 是否为团队
          */
         private fun isTeam(homeObj: JSONObject): Boolean {
-            return homeObj.optString("nextAction", "") == "Team"
+            // 修复逻辑：
+            // 如果 nextAction 是 "Team"，说明当前在个人主页（显示去组队的入口），因此不是团队模式，应返回 false
+            // 如果 nextAction 是 "Cultivate"，说明当前在团队主页（显示去种树的入口），是团队模式，应返回 true
+            return "Team" != homeObj.optString("nextAction", "")
         }
 
         /**

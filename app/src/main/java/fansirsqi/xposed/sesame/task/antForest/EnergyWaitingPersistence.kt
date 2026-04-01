@@ -2,7 +2,7 @@ package fansirsqi.xposed.sesame.task.antForest
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.fasterxml.jackson.core.type.TypeReference
-import fansirsqi.xposed.sesame.newutil.DataStore
+import fansirsqi.xposed.sesame.util.DataStore
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.TimeUtil
 import fansirsqi.xposed.sesame.util.maps.UserMap

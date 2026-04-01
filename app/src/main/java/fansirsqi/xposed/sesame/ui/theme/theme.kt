@@ -263,7 +263,7 @@ fun AppTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     // Dynamic color is available on Android 12+
     dynamicColor: Boolean = false,
-    content: @Composable() () -> Unit
+    content: @Composable () -> Unit
 ) {
     val colorScheme = when {
         dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
@@ -280,20 +280,15 @@ fun AppTheme(
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-
-            // 1. 设置背景透明 (为了兼容 Android 14 及以下版本)
-            // 虽然 Android 15 弃用了，但写了也没事，旧版本必须要有这句
             window.statusBarColor = Color.Transparent.toArgb()
-
-            // 2. 🔥 核心修复：控制图标颜色的“开关”
-            // WindowCompat 是 AndroidX 库，它会自动处理不同安卓版本的兼容性
+            window.navigationBarColor = Color.Transparent.toArgb()
+            // 🔥🔥🔥 核心修复：加上这一行！开启全屏沉浸式 🔥🔥🔥
+            // 这会让 Compose 的背景延伸到状态栏后面，盖住 Window 的白色背景
+            WindowCompat.setDecorFitsSystemWindows(window, false)
             val insetsController = WindowCompat.getInsetsController(window, view)
-
-            // 如果是浅色模式(!darkTheme) -> 设置为 true (状态栏文字变黑)
-            // 如果是深色模式(darkTheme)  -> 设置为 false (状态栏文字变白)
             insetsController.isAppearanceLightStatusBars = !darkTheme
+            insetsController.isAppearanceLightNavigationBars = !darkTheme
         }
-        // 👆👆👆 结束 👆👆👆
     }
 
     MaterialTheme(

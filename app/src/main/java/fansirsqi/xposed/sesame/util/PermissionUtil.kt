@@ -205,7 +205,7 @@ object PermissionUtil {
      */
     private val contextSafely: Context?
         get() = try {
-            if (ApplicationHook.isHooked()) ApplicationHook.getAppContext() else null
+            if (ApplicationHook.isHooked) ApplicationHook.appContext else null
         } catch (_: Exception) {
             null
         }

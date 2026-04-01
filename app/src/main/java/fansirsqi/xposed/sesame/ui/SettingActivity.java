@@ -1,7 +1,5 @@
 package fansirsqi.xposed.sesame.ui;
 
-import static fansirsqi.xposed.sesame.data.UIConfig.UI_OPTION_WEB;
-
 import android.app.AlertDialog;
 import android.content.ClipData;
 import android.content.Intent;
@@ -24,17 +22,17 @@ import java.util.Map;
 
 import fansirsqi.xposed.sesame.R;
 import fansirsqi.xposed.sesame.data.Config;
-import fansirsqi.xposed.sesame.data.UIConfig;
 import fansirsqi.xposed.sesame.entity.AlipayUser;
 import fansirsqi.xposed.sesame.model.Model;
 import fansirsqi.xposed.sesame.model.ModelConfig;
 import fansirsqi.xposed.sesame.model.SelectModelFieldFunc;
-//import fansirsqi.xposed.sesame.newui.WatermarkView;
 import fansirsqi.xposed.sesame.task.ModelTask;
-import fansirsqi.xposed.sesame.ui.compose.WatermarkInjector;
-import fansirsqi.xposed.sesame.ui.widget.ContentPagerAdapter;
+import fansirsqi.xposed.sesame.ui.extension.WatermarkInjector;
+import fansirsqi.xposed.sesame.ui.model.UiMode;
+import fansirsqi.xposed.sesame.ui.repository.ConfigRepository;
+import fansirsqi.xposed.sesame.ui.adapter.ContentPagerAdapter;
 import fansirsqi.xposed.sesame.ui.widget.ListDialog;
-import fansirsqi.xposed.sesame.ui.widget.TabAdapter;
+import fansirsqi.xposed.sesame.ui.adapter.TabAdapter;
 import fansirsqi.xposed.sesame.util.Files;
 import fansirsqi.xposed.sesame.util.LanguageUtil;
 import fansirsqi.xposed.sesame.util.Log;
@@ -207,16 +205,12 @@ public class SettingActivity extends BaseActivity {
                 ListDialog.show(this, "单向好友列表", AlipayUser.getList(user -> user.getFriendStatus() != 1), SelectModelFieldFunc.newMapInstance(), false, ListDialog.ListType.SHOW);
                 break;
             case 5: // 切换到新 UI
-                UIConfig.INSTANCE.setUiOption(UI_OPTION_WEB);
-                if (UIConfig.save()) {
-                    Intent intent = new Intent(this, UIConfig.INSTANCE.getTargetActivityClass());
-                    intent.putExtra("userId", this.userId);
-                    intent.putExtra("userName", this.userName);
-                    finish();
-                    startActivity(intent);
-                } else {
-                    ToastUtil.INSTANCE.makeText(this, "切换失败", Toast.LENGTH_SHORT).show();
-                }
+                ConfigRepository.INSTANCE.setUiMode(UiMode.Web);
+                Intent intent = new Intent(this, WebSettingsActivity.class);
+                intent.putExtra("userId", userId);
+                intent.putExtra("userName", userName);
+                finish();
+                startActivity(intent);
                 break;
             case 6:
                 save();

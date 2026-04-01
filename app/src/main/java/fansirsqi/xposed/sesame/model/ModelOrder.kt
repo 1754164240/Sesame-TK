@@ -21,12 +21,12 @@ object ModelOrder {
         AntForest::class.java,       // 森林
         AntFarm::class.java,         // 庄园
         AntOcean::class.java,        // 海洋
-        AntOrchard::class.java,    // 农场
         AntStall::class.java,      // 蚂蚁新村
         AntDodo::class.java,       // 神奇物种
         AntCooperate::class.java,    // 合种
-        AntSports::class.java,       // 运动
         AntMember::class.java,     // 会员
+        AntOrchard::class.java,    // 农场
+        AntSports::class.java,       // 运动
         EcoProtection::class.java,     // 古树
         GreenFinance::class.java,  // 绿色经营
         Reserve::class.java,       // 保护地

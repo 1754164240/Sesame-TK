@@ -186,7 +186,7 @@ object HookUtil {
     }
 
     /**
-     * 突破支付宝最大可登录账号数量限制
+     * 突破目标应用最大可登录账号数量限制
      * @param classLoader 类加载器
      */
     fun fuckAccounLimit(classLoader: ClassLoader) {

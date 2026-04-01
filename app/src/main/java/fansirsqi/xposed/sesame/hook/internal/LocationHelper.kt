@@ -1,7 +1,7 @@
 package fansirsqi.xposed.sesame.hook.internal
 
 import de.robv.android.xposed.XposedHelpers
-import fansirsqi.xposed.sesame.newutil.DataStore
+import fansirsqi.xposed.sesame.util.DataStore
 import fansirsqi.xposed.sesame.util.Log
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
@@ -61,7 +61,7 @@ object LocationHelper {
                 saveLocationToDataStore(locationMap)
                 JSONObject(locationMap)
             } else {
-                createAndSaveError("等待支付宝初始化中...")
+                createAndSaveError("等待目标应用初始化中...")
             }
         } catch (e: Throwable) {
             Log.error(TAG, "获取经纬度异常: ${e.message}")

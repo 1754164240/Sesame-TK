@@ -332,7 +332,7 @@ public class AntFarmRpcCall {
             // 标准的md5加密后的结果
             return buffer.toString();
         } catch (NoSuchAlgorithmException e) {
-            e.printStackTrace();
+            Log.printStackTrace(e);
             return "";
         }
     }
@@ -397,10 +397,25 @@ public class AntFarmRpcCall {
     }
 
     public static String useFarmFood(String cookbookId, String cuisineId) {
-        return RequestManager.requestString("com.alipay.antfarm.useFarmFood",
-                "[{\"cookbookId\":\"" + cookbookId + "\",\"cuisineId\":\"" + cuisineId
-                        + "\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ANTFARM\",\"source\":\"chInfo_ch_appcenter__chsub_9patch\",\"useCuisine\":true,\"version\":\""
-                        + VERSION + "\"}]");
+//        return RequestManager.requestString("com.alipay.antfarm.useFarmFood",
+//                "[{\"cookbookId\":\"" + cookbookId + "\",\"cuisineId\":\"" + cuisineId
+//                        + "\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ANTFARM\",\"source\":\"chInfo_ch_appcenter__chsub_9patch\",\"useCuisine\":true,\"version\":\""
+//                        + VERSION + "\"}]");
+        try {
+            JSONObject args = new JSONObject();
+            args.put("cookbookId", cookbookId);
+            args.put("cuisineId", cuisineId);
+            args.put("requestType", "NORMAL");
+            args.put("sceneCode", "ANTFARM");
+            args.put("canMock", true);
+            args.put("source", "chInfo_ch_appcenter__chsub_9patch");
+            args.put("useCuisine", true);
+            args.put("version", VERSION);
+            String params = "[" + args + "]";
+            return RequestManager.requestString("com.alipay.antfarm.useFarmFood", params);
+        } catch (JSONException e) {
+            return "";
+        }
     }
 
     public static String collectKitchenGarbage() {
@@ -522,21 +537,175 @@ public class AntFarmRpcCall {
                 "[{\"friendFarmId\":\"" + farmId + "\",\"hireActionType\":\"HIRE_IN_FRIEND_FARM\",\"hireAnimalId\":\"" + animalId + "\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ANTFARM\",\"sendCardChat\":false,\"source\":\"H5\",\"version\":\"" + VERSION + "\"}]");
     }
 
+    /**
+     * 雇佣NPC小鸡（修复版：支持传入source）
+     * @param animalId 动物ID
+     * @param source 请求来源，如 "zhimaxiaoji_lianjin"
+     */
+    public static String hireNpcAnimal(String animalId, String source) throws JSONException {
+        JSONObject args = new JSONObject();
+        args.put("hireActionType", "HIRE_IN_SELF_FARM");
+        args.put("hireAnimalId", animalId);
+        args.put("isNpcAnimal", true);
+        args.put("requestType", "NORMAL");
+        args.put("sceneCode", "ANTFARM");
+        args.put("source", source);
+        args.put("version", VERSION);
+        return RequestManager.requestString("com.alipay.antfarm.hireAnimal", "[" + args + "]");
+    }
+
+    /**
+     * 遣返NPC小鸡（领取奖励）
+     */
+    public static String sendBackNpcAnimal(String animalId, String currentFarmId, String masterFarmId) throws JSONException {
+        JSONObject args = new JSONObject();
+        args.put("animalId", animalId);
+        args.put("currentFarmId", currentFarmId);
+        args.put("masterFarmId", masterFarmId);
+        args.put("receiveNPCReward", true); // 关键参数：领取奖励
+        args.put("requestType", "NORMAL");
+        args.put("sceneCode", "ANTFARM");
+        args.put("sendType", "NORMAL");
+        args.put("source", "H5");
+        args.put("version", VERSION);
+        return RequestManager.requestString("com.alipay.antfarm.sendBackAnimal", "[" + args + "]");
+    }
+
+    /**
+     * 获取芝麻NPC任务列表  大表哥
+     */
+    public static String listZhimaNpcFarmTask() {
+        String args = "[{\"requestType\":\"NORMAL\",\"sceneCode\":\"ANTFARM\",\"source\":\"zhimaxiaoji_lianjin\",\"taskSceneCode\":\"ANTFARM_ZHIMA_NPC_TASK\",\"version\":\"" + VERSION + "\"}]";
+        return RequestManager.requestString("com.alipay.antfarm.listFarmTask", args);
+    }
+
+    /**
+     * 领取芝麻NPC任务奖励
+     */
+    public static String receiveZhimaNpcFarmTaskAward(String taskId) {
+        String args = "[{\"requestType\":\"NORMAL\",\"sceneCode\":\"ANTFARM\",\"source\":\"zhimaxiaoji_lianjin\",\"taskId\":\"" + taskId + "\",\"taskSceneCode\":\"ANTFARM_ZHIMA_NPC_TASK\",\"version\":\"" + VERSION + "\"}]";
+        return RequestManager.requestString("com.alipay.antfarm.receiveFarmTaskAward", args);
+    }
+
     public static String DrawPrize() {
         return RequestManager.requestString("com.alipay.antfarm.DrawPrize",
                 "[{\"requestType\":\"RPC\",\"sceneCode\":\"ANTFARM\",\"source\":\"chouchoule\"}]");
     }
 
-
-
-    public static String drawGameCenterAward() {
-        return RequestManager.requestString("com.alipay.antfarm.drawGameCenterAward",
-                "[{\"requestType\":\"NORMAL\",\"sceneCode\":\"ANTFARM\",\"source\":\"H5\",\"version\":\"" + VERSION + "\"}]");
+    /**
+     * 获取黄金小鸡任务列表
+     * 对应日志中的 taskSceneCode: "ANTFARM_CAIFU_NPC_TASK"
+     */
+    public static String listGoldChickenFarmTask() {
+        String args = "[{\"requestType\":\"NORMAL\",\"sceneCode\":\"ANTFARM\",\"source\":\"H5\",\"taskSceneCode\":\"ANTFARM_CAIFU_NPC_TASK\",\"version\":\"" + VERSION + "\"}]";
+        return RequestManager.requestString("com.alipay.antfarm.listFarmTask", args);
     }
 
+    /**
+     * 领取黄金小鸡任务奖励 (新增)
+     * taskSceneCode: ANTFARM_CAIFU_NPC_TASK
+     */
+    public static String receiveGoldChickenTaskAward(String taskId) {
+        String args = "[{\"requestType\":\"NORMAL\",\"sceneCode\":\"ANTFARM\",\"source\":\"H5\",\"taskId\":\"" + taskId + "\",\"taskSceneCode\":\"ANTFARM_CAIFU_NPC_TASK\",\"version\":\"" + VERSION + "\"}]";
+        return RequestManager.requestString("com.alipay.antfarm.receiveFarmTaskAward", args);
+    }
+
+    /**
+     * 理财体验金：查询活动首页
+     */
+    public static String lctyj2025PromoIndex() {
+        String args = "[{\"blockFeature\":{},\"isAdoutterPos\":\"N\",\"pageType\":\"normal\"}]";
+        // 注意：headers 需要根据实际抓包补充，这里简化处理，通常 RPC 框架会自动处理 headers
+        return RequestManager.requestString("com.alipay.fundscenebff.needle.lctyj2025.promoIndex", args);
+    }
+
+    /**
+     * 理财体验金：开启体验计划
+     */
+    public static String lctyj2025OpenPlan() {
+        // 构造模拟的请求数据，基于日志分析
+        // 关键参数：conditionType, userPurchaseAmount, payChannelIndex
+        String args = "[{" +
+                "\"conditionType\":\"STABLE_AND_EQUITY_BUY_ONE_POSITIVE_PROFIT\"," +
+                "\"context\":{" +
+                "\"AuthenticationType\":\"PASSWORD\"," +
+                "\"payChannelFullName\":\"余额宝\"," +
+                "\"payChannelIndex\":\"[\\\"FUND_DC_MONEYFUND_DEFAULT_ALIPAY_NULL\\\"]\"," +
+                "\"payChannelType\":\"MONEYFUND\"," +
+                "\"userPurchaseAmount\":\"10\"" +
+                "}," +
+                "\"mismatch\":\"AGREE_MISMATCH\"," +
+                "\"needCreatePackage\":true," +
+                "\"packageType\":\"bigAmountCamp\"" +
+                "}]";
+        return RequestManager.requestString("com.alipay.fundscenebff.needle.lctyj2025.openPlan", args);
+    }
+
+    /**
+     * 黄金票任务：模拟进入黄金攒存页面（仅查询，不涉及交易）
+     */
+    public static String queryGoldCollectionV2() {
+        String args = "[{\"pageSize\":10,\"queryType\":\"CREATE_PLAN\",\"specifyGram\":\"2\",\"subQueryType\":\"MAKE_PLAN\"}]";
+        return RequestManager.requestString("com.alipay.ficcbffweb.gold.collectionV2.query", args);
+    }
+
+    /**
+     * 获取农场小鸡(肥料鸡)任务列表
+     * source: feiliaoji_202507
+     * taskSceneCode: ANTFARM_ORCHARD_NPC_TASK
+     */
+    public static String listFarmChickenFarmTask() {
+        String args = "[{\"requestType\":\"NORMAL\",\"sceneCode\":\"ANTFARM\",\"source\":\"feiliaoji_202507\",\"taskSceneCode\":\"ANTFARM_ORCHARD_NPC_TASK\",\"version\":\"" + VERSION + "\"}]";
+        return RequestManager.requestString("com.alipay.antfarm.listFarmTask", args);
+    }
+
+    /**
+     * 领取农场小鸡任务奖励
+     * awardType: NPC_ANIMAL_FOOD
+     */
+    public static String receiveFarmChickenTaskAward(String taskId) {
+        String args = "[{\"awardType\":\"NPC_ANIMAL_FOOD\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ANTFARM\",\"source\":\"feiliaoji_202507\",\"taskId\":\"" + taskId + "\",\"taskSceneCode\":\"ANTFARM_ORCHARD_NPC_TASK\",\"version\":\"" + VERSION + "\"}]";
+        return RequestManager.requestString("com.alipay.antfarm.receiveFarmTaskAward", args);
+    }
+
+    /**
+     * 领取蚂蚁庄园游戏中心奖励 (开宝箱)
+     * @param drawTimes 开启次数
+     */
+    public static String drawGameCenterAward(int drawTimes) {
+        return RequestManager.requestString("com.alipay.antfarm.drawGameCenterAward",
+                "[{" +
+                        "  \"drawTimes\": " + drawTimes + "," +
+                        "  \"requestType\": \"NORMAL\"," +
+                        "  \"sceneCode\": \"ANTFARM\"," +
+                        "  \"source\": \"H5\"," +
+                        "  \"version\": \"" + VERSION + "\"" +
+                        "}]");
+    }
+
+
+    /**
+     * 查询游戏列表 (如：蚂蚁农场、庄园等)
+     * 对应 methodName: com.alipay.charitygamecenter.queryGameList
+     */
     public static String queryGameList() {
-        return RequestManager.requestString("com.alipay.antfarm.queryGameList",
-                "[{\"commonDegradeResult\":{\"deviceLevel\":\"high\",\"resultReason\":0,\"resultType\":0},\"platform\":\"Android\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ANTFARM\",\"source\":\"H5\",\"version\":\"" + VERSION + "\"}]");
+        // 按照你提供的 JSON 结构进行字符串拼接
+        // 注意：requestData 是一个数组，内部包含一个对象
+        String data = "[{" +
+                "\"bizType\":\"ANTFARM\"," +
+                "\"commonDegradeFilterRequest\":{" +
+                "\"deviceLevel\":\"high\"," +
+                "\"platform\":\"Android\"," +
+                "\"unityDeviceLevel\":\"high\"" +
+                "}," +
+                "\"recentAppRecordList\":[]," +
+                "\"requestType\":\"NORMAL\"," +
+                "\"sceneCode\":\"ANTFARM\"," +
+                "\"source\":\"H5\"," +
+                "\"version\":\"" + VERSION + "\"" +
+                "}]";
+
+        return RequestManager.requestString("com.alipay.charitygamecenter.queryGameList", data);
     }
 
     // 小鸡换装
@@ -832,13 +1001,13 @@ public class AntFarmRpcCall {
         String taskSceneCode = "dailyDraw".equals(drawType) ?
                 "ANTFARM_DAILY_DRAW_TASK" : "ANTFARM_IP_DRAW_TASK";
         String awardType = "dailyDraw".equals(drawType) ?
-                "DAILY_DRAW_TIMES" : "FAMILY_DRAW_TIME";
+                "DAILY_DRAW_TIMES" : "IP_DRAW_MACHINE_DRAW_TIMES";
 
         JSONObject args = new JSONObject();
         args.put("awardType", awardType);
         args.put("requestType", "RPC");
         args.put("sceneCode", "ANTFARM");
-        args.put("source", "icon");
+        args.put("source", "antfarm_villa");
         args.put("taskId", taskId);
         args.put("taskSceneCode", taskSceneCode);
         String params = "[" + args + "]";
@@ -859,8 +1028,7 @@ public class AntFarmRpcCall {
                         + "\"requestType\":\"RPC\","
                         + "\"scene\":\"" + scene + "\","
                         + "\"sceneCode\":\"ANTFARM\","
-                        + "\"source\":\"icon\"}]"
-        );
+                        + "\"source\":\"antfarm_villa\"}]");
     }
 
     /**
@@ -869,19 +1037,46 @@ public class AntFarmRpcCall {
      * @return 返回结果JSON字符串
      */
     public static String drawMachineIP() {
-        return RequestManager.requestString("com.alipay.antfarm.drawMachine",
-                "[{\"requestType\":\"RPC\",\"scene\":\"ipDrawMachine\",\"sceneCode\":\"ANTFARM\",\"source\":\"ip_ccl\"}]");
+        return drawMachineIP(1);
+    }
+
+    /**
+     * 执行抽奖（IP抽抽乐）- 支持连抽
+     * @param batchDrawTimes 连抽次数
+     * @return 返回结果JSON字符串
+     */
+    public static String drawMachineIP(int batchDrawTimes) {
+        String data = "[{"
+                + "\"batchDrawTimes\":" + batchDrawTimes + ","
+                + "\"requestType\":\"RPC\","
+                + "\"scene\":\"ipDrawMachine\","
+                + "\"sceneCode\":\"ANTFARM\","
+                + "\"source\":\"antfarm_villa\""
+                + "}]";
+
+        return RequestManager.requestString("com.alipay.antfarm.drawMachine", data);
     }
 
     /**
      * 执行抽奖（普通抽抽乐）
-     *
      * @param activityId 活动ID
      * @return 返回结果JSON字符串
      */
     public static String drawMachineDaily(String activityId) {
-        return RequestManager.requestString("com.alipay.antfarm.drawMachine",
-                "[{\"activityId\":\"" + activityId + "\",\"requestType\":\"RPC\",\"scene\":\"dailyDrawMachine\",\"sceneCode\":\"ANTFARM\",\"source\":\"icon\"}]");
+        return drawMachineDaily(1);
+    }
+    public static String drawMachineDaily(int batchDrawTimes) {
+        // 构造请求数据，完全匹配日志中的字段
+        String data = "[{"
+                + "\"batchDrawTimes\":" + batchDrawTimes + ","
+                + "\"requestType\":\"RPC\","
+                + "\"scene\":\"dailyDrawMachine\","
+                + "\"sceneCode\":\"ANTFARM\","
+                + "\"source\":\"antfarm_villa\""  //siliaorenwu  庄园首页抽一次抽抽乐获得饲料任务
+                + "}]";
+
+        // 使用 RequestManager 发送请求
+        return RequestManager.requestString("com.alipay.antfarm.drawMachine", data);
     }
 
     /**
@@ -989,28 +1184,27 @@ public class AntFarmRpcCall {
                 "[{\"requestType\":\"NORMAL\",\"sceneCode\":\"ANTFARM\",\"source\":\"H5\"}]");
     }
 
-
-
     /**
-     * 查询物品列表（蚂蚁庄园装修商城）
-     *
-     * @param labelType  标签类型（如 recentlyAdded）
-     * @param pageSize   每页数量
-     * @param startIndex 起始索引
-     * @return 返回结果JSON字符串
+     * 装修金商城 - 分页查询家具列表
      */
-    public static String getItemList(String labelType, int pageSize, int startIndex) {
-        String data="[{\"activityId\":\"20250808\"," +
-                "\"labelType\":\"" + labelType + "\"," +
-                "\"pageSize\":" + pageSize + "," +
-                "\"requestType\":\"NORMAL\"," +
-                "\"sceneCode\":\"ANTFARM_FITMENT_MALL\"," +
-                "\"source\":\"antfarm\"," +
-                "\"startIndex\":" + startIndex + "}]";
-        return RequestManager.requestString("com.alipay.antiep.itemList",data);
+    public static String getFitmentItemList(String activityId, int pageSize, String labelType, int startIndex) {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("activityId", activityId);
+            if (labelType != null && !labelType.isEmpty()) {
+                args.put("labelType", labelType);
+            }
+            args.put("pageSize", pageSize);
+            args.put("requestType", "NORMAL");
+            args.put("sceneCode", "ANTFARM_FITMENT_MALL");
+            args.put("source", "antfarm");
+            args.put("startIndex", startIndex);
 
+            return RequestManager.requestString("com.alipay.antiep.itemList", "[" + args + "]");
+        } catch (Exception e) {
+            return "";
+        }
     }
-
 
     /**
      * 查询道具详情
@@ -1027,24 +1221,33 @@ public class AntFarmRpcCall {
     }
 
     /**
-     * 兑换装扮或利益点
-     *
-     * @param spuId 标准产品单元ID
-     * @param skuId 库存保持单位ID
-     * @return 返回结果JSON字符串
+     * 兑换庄园家具
      */
-    public static String exchangeBenefit(String spuId, String skuId) {
+    public static String exchangeBenefit(String spuId, String skuId, String activityId) {
         String requestId = generateRequestId();
-        return RequestManager.requestString("com.alipay.antcommonweal.exchange.h5.exchangeBenefit",
-                "[{" +
-                        "\"context\":{\"activityId\":\"20250808\"}," +
-                        "\"requestId\":\"" + requestId + "\"," +
-                        "\"requestType\":\"NORMAL\"," +
-                        "\"sceneCode\":\"ANTFARM_FITMENT_MALL\"," +
-                        "\"skuId\":\"" + skuId + "\"," +
-                        "\"source\":\"H5\"," +
-                        "\"spuId\":\"" + spuId + "\"" +
-                        "}]");
+        try {
+            JSONObject requestDataItem = new JSONObject();
+
+            JSONObject context = new JSONObject();
+            context.put("activityId", activityId);
+
+            requestDataItem.put("context", context);
+            requestDataItem.put("requestId", requestId);
+            requestDataItem.put("requestType", "NORMAL");
+            requestDataItem.put("sceneCode", "ANTFARM_FITMENT_MALL");
+            requestDataItem.put("skuId", skuId);
+            requestDataItem.put("source", "H5");
+            requestDataItem.put("spuId", spuId);
+
+            JSONArray requestData = new JSONArray().put(requestDataItem);
+            return RequestManager.requestString(
+                    "com.alipay.antcommonweal.exchange.h5.exchangeBenefit",
+                    requestData.toString()
+            );
+        } catch (JSONException e) {
+            Log.printStackTrace("exchangeBenefit Error", e);
+            return "";
+        }
     }
 
     /**
@@ -1085,11 +1288,60 @@ public class AntFarmRpcCall {
         return RequestManager.requestString("com.alipay.antfarm.listFarmTask", args);
     }
 
+    /**
+     * 查询物品列表（ip抽抽乐）
+     *
+     * @param activityId 活动ID（如图片中的 ipDrawMachine_260112）
+     * @param pageSize   每页数量 * @param startIndex 起始索引
+     * @return 返回结果JSON字符串
+     */
+    public static String getItemList(String activityId, int pageSize, int startIndex) {
+        String data = "[{" +
+                "\"activityId\":\"" + activityId + "\"," +
+                "\"pageSize\":" + pageSize + "," +
+                "\"requestType\":\"RPC\"," +
+                "\"sceneCode\":\"ANTFARM_IP_DRAW_MALL\"," +
+                "\"source\":\"antfarm.villa\"," +
+                "\"startIndex\":" + startIndex + "}]";
+        return RequestManager.requestString("com.alipay.antiep.itemList", data);
+    }
 
+    /**
+     * ip抽抽乐兑换装扮
+     *
+     * @param spuId      标准产品单元ID
+     * @param skuId      库存保持单位ID
+     * @param activityId 活动ID (例如: ipDrawMachine_260112)
+     * @param sceneCode  场景代码 (例如: ANTFARM_IP_DRAW_MALL)
+     * @param source     来源
+     * @return 返回结果JSON字符串
+     */
+    public static String exchangeBenefit(String spuId, String skuId, String activityId, String sceneCode,
+            String source) {
+        String requestId = generateRequestId();
+        try {
+            JSONObject requestDataItem = new JSONObject();
 
+            JSONObject context = new JSONObject();
+            context.put("activityId", activityId);
 
+            requestDataItem.put("context", context);
+            requestDataItem.put("requestId", requestId);
+            requestDataItem.put("requestType", "RPC");
+            requestDataItem.put("sceneCode", sceneCode);
+            requestDataItem.put("skuId", skuId);
+            requestDataItem.put("source", source);
+            requestDataItem.put("spuId", spuId);
+            JSONArray requestData = new JSONArray().put(requestDataItem);
 
-
-
+            return RequestManager.requestString(
+                    "com.alipay.antcommonweal.exchange.h5.exchangeBenefit",
+                    requestData.toString()
+            );
+        } catch (JSONException e) {
+            Log.printStackTrace("exchangeBenefit Error", e);
+            return "";
+        }
+    }
 
 }

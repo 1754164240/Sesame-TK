@@ -141,7 +141,6 @@ object Files {
                 Log.printStackTrace(TAG, "Failed to create file: ${targetFile.name}", e)
             }
         } else {
-            val canRead = targetFile.canRead()
             val canWrite = targetFile.canWrite()
 //            Log.record(TAG, "$fullTargetFileName permissions: r=$canRead; w=$canWrite")
             if (!canWrite) {
@@ -168,7 +167,6 @@ object Files {
                 Log.printStackTrace(TAG, "Failed to create file: ${targetFile.absolutePath}",e)
             }
         } else {
-            val canRead = targetFile.canRead()
             val canWrite = targetFile.canWrite()
 //            Log.record(TAG, "File permissions for ${targetFile.absolutePath}: r=$canRead; w=$canWrite")
             if (!canWrite) {
@@ -180,12 +178,6 @@ object Files {
             }
         }
         return targetFile
-    }
-
-    @JvmStatic
-    @Synchronized
-    fun setTargetFileofDir(content: String, targetFileName: File): Boolean {
-        return write2File(content, targetFileName)
     }
 
     @JvmStatic
@@ -209,18 +201,8 @@ object Files {
     }
 
     @JvmStatic
-    fun getStatisticsFile(): File {
-        return getTargetFileofDir(MAIN_DIR, "statistics.json")
-    }
-
-    @JvmStatic
     fun getFriendWatchFile(userId: String): File? {
         return getTargetFileofUser(userId, "friendWatch.json")
-    }
-
-    @JvmStatic
-    fun getappConfigFile(): File {
-        return getTargetFileofDir(CONFIG_DIR, "appConfig.json")
     }
 
     @JvmStatic
@@ -236,7 +218,7 @@ object Files {
 
         val fileName = file.name
         val dotIndex = fileName.lastIndexOf('.')
-        val fileNameWithoutExtension = if (dotIndex != -1) fileName.substring(0, dotIndex) else fileName
+        val fileNameWithoutExtension = if (dotIndex != -1) fileName.take(dotIndex) else fileName
         val fileExtension = if (dotIndex != -1) fileName.substring(dotIndex) else ""
 
         val newFileName = if (hasTime) {
@@ -257,7 +239,7 @@ object Files {
         }
         if (!copy(file, exportFile)) {
             Log.error(TAG, "Failed to copy file: ${file.absolutePath} to ${exportFile.absolutePath}")
-            return null;
+            return null
         }
         return exportFile
     }
@@ -299,9 +281,6 @@ object Files {
     fun getLogFile(logName: String): String {
         return "$logName.log"
     }
-
-    @JvmStatic
-    fun getRuntimeLogFile(): File = ensureLogFile(getLogFile("runtime"))
 
     @JvmStatic
     fun getRecordLogFile(): File = ensureLogFile(getLogFile("record"))
@@ -469,10 +448,7 @@ object Files {
             return deleteFileWithRetry(file)
         }
 
-        val files = file.listFiles()
-        if (files == null) {
-            return deleteFileWithRetry(file)
-        }
+        val files = file.listFiles() ?: return deleteFileWithRetry(file)
 
         var allSuccess = true
         for (innerFile in files) {

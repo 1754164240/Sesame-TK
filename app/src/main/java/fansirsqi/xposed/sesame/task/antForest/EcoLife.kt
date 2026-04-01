@@ -3,8 +3,8 @@ package fansirsqi.xposed.sesame.task.antForest
 import com.fasterxml.jackson.core.type.TypeReference
 import fansirsqi.xposed.sesame.data.Status
 import fansirsqi.xposed.sesame.hook.Toast
-import fansirsqi.xposed.sesame.newutil.DataStore
-import fansirsqi.xposed.sesame.newutil.DataStore.put
+import fansirsqi.xposed.sesame.util.DataStore
+import fansirsqi.xposed.sesame.util.DataStore.put
 import fansirsqi.xposed.sesame.util.JsonUtil
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.RandomUtil

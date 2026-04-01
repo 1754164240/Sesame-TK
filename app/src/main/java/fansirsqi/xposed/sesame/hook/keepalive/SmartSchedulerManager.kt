@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.os.PowerManager
 import fansirsqi.xposed.sesame.util.Log
+import fansirsqi.xposed.sesame.util.TimeUtil
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -30,10 +31,19 @@ object SmartSchedulerManager {
     private const val WAKELOCK_TAG = "Sesame:SchedulerLock"
 
     // 独立的协程作用域，使用 SupervisorJob 确保单个任务崩溃不影响其他任务
-    private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+    // 改为可重新创建
+    private var _scope: CoroutineScope? = null
+    private val scope: CoroutineScope
+        get() {
+            val s = _scope
+            if (s != null && s.isActive) return s
+            return CoroutineScope(Dispatchers.Default + SupervisorJob()).also { _scope = it }
+        }
 
     // 管理所有正在运行的任务 Job，用于取消
     private val taskMap = ConcurrentHashMap<Int, Job>()
+    // 命名任务映射，用于自动替换同名任务，防止重复调度逻辑堆积
+    private val namedTasks = ConcurrentHashMap<String, Int>()
     private val taskIdGenerator = AtomicInteger(0)
 
     @SuppressLint("StaticFieldLeak")
@@ -44,7 +54,8 @@ object SmartSchedulerManager {
     private var isInitialized = false
 
     fun initialize(context: Context) {
-        if (isInitialized) return
+        // 即使已初始化，如果 scope 被取消了也要允许恢复
+        if (isInitialized && _scope?.isActive == true) return
         try {
             val appContext = context.applicationContext ?: context
             powerManager = appContext.getSystemService(Context.POWER_SERVICE) as PowerManager
@@ -58,7 +69,7 @@ object SmartSchedulerManager {
     /**
      * 调度任务
      * @param delayMillis 延迟毫秒数
-     * @param taskName 任务名称（用于日志）
+     * @param taskName 任务名称（用于日志和覆盖旧任务）
      * @param block 要执行的代码块
      * @return 任务ID，可用于取消
      */
@@ -68,18 +79,25 @@ object SmartSchedulerManager {
             return -1
         }
 
+        // 自动替换同名任务，防止竞争导致的调度混乱
+        namedTasks[taskName]?.let { oldTaskId ->
+            cancelTask(oldTaskId)
+        }
+
         val taskId = taskIdGenerator.incrementAndGet()
+        namedTasks[taskName] = taskId
+
+        val finalDelay = if (delayMillis < 0) 0L else delayMillis
 
         // 启动协程
         val job = scope.launch {
-            // 获取 WakeLock
-            val wakeLock = acquireWakeLock(delayMillis + 2000) // 多申请2秒余量
-            Log.record(TAG, "⏳ 任务调度: [$taskName] | ID:$taskId | 延迟: ${delayMillis / 1000}s")
+            val wakeLock = acquireWakeLock(finalDelay + 5000)
+            Log.record(TAG, "⏳ 任务调度: [$taskName] | ID:$taskId | 延迟: ${TimeUtil.formatDuration(finalDelay)}")
+            Log.record( ">".repeat(40))
 
             try {
                 // 核心：在 WakeLock 保护下进行挂起
-                // 即使屏幕关闭，CPU 也会保持唤醒，delay 时间是准确的
-                delay(delayMillis)
+                delay(finalDelay)
 
                 if (isActive) {
                     Log.record(TAG, "▶️ 开始执行: [$taskName] | ID:$taskId")
@@ -98,6 +116,9 @@ object SmartSchedulerManager {
                 // 释放锁和清理 Map
                 releaseWakeLock(wakeLock)
                 taskMap.remove(taskId)
+                if (namedTasks[taskName] == taskId) {
+                    namedTasks.remove(taskName)
+                }
             }
         }
 
@@ -110,6 +131,7 @@ object SmartSchedulerManager {
      */
     fun cancelTask(taskId: Int) {
         taskMap[taskId]?.cancel()
+        taskMap.remove(taskId)
     }
 
     /**
@@ -119,6 +141,7 @@ object SmartSchedulerManager {
         Log.record(TAG, "正在取消所有任务...")
         taskMap.values.forEach { it.cancel() }
         taskMap.clear()
+        namedTasks.clear()
     }
 
     /**
@@ -149,7 +172,8 @@ object SmartSchedulerManager {
     }
 
     fun cleanup() {
-        scope.cancel() // 取消整个作用域
+        _scope?.cancel()
+        _scope = null
         cancelAll()
     }
 }

@@ -8,10 +8,12 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.os.IBinder
+import android.os.RemoteCallbackList
 import android.os.RemoteException
 import androidx.core.app.NotificationCompat
 import fansirsqi.xposed.sesame.ICallback
 import fansirsqi.xposed.sesame.ICommandService
+import fansirsqi.xposed.sesame.IStatusListener
 import fansirsqi.xposed.sesame.R
 import fansirsqi.xposed.sesame.ui.MainActivity
 import fansirsqi.xposed.sesame.util.Log
@@ -44,6 +46,11 @@ class CommandService : Service() {
         private const val COMMAND_TIMEOUT_MS = 15000L
     }
 
+    /**
+     * 用于管理跨进程回调的列表
+     */
+    private val listeners = RemoteCallbackList<IStatusListener>()
+
     // 使用 SupervisorJob，确保单个任务崩溃不影响整个作用域
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val commandMutex = Mutex()
@@ -57,7 +64,6 @@ class CommandService : Service() {
                 commandMutex.withLock {
                     try {
                         ensureShellManager()
-
                         // 优化: 如果 ShellManager 依然没有 Shell，尝试重置一下（应对 Shizuku 刚授权的情况）
                         if (shellManager?.selectedName == "no_executor") {
                             shellManager?.reset()
@@ -88,36 +94,62 @@ class CommandService : Service() {
             }
         }
 
-        override fun getShellType(): String {
-            // 尝试初始化以便获取最新状态
-            if (shellManager == null) {
-                // 不要在主线程初始化 ShellManager，这里仅返回当前状态
-                return "Initializing..."
-            }
-            return shellManager?.selectedName ?: "Uninitialized"
+
+        /**
+         * 实现注册
+         */
+        override fun registerListener(listener: IStatusListener?) {
+            listeners.register(listener)
+            // 💡 注册时立即回调一次当前状态，防止客户端状态不同步
+            listener?.onStatusChanged(shellManager?.selectedName)
+        }
+
+        /**
+         * 实现注销
+         */
+        override fun unregisterListener(listener: IStatusListener?) {
+            listeners.unregister(listener)
         }
     }
+
     @SuppressLint("ForegroundServiceType")
     override fun onCreate() {
         super.onCreate()
-        Log.d(TAG, "CommandService onCreate")
 
+        Log.d(TAG, "CommandService onCreate")
         // 立即启动前台服务，避免超时
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, createNotification())
-
         // 延迟初始化 ShellManager（不阻塞前台服务启动）
         serviceScope.launch {
             try {
                 ensureShellManager()
+                shellManager?.onStateChanged = { newType ->
+                    dispatchStatusChange(newType)
+                }
             } catch (e: Exception) {
                 Log.e(TAG, "ShellManager 初始化失败", e)
             }
         }
     }
 
+    /**
+     * 分发状态给所有客户端
+     */
+    private fun dispatchStatusChange(type: String) {
+        val count = listeners.beginBroadcast()
+        for (i in 0 until count) {
+            try {
+                listeners.getBroadcastItem(i).onStatusChanged(type)
+            } catch (e: Exception) {
+                // 客户端可能死掉了，RemoteCallbackList 会自动清理
+            }
+        }
+        listeners.finishBroadcast()
+    }
+
     override fun onBind(intent: Intent?): IBinder {
-//        Log.d(TAG, "CommandService onBind")
+        Log.d(TAG, "CommandService onBind")
         return binder
     }
 

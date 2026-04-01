@@ -12,21 +12,19 @@ import fansirsqi.xposed.sesame.entity.MemberBenefit
 import fansirsqi.xposed.sesame.entity.SesameGift
 import fansirsqi.xposed.sesame.hook.internal.LocationHelper.requestLocationSuspend
 import fansirsqi.xposed.sesame.hook.internal.SecurityBodyHelper.getSecurityBodyData
-import fansirsqi.xposed.sesame.model.BaseModel.Companion.energyTime
-import fansirsqi.xposed.sesame.model.BaseModel.Companion.modelSleepTime
 import fansirsqi.xposed.sesame.model.ModelFields
 import fansirsqi.xposed.sesame.model.ModelGroup
 import fansirsqi.xposed.sesame.model.modelFieldExt.BooleanModelField
 import fansirsqi.xposed.sesame.model.modelFieldExt.SelectModelField
-import fansirsqi.xposed.sesame.newutil.TaskBlacklist.autoAddToBlacklist
+import fansirsqi.xposed.sesame.util.TaskBlacklist.autoAddToBlacklist
 import fansirsqi.xposed.sesame.task.ModelTask
-import fansirsqi.xposed.sesame.task.TaskCommon
 import fansirsqi.xposed.sesame.task.antOrchard.AntOrchardRpcCall.orchardSpreadManure
 import fansirsqi.xposed.sesame.util.CoroutineUtils
 import fansirsqi.xposed.sesame.util.GlobalThreadPools
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.Log.record
 import fansirsqi.xposed.sesame.util.ResChecker
+import fansirsqi.xposed.sesame.util.TaskBlacklist
 import fansirsqi.xposed.sesame.util.TimeUtil
 import fansirsqi.xposed.sesame.util.maps.IdMapManager
 import fansirsqi.xposed.sesame.util.maps.MemberBenefitsMap
@@ -82,8 +80,8 @@ class AntMember : ModelTask() {
     // 芝麻树
     private var enableZhimaTree: BooleanModelField? = null
 
-    //年度回顾
-    private var annualReview: BooleanModelField? = null
+    /*//年度回顾
+    private var annualReview: BooleanModelField? = null*/
 
     // 黄金票配置 - 签到
     private var enableGoldTicket: BooleanModelField? = null
@@ -246,7 +244,7 @@ class AntMember : ModelTask() {
                     if ((sesameTask!!.value || collectSesame!!.value)) {
                         // 芝麻粒福利签到
                         doSesameZmlCheckIn()
-                        if (hasFlagToday(StatusFlags.FLAG_AntMember_doAllAvailableSesameTask)) {
+                        if (hasFlagToday(StatusFlags.FLAG_ANTMEMBER_DO_ALL_SESAME_TASK)) {
                             record(TAG, "⏭️ 今天已完成过芝麻信用任务，跳过执行")
                         } else {
                             // 芝麻信用任务（今日首次）
@@ -306,9 +304,9 @@ class AntMember : ModelTask() {
                     deferredTasks.add(async(Dispatchers.IO) { beanSignIn() })
                 }
 
-                if (annualReview!!.value) {
+               /* if (annualReview!!.value) {   //年度回顾已下线
                     deferredTasks.add(async(Dispatchers.IO) { doAnnualReview() })
-                }
+                }*/
 
                 if (beanExchangeBubbleBoost!!.value) {
                     deferredTasks.add(async(Dispatchers.IO) { beanExchangeBubbleBoost() })
@@ -1146,7 +1144,7 @@ class AntMember : ModelTask() {
 
             // 如果所有任务都已完成或跳过（没有剩余可完成任务），关闭开关
             if (totalTasks > 0 && (completedTasks + skippedTasks) >= totalTasks) {
-                setFlagToday(StatusFlags.FLAG_AntMember_doAllAvailableSesameTask)
+                setFlagToday(StatusFlags.FLAG_ANTMEMBER_DO_ALL_SESAME_TASK)
                 record(TAG, "芝麻信用💳[已全部完成任务，临时关闭]")
             }
         } catch (t: Throwable) {
@@ -2489,7 +2487,7 @@ class AntMember : ModelTask() {
     @SuppressLint("DefaultLocale")
     fun queryAndCollectStickers() {
         try {
-            if (hasFlagToday(StatusFlags.FLAG_AntMember_STICKER)) {
+            if (hasFlagToday(StatusFlags.FLAG_ANTMEMBER_STICKER)) {
                 record(TAG, "今日已兑换贴纸，跳过")
                 return
             }
@@ -2563,7 +2561,7 @@ class AntMember : ModelTask() {
             }
 
             // 标记今日完成
-            setFlagToday(StatusFlags.FLAG_AntMember_STICKER)
+            setFlagToday(StatusFlags.FLAG_ANTMEMBER_STICKER)
 
         } catch (e: Exception) {
             Log.printStackTrace("$TAG stickerAutoCollect err", e)
@@ -2679,7 +2677,7 @@ class AntMember : ModelTask() {
          * @return true表示在黑名单中，应该跳过
          */
         private fun isTaskInBlacklist(taskTitle: String?): Boolean {
-            return fansirsqi.xposed.sesame.newutil.TaskBlacklist.isTaskInBlacklist(taskTitle)
+            return TaskBlacklist.isTaskInBlacklist(taskTitle)
         }
 
         /**
@@ -2733,7 +2731,7 @@ class AntMember : ModelTask() {
 
 
                 if (task.has("actionUrl") && task.getString("actionUrl").contains("jumpAction")) {
-                    // 跳转APP任务 依赖跳转的APP发送请求鉴别任务完成 仅靠hook支付宝无法完成
+                    // 跳转APP任务 依赖跳转的APP发送请求鉴别任务完成 仅靠hook目标应用无法完成
                     record(TAG, "芝麻信用💳[跳过跳转APP任务]#$taskTitle")
                     skippedCount++
                     continue
@@ -2925,10 +2923,10 @@ class AntMember : ModelTask() {
                                     "JFLLRW_TASK" ->                   // 逛一逛得缴费红包
                                         taskReceive(taskCode, "JFLL_VIEWED", title)
 
-                                    "ZFBHYLLRW_TASK" ->                   // 逛一逛支付宝会员
+                                    "ZFBHYLLRW_TASK" ->                   // 逛一逛目标应用会员
                                         taskReceive(taskCode, "ZFBHYLL_VIEWED", title)
 
-                                    "QQKLLRW_TASK" ->                   // 逛一逛支付宝亲情卡
+                                    "QQKLLRW_TASK" ->                   // 逛一逛目标应用亲情卡
                                         taskReceive(taskCode, "QQKLL_VIEWED", title)
 
                                     "SSLLRW_TASK" ->                   // 逛逛领优惠得红包

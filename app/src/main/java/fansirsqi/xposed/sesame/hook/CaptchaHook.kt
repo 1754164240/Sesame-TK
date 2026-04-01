@@ -5,7 +5,7 @@ import de.robv.android.xposed.XposedHelpers
 import fansirsqi.xposed.sesame.util.Log
 
 /**
- * 支付宝滑块验证码Hook工具类（UI层拦截）
+ * 目标应用滑块验证码Hook工具类（UI层拦截）
  * 
  * 核心策略：
  * Hook CaptchaDialog.show() - 阻止验证码对话框显示（UI层拦截）

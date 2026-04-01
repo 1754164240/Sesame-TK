@@ -8,6 +8,9 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <!-- applist -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
+        tools:ignore="PackageVisibilityPolicy,QueryAllPackagesPermission" />
     <uses-permission
         android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
         tools:ignore="AllFilesAccessPolicy,ScopedStorage" />
@@ -16,7 +19,8 @@
     <!-- 添加唤醒锁权限（用于定期唤醒设备） -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- 添加前台服务权限 -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"
+    <uses-permission
+        android:name="android.permission.FOREGROUND_SERVICE"
         tools:ignore="ForegroundServicesPolicy" />
     <!-- 添加特殊用途前台服务权限 -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
@@ -54,18 +58,29 @@
         </activity>
 
         <!-- 其他 Activity 保持不变 -->
-        <activity android:name="fansirsqi.xposed.sesame.ui.ExtendActivity" />
-        <activity android:name="fansirsqi.xposed.sesame.ui.WebSettingsActivity" />
-        <activity android:name="fansirsqi.xposed.sesame.ui.SettingActivity" />
-        <activity android:name="fansirsqi.xposed.sesame.ui.HtmlViewerActivity" />
+        <activity
+            android:name=".ui.ExtendActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.WebSettingsActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.SettingActivity"
+            android:exported="false" />
         <!-- RPC 调试 Activity -->
-        <activity android:name="fansirsqi.xposed.sesame.ui.RpcDebugActivity" />
+        <activity
+            android:name=".ui.RpcDebugActivity"
+            android:exported="false" />
         <!-- 高性能日志查看器 (Compose) -->
         <!-- theme 必须设置为 NoActionBar，因为 Compose 自带了 TopAppBar -->
         <activity
-            android:name=".ui.log.LogViewerComposeActivity"
+            android:name=".ui.LogViewerActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".ui.ManualTaskActivity"
             android:exported="false"
-            android:theme="@style/Theme.AppCompat.NoActionBar" />
+            android:label="手动任务" />
 
 
         <!-- for-hide-icon -->

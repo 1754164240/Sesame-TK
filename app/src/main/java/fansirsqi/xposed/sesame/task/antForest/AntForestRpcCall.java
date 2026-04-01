@@ -22,7 +22,7 @@ public class AntForestRpcCall {
 
     public static void init() {
         AlipayVersion alipayVersion = ApplicationHook.getAlipayVersion();
-        Log.record("AntForestRpcCall", "当前支付宝版本: " + alipayVersion.toString());
+        Log.record("AntForestRpcCall", "当前目标应用版本: " + alipayVersion);
         try {
             switch (alipayVersion.getVersionString()) {
                 case "10.7.30.8000":
@@ -247,10 +247,16 @@ public class AntForestRpcCall {
         return RequestManager.requestString("alipay.antforest.forest.h5.startEnergyRain", "[{\"version\":\"" + VERSION + "\"}]");
     }
 
+
     public static String energyRainSettlement(int saveEnergy, String token) {
         return RequestManager.requestString(
                 "alipay.antforest.forest.h5.energyRainSettlement",
                 "[{\"activityPropNums\":0,\"saveEnergy\":" + saveEnergy + ",\"token\":\"" + token + "\",\"version\":\"" + VERSION + "\"}]");
+    }
+    /** 查询能量雨/游戏结束列表奖励 */
+    public static String queryEnergyRainEndGameList() {
+        return RequestManager.requestString("alipay.antforest.forest.h5.queryEnergyRainEndGameList",
+                "[ {} ]");
     }
 
     public static String queryTaskList() throws JSONException {
@@ -322,6 +328,25 @@ public class AntForestRpcCall {
         jo.put("userId", userId);
         String args = "[" + jo + "]";
         return RequestManager.requestString("com.alipay.antiep.sign", args);
+    }
+
+    public static String antiepSign(String userId, String sceneCode)
+            throws JSONException {
+        JSONObject jo = new JSONObject();
+        jo.put("requestType", "rpc");
+        jo.put("sceneCode", sceneCode);
+        jo.put("source", "ANTFOREST");
+        jo.put("userId", userId);
+        String args = "[" + jo + "]";
+        return RequestManager.requestString("com.alipay.antiep.sign", args);
+    }
+
+    public static String queryCommonSign(String bizType) throws JSONException {
+        JSONObject jo = new JSONObject();
+        jo.put("bizType", bizType);
+        jo.put("source", "chInfo_ch_appcenter__chsub_9patch");
+        jo.put("withEntity", true);
+        return RequestManager.requestString("alipay.antforest.forest.h5.queryCommonSign", new JSONArray().put(jo).toString());
     }
 
     /** 查询背包道具列表 */
@@ -396,6 +421,14 @@ public class AntForestRpcCall {
         return RequestManager.requestString("alipay.antforest.forest.h5.collectProp", new JSONArray().put(jo).toString());
     }
 
+    /** 收取能量炸弹卡 */
+    public static String collectBombCardEnergy(String propId) throws JSONException {
+        JSONObject jo = new JSONObject();
+        jo.put("propId", propId);
+        jo.put("source", "chInfo_ch_appcenter__chsub_9patch");
+        return RequestManager.requestString("alipay.antforest.forest.h5.collectBombCardEnergy", new JSONArray().put(jo).toString());
+    }
+
     public static String itemList(String labelType) {
         return RequestManager.requestString(
                 "com.alipay.antiep.itemList",
@@ -450,25 +483,20 @@ public class AntForestRpcCall {
     }
 
     public static String patrolKeepGoing(int nodeIndex, int patrolId, String eventType) {
-        String args = null;
-        switch (eventType) {
-            case "video":
-                args = "[{\"nodeIndex\":" + nodeIndex + ",\"patrolId\":" + patrolId + ",\"reactParam\":{\"viewed\":\"Y\"},\"source\":\"ant_forest\"," +
-                        "\"timezoneId\":\"Asia/Shanghai\"}]";
-                break;
-            case "chase":
-                args = "[{\"nodeIndex\":" + nodeIndex + ",\"patrolId\":" + patrolId + ",\"reactParam\":{\"sendChat\":\"Y\"},\"source\":\"ant_forest\"," +
-                        "\"timezoneId\":\"Asia/Shanghai\"}]";
-                break;
-            case "quiz":
-                args = "[{\"nodeIndex\":" + nodeIndex + ",\"patrolId\":" + patrolId + ",\"reactParam\":{\"answer\":\"correct\"},\"source\":\"ant_forest\"," +
-                        "\"timezoneId\":\"Asia/Shanghai\"}]";
-                break;
-            default:
-                args = "[{\"nodeIndex\":" + nodeIndex + ",\"patrolId\":" + patrolId + ",\"reactParam\":{},\"source\":\"ant_forest\"," +
-                        "\"timezoneId\":\"Asia/Shanghai\"}]";
-                break;
-        }
+        String args = switch (eventType) {
+            case "video" ->
+                    "[{\"nodeIndex\":" + nodeIndex + ",\"patrolId\":" + patrolId + ",\"reactParam\":{\"viewed\":\"Y\"},\"source\":\"ant_forest\"," +
+                            "\"timezoneId\":\"Asia/Shanghai\"}]";
+            case "chase" ->
+                    "[{\"nodeIndex\":" + nodeIndex + ",\"patrolId\":" + patrolId + ",\"reactParam\":{\"sendChat\":\"Y\"},\"source\":\"ant_forest\"," +
+                            "\"timezoneId\":\"Asia/Shanghai\"}]";
+            case "quiz" ->
+                    "[{\"nodeIndex\":" + nodeIndex + ",\"patrolId\":" + patrolId + ",\"reactParam\":{\"answer\":\"correct\"},\"source\":\"ant_forest\"," +
+                            "\"timezoneId\":\"Asia/Shanghai\"}]";
+            default ->
+                    "[{\"nodeIndex\":" + nodeIndex + ",\"patrolId\":" + patrolId + ",\"reactParam\":{},\"source\":\"ant_forest\"," +
+                            "\"timezoneId\":\"Asia/Shanghai\"}]";
+        };
         return RequestManager.requestString("alipay.antforest.forest.h5.patrolKeepGoing", args);
     }
 
@@ -479,7 +507,7 @@ public class AntForestRpcCall {
     }
 
     public static String queryAnimalAndPiece(int animalId) {
-        String args = null;
+        String args;
         if (animalId != 0) {
             args = "[{\"animalId\":" + animalId + ",\"source\":\"ant_forest\",\"timezoneId\":\"Asia/Shanghai\"}]";
         } else {
@@ -549,7 +577,7 @@ public class AntForestRpcCall {
 
         return RequestManager.requestString(
                 "alipay.antforest.forest.h5.whackMole",
-                "[" + param.toString() + "]"
+                "[" + param + "]"
         );
     }
 
@@ -829,4 +857,53 @@ public class AntForestRpcCall {
         }
         return ""; // 默认返回空字符串
     }
+
+    /** 查询游戏列表 */
+    public static String queryGameList() {
+        return RequestManager.requestString("com.alipay.charitygamecenter.queryGameList",
+                "[{" +
+                        "  \"bizType\": \"ANTFOREST\"," +
+                        "  \"commonDegradeFilterRequest\": {" +
+                        "    \"deviceLevel\": \"high\"," +
+                        "    \"platform\": \"Android\"," +
+                        "    \"unityDeviceLevel\": \"high\"" +
+                        "  }," +
+                        "  \"requestType\": \"RPC\"," +
+                        "  \"sceneCode\": \"ANTFOREST\"," +
+                        "  \"source\": \"chInfo_ch_appcenter__chsub_9patch\"," +
+                        "  \"version\": \"" + VERSION + "\"" +
+                        "}]");
+    }
+    /**
+     * 领取游戏中心奖励 (批量开宝箱)
+     * @param batchDrawCount 批量领取的次数 (例如 1 或 10)
+     */
+    public static String drawGameCenterAward(int batchDrawCount) {
+        return RequestManager.requestString("com.alipay.charitygamecenter.drawGameCenterAward",
+                "[{" +
+                        "  \"batchDrawCount\": " + batchDrawCount + "," +
+                        "  \"bizType\": \"ANTFOREST\"," +
+                        "  \"requestType\": \"RPC\"," +
+                        "  \"sceneCode\": \"ANTFOREST\"," +
+                        "  \"source\": \"leyuan\"," +
+                        "  \"version\": \"" + VERSION + "\"" +
+                        "}]");
+    }
+    /** 初始化/上报游戏任务 */
+    public static String initTask(String taskType) {
+        // 生成类似 GAME_DONE_SLJYD_1769062463227_569cf36c 的 outBizNo
+        String timestamp = String.valueOf(System.currentTimeMillis());
+        String randomSuffix = java.util.UUID.randomUUID().toString().substring(0, 8);
+        String outBizNo = taskType + "_" + timestamp + "_" + randomSuffix;
+
+        return RequestManager.requestString("com.alipay.antiep.initTask",
+                "[{" +
+                        "  \"outBizNo\": \"" + outBizNo + "\"," +
+                        "  \"requestType\": \"H5\"," +
+                        "  \"sceneCode\": \"ANTFOREST_ENERGY_RAIN_TASK\"," +
+                        "  \"source\": \"ANTFOREST\"," +
+                        "  \"taskType\": \"" + taskType + "\"" +
+                        "}]");
+    }
+
 }

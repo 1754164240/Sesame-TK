@@ -70,9 +70,7 @@ public class DebugRpc {
         return DebugRpcCall.queryEnvironmentCertDetailList(alias, pageNum, targetUserID);
     }
 
-    public String sendTree(String certificateId, String friendUserId) {
-        return DebugRpcCall.sendTree(certificateId, friendUserId);
-    }
+
 
     private void getNewTreeItems() {
         try {

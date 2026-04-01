@@ -14,7 +14,7 @@ val provider = GoogleFont.Provider(
 
 val bodyFontFamily = FontFamily(
     Font(
-        googleFont = GoogleFont("AR One Sans"),
+        googleFont = GoogleFont("Andada Pro"),
         fontProvider = provider,
     )
 )

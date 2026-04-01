@@ -56,7 +56,7 @@ class BaseModel : Model() {
             modelFields.addField(sendHookDataUrl) //Hook数据转发地址
         }
 
-        modelFields.addField(batteryPerm) //是否申请支付宝的后台运行权限
+        modelFields.addField(batteryPerm) //是否申请目标应用的后台运行权限
         modelFields.addField(recordLog) //是否记录record日志
         modelFields.addField(runtimeLog) //是否记录runtime日志
         modelFields.addField(showToast) //是否显示气泡提示
@@ -88,7 +88,7 @@ class BaseModel : Model() {
          * //手动触发是否自动安排下次执行
          */
         @Getter
-        val manualTriggerAutoSchedule: BooleanModelField = BooleanModelField("manualTriggerAutoSchedule", "手动触发支付宝运行", false) //一般人不开这个
+        val manualTriggerAutoSchedule: BooleanModelField = BooleanModelField("manualTriggerAutoSchedule", "手动触发目标应用运行", false) //一般人不开这个
 
         /**
          * 执行间隔时间（分钟）
@@ -175,10 +175,10 @@ class BaseModel : Model() {
         val debugMode: BooleanModelField = BooleanModelField("debugMode", "开启抓包(基于新接口)", false)
 
         /**
-         * 是否申请支付宝的后台运行权限
+         * 是否申请目标应用的后台运行权限
          */
         @Getter
-        val batteryPerm: BooleanModelField = BooleanModelField("batteryPerm", "为支付宝申请后台运行权限", true)
+        val batteryPerm: BooleanModelField = BooleanModelField("batteryPerm", "为目标应用申请后台运行权限", true)
 
 
         /**

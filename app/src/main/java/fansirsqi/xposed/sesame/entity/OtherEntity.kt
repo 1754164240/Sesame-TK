@@ -43,7 +43,16 @@ object OtherEntityProvider {
     )
 
 
-    //信用2101任务列表
+    // 信用2101任务列表
+    @JvmStatic
+    fun listCreditTaskOptions(): List<OtherEntity> = listOf(
+        OtherEntity(Credit2101.TaskType.AUTO_OPEN_CHEST, "自动开宝箱 🎁"),
+        OtherEntity(Credit2101.TaskType.AUTO_SIGN_IN, "自动签到 📅"),
+        OtherEntity(Credit2101.TaskType.DAILY_TASKS, "自动完成任务 👷‍♂️"),
+        OtherEntity(Credit2101.TaskType.UPGRADE_TALENT, "自动升级天赋 ⚡"),
+        OtherEntity(Credit2101.TaskType.CHAPTER_TASKS, "图鉴章节合成 📖")
+    )
+    //信用2101事件列表
     @JvmStatic
     fun listCreditOptions(): List<OtherEntity> = listOf(
         OtherEntity(Credit2101.EventType.MINI_GAME_ELIMINATE, "消除小游戏 🎮"),

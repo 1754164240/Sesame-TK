@@ -23,7 +23,7 @@ data class SlideCoordinates(
 
 /**
  * 验证码处理程序的基类，提供处理滑动验证码的通用逻辑。
- * 该类专门用于处理支付宝验证页面上的滑动验证码。
+ * 该类专门用于处理目标应用验证页面上的滑动验证码。
  */
 abstract class BaseCaptchaHandler {
 

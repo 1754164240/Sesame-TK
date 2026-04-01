@@ -1,7 +1,6 @@
 package fansirsqi.xposed.sesame.task.other.credit2101
 
 import fansirsqi.xposed.sesame.hook.RequestManager
-import fansirsqi.xposed.sesame.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
 

@@ -32,7 +32,7 @@ public class OldRpcBridge implements RpcBridge {
      * 加载 RPC 所需的类和方法。
      */
     public void load() throws Exception {
-        loader = ApplicationHook.getClassLoader();
+        loader = ApplicationHook.classLoader;
         try {
             h5PageClazz = loader.loadClass(General.H5PAGE_NAME);
             Log.record(TAG, "RPC 类加载成功");
@@ -87,7 +87,7 @@ public class OldRpcBridge implements RpcBridge {
     }
     @Override
     public RpcEntity requestObject(RpcEntity rpcEntity, int tryCount, int retryInterval) {
-        if (ApplicationHook.isOffline()) {
+        if (ApplicationHook.offline) {
             return null; // 如果离线，直接返回 null
         }
         int id = rpcEntity.hashCode(); // 获取请求 ID
@@ -201,7 +201,7 @@ public class OldRpcBridge implements RpcBridge {
      * 处理登录超时的情况。
      */
     private void handleLoginTimeout() {
-        if (!ApplicationHook.isOffline()) {
+        if (!ApplicationHook.offline) {
             ApplicationHook.setOffline(true);
             Notify.updateStatusText("登录超时");
             if (BaseModel.Companion.getTimeoutRestart().getValue()) {

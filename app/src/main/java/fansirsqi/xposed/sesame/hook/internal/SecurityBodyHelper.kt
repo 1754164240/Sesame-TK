@@ -6,7 +6,7 @@ import fansirsqi.xposed.sesame.util.Log
 
 /**
  * 安全组件数据获取助手类
- * 用于调用支付宝的 ISecurityBodyComponent.getSecurityBodyDataEx 方法
+ * 用于调用目标应用的 ISecurityBodyComponent.getSecurityBodyDataEx 方法
  */
 object SecurityBodyHelper {
 
@@ -23,7 +23,7 @@ object SecurityBodyHelper {
     }
 
     /**
-     * 获取支付宝安全组件数据
+     * 获取目标应用安全组件数据
      * 通过调用 ISecurityBodyComponent.getSecurityBodyDataEx 方法获取安全相关数据
      * 调用方式与 SecurityBodyWuaBridgeExtension 中完全一致
      *
@@ -39,7 +39,7 @@ object SecurityBodyHelper {
             }
 
             // 使用 appContext 作为上下文
-            val appContext = ApplicationHook.getAppContext()
+            val appContext = ApplicationHook.appContext
             if (appContext == null) {
                 Log.error(TAG, "appContext 为 null，可能应用还未完全启动，请稍后再试")
                 return null

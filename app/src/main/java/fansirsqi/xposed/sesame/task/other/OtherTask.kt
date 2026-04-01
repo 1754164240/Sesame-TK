@@ -1,6 +1,7 @@
 package fansirsqi.xposed.sesame.task.other
 
 import fansirsqi.xposed.sesame.entity.OtherEntityProvider.listCreditOptions
+import fansirsqi.xposed.sesame.entity.OtherEntityProvider.listCreditTaskOptions
 import fansirsqi.xposed.sesame.model.ModelFields
 import fansirsqi.xposed.sesame.model.ModelGroup
 import fansirsqi.xposed.sesame.model.modelFieldExt.BooleanModelField
@@ -8,8 +9,8 @@ import fansirsqi.xposed.sesame.model.modelFieldExt.SelectAndCountModelField
 import fansirsqi.xposed.sesame.model.modelFieldExt.SelectModelField
 import fansirsqi.xposed.sesame.task.ModelTask
 import fansirsqi.xposed.sesame.task.other.credit2101.Credit2101
+import fansirsqi.xposed.sesame.task.other.haojia.HaoJiaWuyou
 import fansirsqi.xposed.sesame.util.Log
-import fansirsqi.xposed.sesame.util.Log.record
 
 class OtherTask : ModelTask() {
     override fun getName(): String {
@@ -28,14 +29,14 @@ class OtherTask : ModelTask() {
     private var credit2101: BooleanModelField? = null
 
     /** @brief 信用2101 事件列表 */
-    private var CreditOptions: SelectAndCountModelField? = null
+    private var creditEventOptions: SelectAndCountModelField? = null
+
+    /** @brief 信用2101 任务列表 */
+    private var credit2101OTaskOptions: SelectModelField? = null
 
 
-    /** @brief 信用2101 自动开宝箱 */
-    private var AutoOpenChest: BooleanModelField? = null
-
-    /** @brief 信用2101 仅完成1次的事件列表 */
-    private var CreditOnceOptions: SelectModelField? = null
+    /** @brief 好家无忧卡 开关 */
+    private var haojiaWuyou: BooleanModelField? = null
 
 
     override fun getFields(): ModelFields {
@@ -45,11 +46,15 @@ class OtherTask : ModelTask() {
                 "credit2101", "信用2101", false
             ).apply { credit2101 = this })
 
-        fields.addField(
-            BooleanModelField(
-                "AutoOpenChest", "信用2101 | 自动开宝箱", false
-            ).apply { AutoOpenChest = this })
 
+
+        fields.addField(
+            SelectModelField(
+                "credit2101Options",
+                "信用2101 | 任务选项",
+                LinkedHashSet<String?>(),
+                listCreditTaskOptions()
+            ).also { credit2101OTaskOptions = it })
 
         fields.addField(
             SelectAndCountModelField(
@@ -59,16 +64,15 @@ class OtherTask : ModelTask() {
                 listCreditOptions(),
                 "设置运行次数(-1为不限制)"
             ).also {
-                CreditOptions = it
+                creditEventOptions = it
             })
 
-
-
-
-
-
-
-
+        // 新增好家无忧卡开关
+        fields.addField(
+            BooleanModelField(
+                "haojiaWuyou", "好家无忧卡", false
+            ).apply { haojiaWuyou = this }
+        )
 
         return fields
     }
@@ -76,13 +80,16 @@ class OtherTask : ModelTask() {
     override suspend fun runSuspend() {
         try {
             if (credit2101!!.value) {
-                Credit2101.doCredit2101(AutoOpenChest!!.value==true,CreditOptions!!)
+                Credit2101.doCredit2101(credit2101OTaskOptions!!,creditEventOptions!!)
+            }
+            // 执行好家无忧卡任务
+            if (haojiaWuyou!!.value) {
+                HaoJiaWuyou.start()
             }
         } catch (e: Exception) {
             Log.printStackTrace(TAG, e)
         }
     }
-
 
     companion object {
         const val TAG = "OtherTask"

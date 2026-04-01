@@ -1,7 +1,7 @@
 package fansirsqi.xposed.sesame.task.antForest
 
 import fansirsqi.xposed.sesame.data.Status
-import fansirsqi.xposed.sesame.task.antFarm.TaskStatus
+import fansirsqi.xposed.sesame.task.TaskStatus
 import fansirsqi.xposed.sesame.util.GlobalThreadPools.sleepCompat
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.ResChecker
@@ -223,8 +223,9 @@ class ForestChouChouLe {
             val taskType = baseInfo.optString("taskType")
             val taskStatus = baseInfo.optString("taskStatus")
             val bizInfoStr = baseInfo.optString("bizInfo")
-            val bizInfo = if (bizInfoStr.isNotEmpty()) JSONObject(bizInfoStr) else JSONObject()
-            val taskName = bizInfo.optString("title", taskType)
+            val taskName = if (bizInfoStr.isNotEmpty()) {
+                JSONObject(bizInfoStr).optString("title", taskType)
+            } else taskType
 
             if (isBlockedTask(taskType, taskName)) continue
 
@@ -238,9 +239,10 @@ class ForestChouChouLe {
         }
 
         Log.record("${s.name} 进度: $completed / $total")
-        if (allDone && total > 0) {
+        if (allDone) {
             Status.setFlagToday(s.flag)
-            Log.record("✅ ${s.name} 全部完成")
+            val msg = if (total > 0) "全部完成" else "无有效任务"
+            Log.record("✅ ${s.name} $msg ($completed/$total)")
         } else {
             Log.record("⚠️ ${s.name} 未全部完成")
         }

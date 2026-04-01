@@ -2,8 +2,9 @@ package fansirsqi.xposed.sesame
 
 import android.app.Application
 import android.content.Intent
-import android.os.Process
+import fansirsqi.xposed.sesame.ui.repository.ConfigRepository
 import fansirsqi.xposed.sesame.service.CommandService
+import fansirsqi.xposed.sesame.ui.theme.ThemeManager
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.ToastUtil
 
@@ -16,16 +17,17 @@ class SesameApplication : Application() {
 
     companion object {
         private const val TAG = "SesameApplication"
-        var preferencesKey = "sesame-tk"
+        public const val PREFERENCES_KEY = "sesame-tk"
         var hasPermissions: Boolean = false
+
     }
 
     override fun onCreate() {
         super.onCreate()
         ToastUtil.init(this) // 初始化全局 Context
         Log.init(this)
-        val processName = getCurrentProcessName()
-        Log.record(TAG, "🚀 应用启动 | 进程: $processName | PID: ${Process.myPid()}")
+        ThemeManager.init(this)
+        ConfigRepository.init(this, PREFERENCES_KEY)
         startCommandService()
     }
 
@@ -38,30 +40,8 @@ class SesameApplication : Application() {
             startService(intent)
             Log.record(TAG, "✅ CommandService 已启动")
         } catch (e: Exception) {
-            Log.printStackTrace(TAG, "❌ CommandService 启动失败:",e)
+            Log.printStackTrace(TAG, "❌ CommandService 启动失败:", e)
         }
     }
 
-    /**
-     * 获取当前进程名
-     */
-    private fun getCurrentProcessName(): String {
-        return try {
-            // Android 9.0+ 可直接获取
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
-                getProcessName()
-            } else {
-                // 通过读取 /proc/self/cmdline 获取
-                val pid = Process.myPid()
-                val cmdlineFile = java.io.File("/proc/$pid/cmdline")
-                if (cmdlineFile.exists()) {
-                    cmdlineFile.readText().trim('\u0000')
-                } else {
-                    packageName
-                }
-            }
-        } catch (e: Exception) {
-            packageName
-        }
-    }
 }

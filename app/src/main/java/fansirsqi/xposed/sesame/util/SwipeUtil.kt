@@ -15,7 +15,7 @@ object SwipeUtil {
     private const val TAG = "SwipeUtil"
 
     /**
-     * 启动支付宝
+     * 启动目标应用
      * 供 Java 调用，使用 runBlocking 保证同步返回
      */
     @JvmStatic
@@ -36,21 +36,22 @@ object SwipeUtil {
         return@runBlocking startBySchemeSync(context)
     }
 
+    /**
+     * 尝试使用 Shell 启动目标应用
+     */
     private suspend fun tryStartWithShell(context: Context): Boolean {
         try {
-            // 优化：先获取当前 Shell 类型
-            val shellType = CommandUtil.getShellType(context)
-            Log.d(TAG, "当前 Shell 类型: $shellType")
+            // 1. 获取当前状态
+            val status = CommandUtil.serviceStatus.value
 
-            // 如果不是 Root 或 Shizuku，直接放弃 Shell 启动，避免无意义的尝试
-            if (shellType.contains("no_executor") || shellType.contains("UserShell") || shellType.contains("未连接")) {
+            // 2. 判断是否可用
+            if (status !is CommandUtil.ServiceStatus.Active) {
                 return false
             }
 
             // 优化命令：使用 --user current 兼容分身
             val cmd = "am start --user current -n com.eg.android.AlipayGphone/com.eg.android.AlipayGphone.AlipayLogin"
             val result = CommandUtil.executeCommand(context, cmd)
-
             return !result.isNullOrBlank()
         } catch (e: Exception) {
             Log.e(TAG, "Shell 启动异常: ${e.message}")

@@ -1,7 +1,5 @@
 package fansirsqi.xposed.sesame.ui;
 
-import static fansirsqi.xposed.sesame.data.UIConfig.UI_OPTION_NEW;
-
 
 import android.annotation.SuppressLint;
 import android.app.AlertDialog;
@@ -40,7 +38,6 @@ import java.util.Map;
 import fansirsqi.xposed.sesame.BuildConfig;
 import fansirsqi.xposed.sesame.R;
 import fansirsqi.xposed.sesame.data.Config;
-import fansirsqi.xposed.sesame.data.UIConfig;
 import fansirsqi.xposed.sesame.entity.AlipayUser;
 import fansirsqi.xposed.sesame.model.Model;
 import fansirsqi.xposed.sesame.model.ModelConfig;
@@ -48,13 +45,14 @@ import fansirsqi.xposed.sesame.model.ModelField;
 import fansirsqi.xposed.sesame.model.ModelFields;
 import fansirsqi.xposed.sesame.model.ModelGroup;
 import fansirsqi.xposed.sesame.model.SelectModelFieldFunc;
-//import fansirsqi.xposed.sesame.newui.WatermarkView;
 import fansirsqi.xposed.sesame.task.ModelTask;
-import fansirsqi.xposed.sesame.ui.compose.WatermarkInjector;
+import fansirsqi.xposed.sesame.ui.extension.WatermarkInjector;
 import fansirsqi.xposed.sesame.ui.dto.ModelDto;
 import fansirsqi.xposed.sesame.ui.dto.ModelFieldInfoDto;
 import fansirsqi.xposed.sesame.ui.dto.ModelFieldShowDto;
 import fansirsqi.xposed.sesame.ui.dto.ModelGroupDto;
+import fansirsqi.xposed.sesame.ui.model.UiMode;
+import fansirsqi.xposed.sesame.ui.repository.ConfigRepository;
 import fansirsqi.xposed.sesame.ui.widget.ListDialog;
 import fansirsqi.xposed.sesame.util.Files;
 import fansirsqi.xposed.sesame.util.JsonUtil;
@@ -470,16 +468,12 @@ public class WebSettingsActivity extends BaseActivity {
                         ListDialog.ListType.SHOW);
                 break;
             case 5:
-                UIConfig.INSTANCE.setUiOption(UI_OPTION_NEW);
-                if (UIConfig.save()) {
-                    Intent intent = new Intent(this, UIConfig.INSTANCE.getTargetActivityClass());
-                    intent.putExtra("userId", userId);
-                    intent.putExtra("userName", userName);
-                    finish();
-                    startActivity(intent);
-                } else {
-                    Toast.makeText(this, "切换失败", Toast.LENGTH_SHORT).show();
-                }
+                ConfigRepository.INSTANCE.setUiMode(UiMode.New);
+                Intent intent = new Intent(this, SettingActivity.class);
+                intent.putExtra("userId", userId);
+                intent.putExtra("userName", userName);
+                finish();
+                startActivity(intent);
                 break;
             case 6:
                 // 在调用 save() 之前，先调用 JS 函数同步 WebView 中的数据到 Java 端

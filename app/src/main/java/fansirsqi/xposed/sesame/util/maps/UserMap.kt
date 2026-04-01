@@ -2,7 +2,7 @@ package fansirsqi.xposed.sesame.util.maps
 
 import com.fasterxml.jackson.core.type.TypeReference
 import fansirsqi.xposed.sesame.entity.UserEntity
-import fansirsqi.xposed.sesame.newutil.DataStore
+import fansirsqi.xposed.sesame.util.DataStore
 import fansirsqi.xposed.sesame.util.Files
 import fansirsqi.xposed.sesame.util.JsonUtil
 import fansirsqi.xposed.sesame.util.Log
