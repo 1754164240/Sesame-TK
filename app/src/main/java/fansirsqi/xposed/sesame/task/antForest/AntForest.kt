@@ -832,6 +832,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
 
             usePropBeforeCollectEnergy(selfId)
             tc.countDebug("使用自己道具卡")
+            executeEnergyRainIfNeeded(tc)
 
             // -------------------------------
             // 收好友能量
@@ -950,20 +951,6 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                     tc.countDebug("活力值兑换")
                 }
 
-                if (energyRain!!.value) {
-                    // 检查是否到达执行时间
-                    if (TaskTimeChecker.isTimeReached(energyRainTime?.value, "0810")) {
-                        if (energyRainChance!!.value) {
-                            useEnergyRainChanceCard()
-                            tc.countDebug("使用能量雨卡")
-                        }
-                        EnergyRainCoroutine.execEnergyRainCompat()
-                        tc.countDebug("能量雨")
-                    } else {
-                        Log.record(TAG, "能量雨未到执行时间，跳过")
-                    }
-                }
-
                 if (forestMarket!!.value) {
                     GreenLife.ForestMarket("GREEN_LIFE")
                     //  GreenLife.ForestMarket("ANTFOREST")  二级条目暂时关闭
@@ -1041,6 +1028,22 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 "本次总 收:" + totalCollected + "g 帮:" + TOTAL_HELP_COLLECTED + "g 浇:" + TOTAL_WATERED + "g"
             updateLastExecText(strTotalCollected)
         }
+    }
+
+    private suspend fun executeEnergyRainIfNeeded(tc: TimeCounter) {
+        if (!energyRain!!.value) {
+            return
+        }
+        if (!TaskTimeChecker.isTimeReached(energyRainTime?.value, "0810")) {
+            Log.record(TAG, "能量雨未到执行时间，跳过")
+            return
+        }
+        if (energyRainChance!!.value) {
+            useEnergyRainChanceCard()
+            tc.countDebug("使用能量雨卡")
+        }
+        EnergyRainCoroutine.execEnergyRainCompat()
+        tc.countDebug("能量雨")
     }
 
     /**
