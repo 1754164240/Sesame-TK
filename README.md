@@ -34,28 +34,11 @@
 
 > [!TIP]
 > ## 授权说明
-> 本项目`fork`自[TKaxv-7S](https://github.com/TKaxv-7S)基于`constanline`版[XQuickEnergy](https://github.com/constanline/XQuickEnergy) 与`pansong291`版[XQuickEnergy](https://github.com/pansong291/XQuickEnergy)开发的项目[Sesame-TK](https://github.com/TKaxv-7S/Sesame-TK)  并且在其基础上进行了少量的功能改进与优化。得益于AI大模型的强大能力使得本项目得以延续发展，请自行斟酌考虑使用。 
->
-> 所有图片由 ༒激༙྇流༙྇泉༙྇༒ 授权使用
->
-> ## 协议说明
-> 在 **北京时间2024年7月15日之前** 提交的所有代码 ，遵循 `Apache-2.0` 协议
->
-> 自 **北京时间2024年7月15日开始** 提交的所有代码 ，遵循 `GPLv3` 协议，并禁止用于任何商业用途、禁止二次修改后闭源发布
->
-> 自 **北京时间2025年7月23日开始** 提交的所有代码 ，遵循 [WTFPL](https://www.wtfpl.net/) 协议 **你他妈想干嘛就干嘛**
->
-> 自 **北京时间2025年12月15日开始** 提交的所有代码 ，又他们改回遵循 `GPLv3` 协议，并禁止用于任何商业用途、禁止二次修改后闭源发布
+> 本项目`fork`自[Sesame-TK](https://github.com/Fansirsqi/Sesame-TK)基于`constanline`版[XQuickEnergy](https://github.com/constanline/XQuickEnergy) 与`pansong291`版[XQuickEnergy](https://github.com/pansong291/XQuickEnergy)开发的项目[Sesame-TK](https://github.com/TKaxv-7S/Sesame-TK)  并且在其基础上进行了少量的功能改进与优化。得益于AI大模型的强大能力使得本项目得以延续发展，请自行斟酌考虑使用。 
+
 
 > [!Important]
 > ## 鸣谢 感谢各位开发者的辛苦贡献
 > ![[贡献列表](https://github.com/Fansirsqi/Sesame-TK/graphs/contributors)](https://contrib.rocks/image?repo=Fansirsqi/Sesame-TK)
 
-## Star History
 
-  <a href="https://star-history.com/#Fansirsqi/Sesame-TK&amp;Timeline"> 
-   <picture> 
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=Fansirsqi/Sesame-TK&amp;type=Timeline&amp;theme=dark"></source> 
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=Fansirsqi/Sesame-TK&amp;type=Timeline"></source> 
-    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=Fansirsqi/Sesame-TK&amp;type=Timeline" /> 
-   </picture> </a>/
