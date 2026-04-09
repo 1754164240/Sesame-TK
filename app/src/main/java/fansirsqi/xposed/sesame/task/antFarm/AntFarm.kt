@@ -3633,7 +3633,11 @@ class AntFarm : ModelTask() {
                             availableCount++
                             if (hireAnimalAction(userId)) {
                                 animalCount++
-                                break
+                                // 成功后继续扫描当前页，尽量在一页内补满
+                                if (animalCount >= 3) {
+                                    break
+                                }
+                                continue
                             }
                             // 检查农场是否已满
                             if (isFarmFull) {
