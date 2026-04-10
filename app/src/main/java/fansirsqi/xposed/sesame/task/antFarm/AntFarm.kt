@@ -793,7 +793,11 @@ class AntFarm : ModelTask() {
             //家庭
             if (family!!.value) {
                 //                family();
-                AntFarmFamily.run(familyOptions!!, notInviteList!!)
+                AntFarmFamily.run(
+                    familyOptions!!,
+                    notInviteList!!,
+                    feedFriendAnimalList!!.value.keys.filterNotNull().toSet()
+                )
                 tc.countDebug("家庭任务")
             }
             // 开宝箱

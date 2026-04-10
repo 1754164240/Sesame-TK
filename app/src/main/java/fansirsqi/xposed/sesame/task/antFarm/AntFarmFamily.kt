@@ -51,9 +51,13 @@ data object AntFarmFamily {
     private var eatTogetherConfig: JSONObject = JSONObject()
 
 
-    fun run(familyOptions: SelectModelField, notInviteList: SelectModelField) {
+    fun run(
+        familyOptions: SelectModelField,
+        notInviteList: SelectModelField,
+        designatedFeedUserIds: Set<String>
+    ) {
         try {
-            enterFamily(familyOptions, notInviteList)
+            enterFamily(familyOptions, notInviteList, designatedFeedUserIds)
         } catch (e: Exception) {
             Log.printStackTrace(TAG, e)
         }
@@ -62,7 +66,11 @@ data object AntFarmFamily {
     /**
      * 进入家庭
      */
-    fun enterFamily(familyOptions: SelectModelField, notInviteList: SelectModelField) {
+    fun enterFamily(
+        familyOptions: SelectModelField,
+        notInviteList: SelectModelField,
+        designatedFeedUserIds: Set<String>
+    ) {
         try {
             val enterRes = JSONObject(AntFarmRpcCall.enterFamily());
             if (ResChecker.checkRes(TAG, enterRes)) {
@@ -92,7 +100,7 @@ data object AntFarmFamily {
                     && assignFamilyMemberInfo.getJSONObject("assignRights").getString("status") != "USED"
                 ) {
                     if (assignFamilyMemberInfo.getJSONObject("assignRights").getString("assignRightsOwner") == UserMap.currentUid) {
-                        assignFamilyMember(assignFamilyMemberInfo, familyUserIds)
+                        assignFamilyMember(assignFamilyMemberInfo, familyUserIds, designatedFeedUserIds)
                     } else {
                         Log.record("家庭任务🏡[使用顶梁柱特权] 不是家里的顶梁柱！")
                         familyOptions.value.remove("assignRights")
@@ -104,7 +112,7 @@ data object AntFarmFamily {
                 }
 
                 if (familyOptions.value.contains("feedFamilyAnimal")) {
-                    familyFeedFriendAnimal(familyAnimals)
+                    familyFeedFriendAnimal(familyAnimals, designatedFeedUserIds)
                 }
 
                 if (familyOptions.value.contains("eatTogetherConfig")) {
@@ -176,21 +184,37 @@ data object AntFarmFamily {
     /**
      * 顶梁柱
      */
-    fun assignFamilyMember(jsonObject: JSONObject, userIds: MutableList<String>) {
+    fun assignFamilyMember(
+        jsonObject: JSONObject,
+        userIds: MutableList<String>,
+        designatedFeedUserIds: Set<String>
+    ) {
         try {
             userIds.remove(UserMap.currentUid)
-            //随机选一个家庭成员
-            if (userIds.isEmpty()) {
+            val candidateUserIds = if (designatedFeedUserIds.isEmpty()) {
+                userIds.toList()
+            } else {
+                userIds.filter { designatedFeedUserIds.contains(it) }
+            }
+            // 优先按帮喂名单筛选顶梁柱目标；未配置名单时沿用原逻辑
+            if (candidateUserIds.isEmpty()) {
+                if (designatedFeedUserIds.isNotEmpty()) {
+                    Log.record("家庭任务🏡[使用顶梁柱特权] 帮喂名单中没有可分配的家庭成员，跳过")
+                }
                 return
             }
-            val beAssignUser = userIds[RandomUtil.nextInt(0, userIds.size - 1)]
-            //随机获取一个任务类型
+            val beAssignUser = candidateUserIds[RandomUtil.nextInt(0, candidateUserIds.size - 1)]
+            // 固定使用服务端返回的第一个特权动作
             val assignConfigList = jsonObject.getJSONArray("assignConfigList")
-            val assignConfig = assignConfigList.getJSONObject(RandomUtil.nextInt(0, assignConfigList.length() - 1))
+            if (assignConfigList.length() == 0) {
+                Log.record("家庭任务🏡[使用顶梁柱特权] 没有可用的特权动作，跳过")
+                return
+            }
+            val assignConfig = assignConfigList.getJSONObject(0)
             val jo = JSONObject(AntFarmRpcCall.assignFamilyMember(assignConfig.getString("assignAction"), beAssignUser))
             if (ResChecker.checkRes(TAG, jo)) {
                 Log.farm("家庭任务🏡[使用顶梁柱特权] ${assignConfig.getString("assignDesc")}")
-//                val sendRes = JSONObject(AntFarmRpcCall.sendChat(assignConfig.getString("chatCardType"), beAssignUser))
+                val sendRes = JSONObject(AntFarmRpcCall.sendChat(assignConfig.getString("chatCardType"), beAssignUser))
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, t)
@@ -201,7 +225,7 @@ data object AntFarmFamily {
      * 帮好友喂小鸡
      * @param animals 家庭动物列表
      */
-    fun familyFeedFriendAnimal(animals: JSONArray) {
+    fun familyFeedFriendAnimal(animals: JSONArray, designatedFeedUserIds: Set<String>) {
         try {
             for (i in 0 until animals.length()) {
                 val animal = animals.getJSONObject(i)
@@ -217,6 +241,10 @@ data object AntFarmFamily {
                 val groupId = animal.getString("groupId")
                 val farmId = animal.getString("farmId")
                 val userId = animal.getString("userId")
+
+                if (designatedFeedUserIds.isNotEmpty() && !designatedFeedUserIds.contains(userId)) {
+                    continue
+                }
 
                 // 非好友 → 跳过
                 if (!UserMap.getUserIdSet().contains(userId)) {
