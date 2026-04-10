@@ -655,6 +655,12 @@ class AntFarm : ModelTask() {
             if (enterFarm() == null) {
                 return
             }
+            val prioritizeSleepTask = shouldPrioritizeSleepTask()
+            if (prioritizeSleepTask) {
+                Log.record(TAG, "晚上20:00后优先处理小鸡睡觉任务")
+                animalSleepAndWake()
+                tc.countDebug("小鸡睡觉&起床(优先)")
+            }
             //先遣返，再雇佣，喂鸡
             if (sendBackAnimal!!.value) {
                 sendBackAnimal()
@@ -811,8 +817,10 @@ class AntFarm : ModelTask() {
                 tc.countDebug("小鸡乐园道具兑换")
             }
             //小鸡睡觉&起床
-            animalSleepAndWake()
-            tc.countDebug("小鸡睡觉&起床")
+            if (!prioritizeSleepTask) {
+                animalSleepAndWake()
+                tc.countDebug("小鸡睡觉&起床")
+            }
 
             /* 小鸡睡觉后领取饲料，先同步小鸡状态，更新小鸡为SLEEPY状态，然后领取饲料。避免小鸡睡觉后软件异常，引起
                 喂小鸡睡觉的饲料没有领取，而造成缺口
@@ -832,6 +840,16 @@ class AntFarm : ModelTask() {
             Log.printStackTrace(TAG, "AntFarm.start.run err:",t)
         } finally {
             Log.record(TAG, "执行结束-蚂蚁$name")
+        }
+    }
+
+    private fun shouldPrioritizeSleepTask(): Boolean {
+        return try {
+            val eightPm = TimeUtil.getTodayCalendarByTimeStr("2000") ?: return false
+            TimeUtil.getNow() >= eightPm
+        } catch (e: Exception) {
+            Log.printStackTrace(TAG, "shouldPrioritizeSleepTask err:", e)
+            false
         }
     }
 
