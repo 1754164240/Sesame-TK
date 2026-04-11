@@ -656,10 +656,14 @@ class AntFarm : ModelTask() {
                 return
             }
             val prioritizeSleepTask = shouldPrioritizeSleepTask()
+            var sleepRewardHandled = false
             if (prioritizeSleepTask) {
                 Log.record(TAG, "晚上20:00后优先处理小鸡睡觉任务")
+                feedAnimalBeforeSleepTask()
+                tc.countDebug("睡前喂食")
                 animalSleepAndWake()
                 tc.countDebug("小鸡睡觉&起床(优先)")
+                sleepRewardHandled = receiveFarmAwardsAfterSleepIfNeeded()
             }
             //先遣返，再雇佣，喂鸡
             if (sendBackAnimal!!.value) {
@@ -825,10 +829,8 @@ class AntFarm : ModelTask() {
             /* 小鸡睡觉后领取饲料，先同步小鸡状态，更新小鸡为SLEEPY状态，然后领取饲料。避免小鸡睡觉后软件异常，引起
                 喂小鸡睡觉的饲料没有领取，而造成缺口
              */
-            syncAnimalStatus(ownerFarmId)
-            if (AnimalFeedStatus.SLEEPY.name == ownerAnimal.animalFeedStatus) {
-                Log.record(TAG, "小鸡正在睡觉，领取饲料")
-                receiveFarmAwards()
+            if (!sleepRewardHandled) {
+                receiveFarmAwardsAfterSleepIfNeeded()
             }
 
             tc.stop()
@@ -849,6 +851,49 @@ class AntFarm : ModelTask() {
             TimeUtil.getNow() >= eightPm
         } catch (e: Exception) {
             Log.printStackTrace(TAG, "shouldPrioritizeSleepTask err:", e)
+            false
+        }
+    }
+
+    private fun feedAnimalBeforeSleepTask() {
+        try {
+            if (AnimalInteractStatus.HOME.name != ownerAnimal.animalInteractStatus) {
+                Log.record(TAG, "睡前喂食🥣[小鸡不在家，跳过]")
+                return
+            }
+            if (AnimalFeedStatus.SLEEPY.name == ownerAnimal.animalFeedStatus) {
+                Log.record(TAG, "睡前喂食🥣[小鸡已在睡觉，跳过]")
+                return
+            }
+            if (AnimalFeedStatus.HUNGRY.name != ownerAnimal.animalFeedStatus) {
+                Log.record(TAG, "睡前喂食🥣[小鸡当前不饿，跳过]")
+                return
+            }
+            if (foodStock < 180) {
+                Log.record(TAG, "睡前喂食🥣[饲料不足180g，跳过]")
+                return
+            }
+            if (feedAnimal(ownerFarmId)) {
+                Log.record(TAG, "睡前喂食🥣[小鸡已喂食，准备睡觉]")
+                syncAnimalStatus(ownerFarmId)
+            }
+        } catch (e: Exception) {
+            Log.printStackTrace(TAG, "feedAnimalBeforeSleepTask err:", e)
+        }
+    }
+
+    private suspend fun receiveFarmAwardsAfterSleepIfNeeded(): Boolean {
+        return try {
+            syncAnimalStatus(ownerFarmId)
+            if (AnimalFeedStatus.SLEEPY.name == ownerAnimal.animalFeedStatus) {
+                Log.record(TAG, "小鸡正在睡觉，领取饲料")
+                receiveFarmAwards()
+                true
+            } else {
+                false
+            }
+        } catch (e: Exception) {
+            Log.printStackTrace(TAG, "receiveFarmAwardsAfterSleepIfNeeded err:", e)
             false
         }
     }
