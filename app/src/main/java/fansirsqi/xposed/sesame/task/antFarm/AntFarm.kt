@@ -782,7 +782,7 @@ class AntFarm : ModelTask() {
                 tc.countDebug("送麦子")
             }
             // 帮好友喂鸡
-            feedFriend()
+            val familyFedUserIds = feedFriend()
             tc.countDebug("帮好友喂鸡")
             // 通知好友赶鸡
             if (notifyFriend!!.value) {
@@ -806,7 +806,7 @@ class AntFarm : ModelTask() {
                 AntFarmFamily.run(
                     familyOptions!!,
                     notInviteList!!,
-                    feedFriendAnimalList!!.value.keys.filterNotNull().toSet()
+                    feedFriendAnimalList!!.value.keys.filterNotNull().toSet() - familyFedUserIds
                 )
                 tc.countDebug("家庭任务")
             }
@@ -2794,9 +2794,94 @@ class AntFarm : ModelTask() {
         return false
     }
 
-    private suspend fun feedFriend() {
+    private data class FamilyFeedTarget(
+        val farmId: String,
+        val groupId: String,
+        val userId: String
+    )
+
+    private fun queryFamilyFeedTargets(designatedUserIds: Set<String>): Map<String, FamilyFeedTarget> {
+        if (designatedUserIds.isEmpty()) {
+            return emptyMap()
+        }
+        return try {
+            val familyRes = JSONObject(AntFarmRpcCall.enterFamily())
+            if (!ResChecker.checkRes(TAG, familyRes) || !familyRes.has("animals")) {
+                return emptyMap()
+            }
+            val animals = familyRes.optJSONArray("animals") ?: return emptyMap()
+            val targetMap = mutableMapOf<String, FamilyFeedTarget>()
+            for (i in 0..<animals.length()) {
+                val animal = animals.optJSONObject(i) ?: continue
+                val userId = animal.optString("userId")
+                if (userId.isEmpty() || !designatedUserIds.contains(userId)) {
+                    continue
+                }
+                val animalStatusVO = animal.optJSONObject("animalStatusVO") ?: continue
+                if (animalStatusVO.optString("animalInteractStatus") != AnimalInteractStatus.HOME.name ||
+                    animalStatusVO.optString("animalFeedStatus") != AnimalFeedStatus.HUNGRY.name
+                ) {
+                    continue
+                }
+                val farmId = animal.optString("farmId")
+                val groupId = animal.optString("groupId")
+                if (farmId.isEmpty() || groupId.isEmpty()) {
+                    continue
+                }
+                targetMap[userId] = FamilyFeedTarget(farmId, groupId, userId)
+            }
+            targetMap
+        } catch (e: CancellationException) {
+            Log.record(TAG, "queryFamilyFeedTargets 协程被取消")
+            throw e
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "queryFamilyFeedTargets err:", t)
+            emptyMap()
+        }
+    }
+
+    private suspend fun tryFeedFriendInFamily(target: FamilyFeedTarget): Boolean {
+        val userId = target.userId
+        val user = UserMap.getMaskName(userId)
+        val flagKey = "farm::feedFriendLimit::$userId"
+        if (Status.hasFlagToday(flagKey)) {
+            Log.record("[$userId] 今日喂鸡次数已达上限（已记录）🥣，跳过")
+            return true
+        }
+        if (foodStock < 180 && unreceiveTaskAward > 0) {
+            Log.record(TAG, "✨还有待领取的饲料")
+            receiveFarmAwards()
+        }
+        if (foodStock < 180) {
+            Log.record(TAG, "😞喂鸡[$user]饲料不足")
+            return false
+        }
+        val familyFeedRes = JSONObject(AntFarmRpcCall.feedFriendAnimal(target.farmId, target.groupId))
+        if (!familyFeedRes.optBoolean("success", false)) {
+            val resultCode = familyFeedRes.optString("resultCode")
+            if (resultCode == "391") {
+                Status.setFlagToday(flagKey)
+                Log.record("[$userId] 今日帮喂次数已达上限🥣，已记录为当日限制")
+                return true
+            }
+            Log.error(
+                TAG,
+                "😞家庭帮喂[$user]失败 code=$resultCode msg=${familyFeedRes.optString("memo")}"
+            )
+            return false
+        }
+        foodStock = familyFeedRes.optInt("foodStock", foodStock)
+        Log.farm("家庭任务🏠帮喂好友🥣[$user]的小鸡180g #剩余${foodStock}g")
+        Status.feedFriendToday(userId)
+        return true
+    }
+
+    private suspend fun feedFriend(): Set<String> {
+        val familyFedUserIds = mutableSetOf<String>()
         try {
             val feedFriendAnimalMap: Map<String?, Int?> = feedFriendAnimalList!!.value
+            val designatedUserIds = feedFriendAnimalMap.keys.filterNotNull().toSet()
+            val familyFeedTargets = queryFamilyFeedTargets(designatedUserIds)
             for (entry in feedFriendAnimalMap.entries) {
                 val userId: String = entry.key!!
                 val maxDailyCount: Int = entry.value!!
@@ -2819,6 +2904,13 @@ class AntFarm : ModelTask() {
                 }
 
                 if (!Status.canFeedFriendToday(userId, maxDailyCount)) continue
+                val familyFeedTarget = familyFeedTargets[userId]
+                if (familyFeedTarget != null) {
+                    if (tryFeedFriendInFamily(familyFeedTarget)) {
+                        familyFedUserIds.add(userId)
+                    }
+                    continue
+                }
                 val jo = JSONObject(AntFarmRpcCall.enterFarm(userId, userId))
                 delay(3 * 1000L) //延迟3秒
                 if (ResChecker.checkRes(TAG, jo)) {
@@ -2846,7 +2938,7 @@ class AntFarm : ModelTask() {
                                 //第二次检查
                                 if (foodStock >= 180) {
                                     if (Status.hasFlagToday("farm::feedFriendLimit")) {
-                                        return
+                                        return familyFedUserIds
                                     }
                                     val feedFriendAnimaljo =
                                         JSONObject(AntFarmRpcCall.feedFriendAnimal(friendFarmId))
@@ -2885,6 +2977,7 @@ class AntFarm : ModelTask() {
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "feedFriendAnimal err:", t)
         }
+        return familyFedUserIds
     }
 
 
