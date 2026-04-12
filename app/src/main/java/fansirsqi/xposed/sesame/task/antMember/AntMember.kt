@@ -2741,12 +2741,12 @@ class AntMember : ModelTask() {
                 if (!task.has("todayFinish")) {
                     // 领取任务
                     s = AntMemberRpcCall.joinSesameTask(taskTemplateId)
-                    delay(200)
+                    delaySesameTaskOperation()
                     responseObj = JSONObject(s)
                     if (!ResChecker.checkRes(TAG, responseObj)) {
                         Log.error(TAG, "芝麻信用💳[领取任务" + taskTitle + "失败]#" + s)
                         // 自动添加到黑名单
-                        val errorCode = responseObj.optString("errorCode", "")
+                        val errorCode = extractSesameTaskErrorCode(responseObj)
                         if (!errorCode.isEmpty()) {
                             autoAddToBlacklist(taskTitle, taskTitle, errorCode)
                         }
@@ -2766,7 +2766,7 @@ class AntMember : ModelTask() {
                 // 完成任务
                 for (j in completedNum..<needCompleteNum) {
                     s = AntMemberRpcCall.finishSesameTask(recordId)
-                    delay(200)
+                    delaySesameTaskOperation()
                     responseObj = JSONObject(s)
                     if (ResChecker.checkRes(TAG, responseObj)) {
                         record(
@@ -2776,7 +2776,7 @@ class AntMember : ModelTask() {
                     } else {
                         Log.error(TAG, "芝麻信用💳[完成任务" + taskTitle + "失败]#" + s)
                         // 自动添加到黑名单
-                        val errorCode = responseObj.optString("errorCode", "")
+                        val errorCode = extractSesameTaskErrorCode(responseObj)
                         if (!errorCode.isEmpty()) {
                             autoAddToBlacklist(taskTitle, taskTitle, errorCode)
                         }
@@ -2792,6 +2792,16 @@ class AntMember : ModelTask() {
             }
 
             return intArrayOf(completedCount, skippedCount)
+        }
+
+        private suspend fun delaySesameTaskOperation() {
+            delay(800)
+        }
+
+        private fun extractSesameTaskErrorCode(responseObj: JSONObject): String {
+            return responseObj.optString("errorCode")
+                .ifEmpty { responseObj.optString("resultCode") }
+                .ifEmpty { responseObj.optString("resultView") }
         }
 
         /**

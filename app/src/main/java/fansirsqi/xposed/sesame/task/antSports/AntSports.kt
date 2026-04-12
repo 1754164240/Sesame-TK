@@ -990,6 +990,11 @@ class AntSports : ModelTask() {
                 val cityId = cityObj.optString("cityId")
                 val cityStatus = cityObj.optString("status")
 
+                if (cityId.isBlank() || cityId == "000000") {
+                    Log.record(TAG, "⛔ 跳过非法城市 cityId=$cityId")
+                    continue
+                }
+
                 // 🚫 非 ONLINE 城市直接跳过
                 if (cityStatus != "ONLINE") {
                     // Log.record(TAG, "⛔ 城市[$cityId] 状态=$cityStatus，跳过")

@@ -349,9 +349,59 @@ data object AntFarmFamily {
             val jo = JSONObject(AntFarmRpcCall.familyEatTogether(groupId, familyUserIds.toJSONArray(), array))
             if (ResChecker.checkRes(TAG, jo)) {
                 Log.farm("家庭任务🏠请客" + periodName + "#消耗美食" + familyUserIds.size + "份")
+            } else if (jo.optString("resultCode") == "FAMILY12") {
+                Log.record("家庭任务🏠请客吃美食#家庭成员发生变化，刷新成员后重试")
+                retryFamilyEatTogether(periodName)
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "familyEatTogether err:",t)
+        }
+    }
+
+    private fun retryFamilyEatTogether(periodName: String) {
+        try {
+            if (!refreshFamilyState()) {
+                Log.record("家庭任务🏠请客吃美食#刷新家庭信息失败，跳过")
+                return
+            }
+            if (familyUserIds.isEmpty()) {
+                Log.record("家庭任务🏠请客吃美食#刷新后家庭成员为空，跳过")
+                return
+            }
+            val array = queryRecentFarmFood(familyUserIds.size)
+            if (array == null) {
+                Log.record("家庭任务🏠请客吃美食#刷新后美食为空，跳过")
+                return
+            }
+            val retryRes = JSONObject(AntFarmRpcCall.familyEatTogether(groupId, familyUserIds.toJSONArray(), array))
+            if (ResChecker.checkRes(TAG, retryRes)) {
+                Log.farm("家庭任务🏠请客" + periodName + "#刷新成员后重试成功")
+            } else {
+                Log.error(TAG, "家庭任务🏠请客吃美食#重试失败:$retryRes")
+            }
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "retryFamilyEatTogether err:", t)
+        }
+    }
+
+    private fun refreshFamilyState(): Boolean {
+        return try {
+            val enterRes = JSONObject(AntFarmRpcCall.enterFamily())
+            if (!ResChecker.checkRes(TAG, enterRes) || !enterRes.has("groupId")) {
+                return false
+            }
+            groupId = enterRes.getString("groupId")
+            groupName = enterRes.optString("groupName")
+            familyAnimals = enterRes.optJSONArray("animals") ?: JSONArray()
+            familyUserIds = (0..<familyAnimals.length())
+                .map { familyAnimals.getJSONObject(it).getString("userId") }
+                .toMutableList()
+            familyInteractActions = enterRes.optJSONArray("familyInteractActions") ?: JSONArray()
+            eatTogetherConfig = enterRes.optJSONObject("eatTogetherConfig") ?: JSONObject()
+            true
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "refreshFamilyState err:", t)
+            false
         }
     }
 
