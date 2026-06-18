@@ -4,6 +4,7 @@ from typing import List
 
 # Corrected imports for exception handling
 import json  # Import the json module for serialization
+import os
 from fastapi import Depends, HTTPException, Query, Request, status, FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
@@ -116,13 +117,27 @@ def get_lan_ip():
     return None
 
 
+def get_bind_host():
+    return os.getenv("SERVE_DEBUG_HOST", "0.0.0.0")
+
+
+def get_access_host(ip_provider=get_lan_ip):
+    return ip_provider() or "127.0.0.1"
+
+
+def get_server_port():
+    return int(os.getenv("SERVE_DEBUG_PORT", "9527"))
+
+
 
 
 
 if __name__ == "__main__":
     import uvicorn
-#     host = get_lan_ip()
-    host="192.168.9.112"
-    logger.info(f"Starting FastAPI server on {host} ")
-    uvicorn.run(app, host=host, port=9527)
+    host = get_bind_host()
+    port = get_server_port()
+    access_host = get_access_host()
+    logger.info(f"Starting FastAPI server on {host}:{port}")
+    logger.info(f"Access URL: http://{access_host}:{port}")
+    uvicorn.run(app, host=host, port=port)
     logger.info("FastAPI server stopped.")
