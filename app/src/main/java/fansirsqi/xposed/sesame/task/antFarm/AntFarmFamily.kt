@@ -19,6 +19,7 @@ import kotlin.math.abs
 
 data object AntFarmFamily {
     private const val TAG = "小鸡家庭"
+    private const val FAMILY_WALK_DONATE_FLAG = "antFarm::familyWalkDonate"
 
     /**
      * 家庭ID
@@ -112,7 +113,7 @@ data object AntFarmFamily {
                 }
 
                 if (familyOptions.value.contains("feedFamilyAnimal")) {
-                    familyFeedFriendAnimal(familyAnimals, designatedFeedUserIds)
+                    Log.record(TAG, "家庭任务🏠帮喂小鸡已由帮喂主流程处理，跳过二次帮喂")
                 }
 
                 if (familyOptions.value.contains("eatTogetherConfig")) {
@@ -144,8 +145,13 @@ data object AntFarmFamily {
      */
     fun familyWalkDonate() {
         try {
+            if (Status.hasFlagToday(FAMILY_WALK_DONATE_FLAG)) {
+                Log.record(TAG, "家庭任务🏡捐步今日已完成，跳过")
+                return
+            }
             if (AntFarmWalkDonateTask.donateIfEligible(TAG)) {
                 Log.farm("家庭任务🏡捐步")
+                Status.setFlagToday(FAMILY_WALK_DONATE_FLAG)
             }
         } catch (e: Exception) {
             Log.printStackTrace(TAG, e)
