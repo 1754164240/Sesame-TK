@@ -1074,6 +1074,49 @@ class AntFarm : ModelTask() {
         return false
     }
 
+    private suspend fun receiveParadiseLimitedActivityAwards(allowTaskTypes: Set<String>) {
+        if (!AntFarmParadiseLimitedActivity.isActive()) {
+            return
+        }
+        try {
+            val jo = queryParadiseLimitedActivity() ?: return
+            val tasks = AntFarmParadiseLimitedActivity.claimableTasks(jo)
+                .filter { allowTaskTypes.contains(it.taskType) }
+            for (task in tasks) {
+                val awardResponse = AntFarmRpcCall.receiveParadiseLimitedActivityAward(task.taskType, task.awardCount)
+                if (awardResponse.isBlank()) {
+                    Log.record(TAG, "小鸡乐园限时活动奖励领取为空[${task.title}]")
+                    continue
+                }
+                val awardJo = JSONObject(awardResponse)
+                if (ResChecker.checkRes(TAG, awardJo)) {
+                    Log.farm("小鸡乐园限时活动🎁[${task.title}]#领取${task.awardCount}乐园币")
+                    delay(1000)
+                } else {
+                    Log.record(TAG, "小鸡乐园限时活动奖励领取失败[${task.title}]: $awardJo")
+                }
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "receiveParadiseLimitedActivityAwards err:", t)
+        }
+    }
+
+    private fun queryParadiseLimitedActivity(): JSONObject? {
+        val response = AntFarmRpcCall.queryParadiseLimitedActivity()
+        if (response.isBlank()) {
+            Log.record(TAG, "小鸡乐园限时活动查询为空")
+            return null
+        }
+        val jo = JSONObject(response)
+        if (!ResChecker.checkRes(TAG, jo)) {
+            Log.record(TAG, "小鸡乐园限时活动查询失败: $jo")
+            return null
+        }
+        return jo
+    }
+
     private fun animalSleepAndWake() {
         try {
             val sleepTimeStr = sleepTime!!.value
@@ -2194,12 +2237,17 @@ class AntFarm : ModelTask() {
                 //  val taskMode = task.optString("taskMode")
                 //  if(taskMode=="TRIGGER")     continue                 //跳过事件任务
 
+                val isWalkDonateTask = AntFarmWalkDonateTask.isWalkDonateTask(bizKey, title)
+
                 // 1. 预检查：黑名单与每日上限
                 // 检查任务标题和业务键是否在黑名单中
                 val titleInBlacklist = TaskBlacklist.isTaskInBlacklist(title)
                 val bizKeyInBlacklist = TaskBlacklist.isTaskInBlacklist(bizKey)
+                val exactBlacklist = TaskBlacklist.getBlacklist()
+                val explicitWalkDonateBlacklist = isWalkDonateTask &&
+                    (exactBlacklist.contains(title) || exactBlacklist.contains(bizKey))
 
-                if (titleInBlacklist || bizKeyInBlacklist) {
+                if ((!isWalkDonateTask || explicitWalkDonateBlacklist) && (titleInBlacklist || bizKeyInBlacklist)) {
                     Log.record(TAG, "跳过黑名单任务: $title ($bizKey)")
                     continue
                 }
@@ -2221,9 +2269,14 @@ class AntFarm : ModelTask() {
                                 }
                             }
                             else -> {
-                                // --- 普通任务通用逻辑 ---
-                                Log.record(TAG, "开始处理庄园任务: $title ($bizKey)")
-                                handleGeneralTask(bizKey, title)
+                                if (isWalkDonateTask) {
+                                    Log.record(TAG, "开始处理庄园捐步任务: $title ($bizKey)")
+                                    handleWalkDonateTask(bizKey, title)
+                                } else {
+                                    // --- 普通任务通用逻辑 ---
+                                    Log.record(TAG, "开始处理庄园任务: $title ($bizKey)")
+                                    handleGeneralTask(bizKey, title)
+                                }
                             }
                         }
                     }
@@ -2291,6 +2344,25 @@ class AntFarm : ModelTask() {
                 Log.error("庄园任务失败：$title code:$resultCode")
                 TaskBlacklist.autoAddToBlacklist(bizKey, title, resultCode)
             }
+        }
+    }
+
+    private fun handleWalkDonateTask(bizKey: String, title: String) {
+        if (!AntFarmWalkDonateTask.donateIfEligible(TAG)) {
+            return
+        }
+
+        val result = AntFarmRpcCall.doFarmTask(bizKey)
+        if (result.isNullOrEmpty()) {
+            Log.farm("庄园捐步任务已执行，等待任务刷新🧾[$title]")
+            return
+        }
+
+        val jo = JSONObject(result)
+        if (AntFarmWalkDonateTask.isGeneralSuccess(jo)) {
+            Log.farm("庄园捐步任务完成🧾[$title]")
+        } else {
+            Log.record(TAG, "庄园捐步已执行，确认任务状态待刷新: $title code:${jo.optString("resultCode", "")}")
         }
     }
 
@@ -4171,67 +4243,93 @@ class AntFarm : ModelTask() {
 
     private suspend fun drawGameCenterAward() {
         try {
-            val response = AntFarmRpcCall.queryGameList()
-            val jo = JSONObject(response)
+            receiveParadiseLimitedActivityAwards(setOf(AntFarmParadiseLimitedActivity.SIGN_TASK_TYPE))
 
-            // 使用你的 ResChecker 工具类判断
-            if (!jo.optBoolean("success")) {
-                Log.record(TAG, "queryGameList 失败: $jo")
-                return
+            try {
+                openAvailableGameCenterTreasureBoxes()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (t: Throwable) {
+                Log.printStackTrace(TAG, "开宝箱流程异常", t)
             }
 
-            // 核心改动：从 gameCenterDrawRights 获取权限数据
-            val drawRights = jo.optJSONObject("gameCenterDrawRights")
-            if (drawRights != null) {
-
-                // 1. 处理当前可开的宝箱 (对应你说的 canUse)
-                var quotaCanUse = drawRights.optInt("quotaCanUse") // 当前手头的机会
-                if (quotaCanUse > 0) {
-                    Log.record(TAG, "当前有 $quotaCanUse 个宝箱待开启...")
-                    while (quotaCanUse > 0) {
-                        val drawRes = JSONObject(AntFarmRpcCall.drawGameCenterAward(1))
-                        if (drawRes.optBoolean("success")) {
-                            // 领取成功后，更新剩余可领取的 quotaCanUse
-                            // 这里的返回 JSON 建议你再确认下，通常也是在 gameCenterDrawRights 里
-                            val nextRights = drawRes.optJSONObject("gameCenterDrawRights")
-                            quotaCanUse = nextRights?.optInt("quotaCanUse") ?: (quotaCanUse - 1)
-
-                            val awardList = drawRes.optJSONArray("gameCenterDrawAwardList")
-                            val awardStrings = mutableListOf<String>()
-                            if (awardList != null) {
-                                for (i in 0 until awardList.length()) {
-                                    val item = awardList.getJSONObject(i)
-                                    awardStrings.add("${item.optString("awardName")}*${item.optInt("awardCount")}")
-                                }
-                            }
-                            Log.farm("庄园小鸡🎁[获得奖品: ${awardStrings.joinToString(",")}]")
-                            delay(3000)
-                        } else {
-                            Log.record(TAG, "开启宝箱失败: ${drawRes.optString("desc")}")
-                            break
-                        }
-                    }
-                }
-
-                // 2. 处理剩余任务 (判断是否需要去刷任务)
-                val limit = drawRights.optInt("quotaLimit") // 总上限，比如 10
-                val used = drawRights.optInt("usedQuota")   // 今日已获得的总数，比如 2
-
-                // 计算逻辑：如果 已获得 < 总上限，且当前没机会了，就去刷
-                val remainToTask = limit - used
-                if (remainToTask > 0 && quotaCanUse == 0) {
-                   // Log.record(TAG, "宝箱进度: $used/$limit，开始自动刷任务补齐...")
-                    // 根据游戏类型选择上报任务
-                    GameTask.Farm_ddply.report(remainToTask)
-                } else if (remainToTask <= 0) {
-                   // Log.record(TAG, "今日 $limit 个金蛋任务已全部满额")
-                }
+            val limitedActivity = queryParadiseLimitedActivity()
+            if (limitedActivity != null &&
+                AntFarmParadiseLimitedActivity.shouldOpenTreasureBoxesBeforeClaim(limitedActivity)
+            ) {
+                Log.record(TAG, "小鸡乐园限时活动宝箱奖励未完成，先领取并开启可用宝箱")
+                openAvailableGameCenterTreasureBoxes()
             }
+            receiveParadiseLimitedActivityAwards(setOf(AntFarmParadiseLimitedActivity.TREASURE_BOX_TASK_TYPE))
 
         } catch (e: CancellationException) {
             throw e
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "drawGameCenterAward 流程异常", t)
+        }
+    }
+
+    private suspend fun openAvailableGameCenterTreasureBoxes() {
+        val response = AntFarmRpcCall.queryGameList()
+        if (response.isBlank()) {
+            Log.record(TAG, "queryGameList 返回为空")
+            return
+        }
+        val jo = JSONObject(response)
+
+        if (!jo.optBoolean("success")) {
+            Log.record(TAG, "queryGameList 失败: $jo")
+            return
+        }
+
+        val drawRights = jo.optJSONObject("gameCenterDrawRights") ?: return
+        var quotaCanUse = drawRights.optInt("quotaCanUse")
+        if (quotaCanUse > 0) {
+            Log.record(TAG, "当前有 $quotaCanUse 个宝箱待开启...")
+            while (quotaCanUse > 0) {
+                val drawRes = JSONObject(AntFarmRpcCall.drawGameCenterAward(1))
+                if (drawRes.optBoolean("success")) {
+                    val nextRights = drawRes.optJSONObject("gameCenterDrawRights")
+                    quotaCanUse = nextRights?.optInt("quotaCanUse") ?: (quotaCanUse - 1)
+
+                    val awardList = drawRes.optJSONArray("gameCenterDrawAwardList")
+                    val awardStrings = mutableListOf<String>()
+                    if (awardList != null) {
+                        for (i in 0 until awardList.length()) {
+                            val item = awardList.getJSONObject(i)
+                            awardStrings.add("${item.optString("awardName")}*${item.optInt("awardCount")}")
+                        }
+                    }
+                    Log.farm("庄园小鸡🎁[获得奖品: ${awardStrings.joinToString(",")}]")
+                    delay(3000)
+                } else {
+                    Log.record(TAG, "开启宝箱失败: ${drawRes.optString("desc")}")
+                    break
+                }
+            }
+        }
+
+        reportRemainingGameCenterTreasureTasks(quotaCanUse)
+    }
+
+    private fun reportRemainingGameCenterTreasureTasks(quotaCanUse: Int) {
+        val response = AntFarmRpcCall.queryGameList()
+        if (response.isBlank()) {
+            Log.record(TAG, "queryGameList 返回为空")
+            return
+        }
+        val jo = JSONObject(response)
+        if (!jo.optBoolean("success")) {
+            Log.record(TAG, "queryGameList 失败: $jo")
+            return
+        }
+        val drawRights = jo.optJSONObject("gameCenterDrawRights") ?: return
+        val limit = drawRights.optInt("quotaLimit")
+        val used = drawRights.optInt("usedQuota")
+        val latestQuotaCanUse = drawRights.optInt("quotaCanUse", quotaCanUse)
+        val remainToTask = limit - used
+        if (remainToTask > 0 && latestQuotaCanUse == 0) {
+            GameTask.Farm_ddply.report(remainToTask)
         }
     }
 

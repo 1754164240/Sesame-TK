@@ -31,6 +31,7 @@ object OtherEntityProvider {
         OtherEntity("feedFamilyAnimal", "帮喂小鸡🐔"),
         OtherEntity("eatTogetherConfig", "请吃美食🍲"),
         OtherEntity("deliverMsgSend", "道早安🌞"),
+        OtherEntity("walkDonate", "捐步🚶‍♂️"),
         OtherEntity("ExchangeFamilyDecoration", "兑换装饰物品🧱"),
         OtherEntity("shareToFriends", "好友分享🙆‍♂️|下方配置排除列表"),
     )

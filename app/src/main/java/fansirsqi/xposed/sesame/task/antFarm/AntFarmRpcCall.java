@@ -9,6 +9,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.UUID;
 
 import fansirsqi.xposed.sesame.hook.RequestManager;
+import fansirsqi.xposed.sesame.hook.ApplicationHook;
 import fansirsqi.xposed.sesame.util.Log;
 import fansirsqi.xposed.sesame.util.RandomUtil;
 
@@ -681,6 +682,49 @@ public class AntFarmRpcCall {
                         "  \"source\": \"H5\"," +
                         "  \"version\": \"" + VERSION + "\"" +
                         "}]");
+    }
+
+    private static String alipayClientVersion() {
+        Object alipayVersion = ApplicationHook.getAlipayVersion();
+        String version = alipayVersion == null ? "" : alipayVersion.toString();
+        return version.isEmpty() ? "10.8.76.8100" : version;
+    }
+
+    /**
+     * 查询小鸡乐园限时活动任务。
+     */
+    public static String queryParadiseLimitedActivity() throws JSONException {
+        JSONObject degradeRequest = new JSONObject();
+        degradeRequest.put("appMode", "normal");
+        degradeRequest.put("deviceLevel", "high");
+        degradeRequest.put("initialized", true);
+        degradeRequest.put("platform", "Android");
+        degradeRequest.put("unityDeviceLevel", "high");
+
+        JSONObject args = new JSONObject();
+        args.put("bizType", "ANTFARM");
+        args.put("commonDegradeFilterRequest", degradeRequest);
+        args.put("playTypeList", new JSONArray().put("TASK_TRIGGER").put("TOP_UP_COUPON"));
+        args.put("recentAppRecordList", new JSONArray());
+        args.put("requestType", "NORMAL");
+        args.put("sceneCode", "ANTFARM_COMMON");
+        args.put("source", "H5");
+        args.put("version", alipayClientVersion());
+        return RequestManager.requestString("com.alipay.charitygamecenter.queryOptionalPlay", new JSONArray().put(args).toString());
+    }
+
+    /**
+     * 领取小鸡乐园限时活动奖励。
+     */
+    public static String receiveParadiseLimitedActivityAward(String taskType, int awardCount) throws JSONException {
+        JSONObject args = new JSONObject();
+        args.put("awardCountForReceive", awardCount);
+        args.put("ignoreLimit", true);
+        args.put("requestType", "RPC");
+        args.put("sceneCode", "ANTFARM_LEYUAN_DAILY_TASK");
+        args.put("source", "antfarm");
+        args.put("taskType", taskType);
+        return RequestManager.requestString("com.alipay.antieptask.receiveTaskAwardantfarm", new JSONArray().put(args).toString());
     }
 
 

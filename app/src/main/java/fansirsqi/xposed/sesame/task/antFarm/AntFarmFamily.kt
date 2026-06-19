@@ -123,6 +123,10 @@ data object AntFarmFamily {
                     deliverMsgSend(familyUserIds)
                 }
 
+                if (familyOptions.value.contains("walkDonate")) {
+                    familyWalkDonate()
+                }
+
                 if (familyOptions.value.contains("shareToFriends")) {
                     familyShareToFriends(familyUserIds, notInviteList)
                 }
@@ -132,6 +136,19 @@ data object AntFarmFamily {
             }
         } catch (e: Exception) {
             Log.printStackTrace(TAG,  e)
+        }
+    }
+
+    /**
+     * 家庭捐步
+     */
+    fun familyWalkDonate() {
+        try {
+            if (AntFarmWalkDonateTask.donateIfEligible(TAG)) {
+                Log.farm("家庭任务🏡捐步")
+            }
+        } catch (e: Exception) {
+            Log.printStackTrace(TAG, e)
         }
     }
 

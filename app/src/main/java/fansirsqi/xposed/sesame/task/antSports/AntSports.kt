@@ -362,36 +362,7 @@ class AntSports : ModelTask() {
             ChildModelTask(
                 "syncStep",
                 Runnable {
-                    val step = tmpStepCount()
-                    try {
-                        val loader = ApplicationHook.classLoader
-                        if (loader == null) {
-                            Log.error(TAG, "ClassLoader is null, 跳过同步步数")
-                            return@Runnable
-                        }
-
-                        val rpcManager = XposedHelpers.callStaticMethod(
-                            loader.loadClass("com.alibaba.health.pedometer.intergation.rpc.RpcManager"),
-                            "a"
-                        )
-
-                        val success = XposedHelpers.callMethod(
-                            rpcManager,
-                            "a",
-                            step,
-                            java.lang.Boolean.FALSE,
-                            "system"
-                        ) as Boolean
-
-                        if (success) {
-                            Log.other("同步步数🏃🏻‍♂️[$step 步]")
-                            Status.setFlagToday(StatusFlags.FLAG_ANTSPORTS_SYNC_STEP_DONE)
-                        } else {
-                            Log.error(TAG, "同步运动步数失败:$step")
-                        }
-                    } catch (t: Throwable) {
-                        Log.printStackTrace(TAG, t)
-                    }
+                    AntSportsStepSync.syncStep(tmpStepCount(), TAG)
                 }
             )
         )

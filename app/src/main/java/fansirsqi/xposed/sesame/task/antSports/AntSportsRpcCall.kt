@@ -458,6 +458,20 @@ object AntSportsRpcCall {
     }
 
     /**
+     * @brief 查询公益捐步使用的当日步数
+     *
+     * @return RPC调用结果的 JSON 字符串
+     *
+     * @remark 对应API：alipay.antsports.steps.query
+     */
+    fun queryDonationSteps(): String {
+        return RequestManager.requestString(
+            "alipay.antsports.steps.query",
+            """[{"appId":"healthstep","bizId":"donation","chInfo":"h5_donation_healthstep","timeZone":"Asia/Shanghai"}]"""
+        )
+    }
+
+    /**
      * @brief 行走捐赠签到信息
      * 
      * @param count 步数
