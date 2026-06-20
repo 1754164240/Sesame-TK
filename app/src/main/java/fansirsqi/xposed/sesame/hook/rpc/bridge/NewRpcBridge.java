@@ -16,6 +16,7 @@ import de.robv.android.xposed.XposedHelpers;
 import fansirsqi.xposed.sesame.data.General;
 import fansirsqi.xposed.sesame.entity.RpcEntity;
 import fansirsqi.xposed.sesame.hook.ApplicationHook;
+import fansirsqi.xposed.sesame.hook.RequestManager;
 import fansirsqi.xposed.sesame.hook.rpc.intervallimit.RpcIntervalLimit;
 import fansirsqi.xposed.sesame.model.BaseModel;
 
@@ -70,6 +71,11 @@ public class NewRpcBridge implements RpcBridge {
         if (shouldShowErrorLog(methodName)) {
             Log.error(TAG, "RPC返回null | 方法: " + methodName + " | 原因: " + reason + " | 重试: " + count);
         }
+    }
+
+    private RpcEntity verificationRequiredResponse(RpcEntity rpcEntity) {
+        rpcEntity.setResponseObject(null, RequestManager.VERIFICATION_REQUIRED_RESPONSE);
+        return rpcEntity;
     }
 
     @Override
@@ -293,11 +299,12 @@ public class NewRpcBridge implements RpcBridge {
 
                         // 检测安全验证错误，自动启动目标应用（带防抖和版本检查）
 
-                        if (errorMessage != null && errorMessage.contains("为了保障您的操作安全，请进行验证后继续")) {
+                        if (RequestManager.isVerificationRequired(errorCode, errorMessage)) {
+                            RequestManager.handleVerificationRequired(methodName);
                             // 检查版本号，只有版本低于等于10.6.58.99999才自动启动目标应用
                             if (!ApplicationHook.shouldEnableSimplePageManager()) {
                               //  Log.record(TAG, "目标应用版本不支持自动启动目标应用进行滑块验证，跳过");
-                                return null;
+                                return verificationRequiredResponse(rpcEntity);
                             }
                             long currentTime = System.currentTimeMillis();
                             long timeSinceLastStart = currentTime - lastAlipayStartTime;
@@ -321,7 +328,7 @@ public class NewRpcBridge implements RpcBridge {
                                     }
                                 }
                             }
-                            return null;
+                            return verificationRequiredResponse(rpcEntity);
                         }
 
                         if (errorMark.contains(errorCode) || errorStringMark.contains(errorMessage)) {

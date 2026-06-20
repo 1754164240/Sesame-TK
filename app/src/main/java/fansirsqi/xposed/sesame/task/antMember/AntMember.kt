@@ -2570,6 +2570,14 @@ class AntMember : ModelTask() {
 
     companion object {
         private val TAG: String = AntMember::class.java.getSimpleName()
+        private val NON_RETRYABLE_SESAME_TASK_ERRORS = setOf(
+            "PROMISE_TODAY_FINISH_TIMES_LIMIT",
+            "PROMISE_TEMPLATE_NOT_EXIST"
+        )
+
+        fun isNonRetryableSesameTaskError(errorCode: String?): Boolean {
+            return !errorCode.isNullOrBlank() && errorCode in NON_RETRYABLE_SESAME_TASK_ERRORS
+        }
 
         /**
          * 查询 + 自动领取可领取球（精简一行输出领取信息）
@@ -2747,9 +2755,7 @@ class AntMember : ModelTask() {
                         Log.error(TAG, "芝麻信用💳[领取任务" + taskTitle + "失败]#" + s)
                         // 自动添加到黑名单
                         val errorCode = extractSesameTaskErrorCode(responseObj)
-                        if (!errorCode.isEmpty()) {
-                            autoAddToBlacklist(taskTitle, taskTitle, errorCode)
-                        }
+                        handleSesameTaskFailure(taskTitle, errorCode)
                         skippedCount++
                         continue
                     }
@@ -2777,9 +2783,7 @@ class AntMember : ModelTask() {
                         Log.error(TAG, "芝麻信用💳[完成任务" + taskTitle + "失败]#" + s)
                         // 自动添加到黑名单
                         val errorCode = extractSesameTaskErrorCode(responseObj)
-                        if (!errorCode.isEmpty()) {
-                            autoAddToBlacklist(taskTitle, taskTitle, errorCode)
-                        }
+                        handleSesameTaskFailure(taskTitle, errorCode)
                         break
                     }
                 }
@@ -2802,6 +2806,16 @@ class AntMember : ModelTask() {
             return responseObj.optString("errorCode")
                 .ifEmpty { responseObj.optString("resultCode") }
                 .ifEmpty { responseObj.optString("resultView") }
+        }
+
+        private fun handleSesameTaskFailure(taskTitle: String, errorCode: String) {
+            if (errorCode.isEmpty()) return
+            if (isNonRetryableSesameTaskError(errorCode)) {
+                TaskBlacklist.addToBlacklist(taskTitle, taskTitle)
+                record(TAG, "芝麻信用💳[任务失败不可重试，已跳过]#$taskTitle#$errorCode")
+                return
+            }
+            autoAddToBlacklist(taskTitle, taskTitle, errorCode)
         }
 
         /**

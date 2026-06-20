@@ -18,9 +18,39 @@ import java.util.concurrent.atomic.AtomicInteger
 object RequestManager {
 
     private const val TAG = "RequestManager"
+    const val EMPTY_RPC_RESPONSE =
+        """{"success":false,"resultCode":"EMPTY_RPC_RESPONSE","resultDesc":"RPC返回为空"}"""
+    const val VERIFICATION_REQUIRED_RESPONSE =
+        """{"success":false,"resultCode":"RPC_VERIFICATION_REQUIRED","resultDesc":"触发安全验证，请人工验证后继续"}"""
 
     // 连续失败计数器
     private val errorCount = AtomicInteger(0)
+
+    @JvmStatic
+    fun isEmptyRpcResponse(result: String?): Boolean {
+        return result.isNullOrBlank()
+    }
+
+    @JvmStatic
+    fun isVerificationRequired(errorCode: String?, errorMessage: String?): Boolean {
+        val message = errorMessage.orEmpty()
+        return errorCode == "1009" ||
+            message.contains("为保障您的正常访问，请进行验证后继续") ||
+            message.contains("为了保障您的操作安全，请进行验证后继续") ||
+            message.contains("请进行验证后继续")
+    }
+
+    @JvmStatic
+    fun handleVerificationRequired(method: String?) {
+        Log.record(TAG, "检测到安全验证，暂停后续RPC请求: $method")
+        ApplicationHook.setOffline(true)
+        if (BaseModel.errNotify.value) {
+            Notify.sendNewNotification(
+                "${TimeUtil.getTimeStr()} | 触发安全验证",
+                "请手动完成验证后再继续任务"
+            )
+        }
+    }
 
     /**
      * 核心执行函数 (内联优化)
@@ -31,7 +61,7 @@ object RequestManager {
         if (ApplicationHook.offline) {
             Log.record(TAG, "当前处于离线状态，拦截请求: $methodLog")
             handleOfflineRecovery()
-            return ""
+            return EMPTY_RPC_RESPONSE
         }
 
         // 2. 获取 Bridge (包含网络检查)
@@ -51,17 +81,17 @@ object RequestManager {
         }
 
         // 4. 结果校验与状态维护
-        if (result.isNullOrBlank()) {
+        if (isEmptyRpcResponse(result)) {
             // 失败：增加计数，检查兜底
             handleFailure(methodLog ?: "Unknown", "返回数据为空")
-            return ""
+            return EMPTY_RPC_RESPONSE
         } else {
             // 成功：重置计数器
             if (errorCount.get() > 0) {
                 errorCount.set(0)
                 Log.record(TAG, "RPC 恢复正常，错误计数重置")
             }
-            return result
+            return result.orEmpty()
         }
     }
 

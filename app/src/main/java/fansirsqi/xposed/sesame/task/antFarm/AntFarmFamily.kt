@@ -20,6 +20,7 @@ import kotlin.math.abs
 data object AntFarmFamily {
     private const val TAG = "小鸡家庭"
     private const val FAMILY_WALK_DONATE_FLAG = "antFarm::familyWalkDonate"
+    private const val FAMILY_EAT_RETRY_DELAY_MS = 3_000L
 
     /**
      * 家庭ID
@@ -151,10 +152,11 @@ data object AntFarmFamily {
             }
             if (AntFarmWalkDonateTask.donateIfEligible(TAG)) {
                 Log.farm("家庭任务🏡捐步")
-                Status.setFlagToday(FAMILY_WALK_DONATE_FLAG)
             }
         } catch (e: Exception) {
             Log.printStackTrace(TAG, e)
+        } finally {
+            Status.setFlagToday(FAMILY_WALK_DONATE_FLAG)
         }
     }
 
@@ -375,10 +377,16 @@ data object AntFarmFamily {
             } else if (jo.optString("resultCode") == "FAMILY12") {
                 Log.record("家庭任务🏠请客吃美食#家庭成员发生变化，刷新成员后重试")
                 retryFamilyEatTogether(periodName)
+            } else if (isFamilyEatTogetherConcurrentError(jo.optString("resultCode"))) {
+                Log.record("家庭任务🏠请客吃美食#远端并发处理中，本轮跳过")
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "familyEatTogether err:",t)
         }
+    }
+
+    fun isFamilyEatTogetherConcurrentError(resultCode: String?): Boolean {
+        return resultCode == "FAMILY27"
     }
 
     private fun retryFamilyEatTogether(periodName: String) {
@@ -396,9 +404,12 @@ data object AntFarmFamily {
                 Log.record("家庭任务🏠请客吃美食#刷新后美食为空，跳过")
                 return
             }
+            GlobalThreadPools.sleepCompat(FAMILY_EAT_RETRY_DELAY_MS)
             val retryRes = JSONObject(AntFarmRpcCall.familyEatTogether(groupId, familyUserIds.toJSONArray(), array))
             if (ResChecker.checkRes(TAG, retryRes)) {
                 Log.farm("家庭任务🏠请客" + periodName + "#刷新成员后重试成功")
+            } else if (isFamilyEatTogetherConcurrentError(retryRes.optString("resultCode"))) {
+                Log.record("家庭任务🏠请客吃美食#重试遇到远端并发，本轮跳过:$retryRes")
             } else {
                 Log.error(TAG, "家庭任务🏠请客吃美食#重试失败:$retryRes")
             }

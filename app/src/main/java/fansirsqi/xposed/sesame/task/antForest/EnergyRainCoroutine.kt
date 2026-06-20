@@ -1,6 +1,7 @@
 package fansirsqi.xposed.sesame.task.antForest
 
 import fansirsqi.xposed.sesame.data.Status
+import fansirsqi.xposed.sesame.hook.RequestManager
 import fansirsqi.xposed.sesame.hook.Toast
 import fansirsqi.xposed.sesame.util.GameTask
 import fansirsqi.xposed.sesame.util.Log
@@ -17,6 +18,12 @@ import kotlin.random.Random
  */
 object EnergyRainCoroutine {
     private const val TAG = "EnergyRain"
+    private const val ENERGY_RAIN_VERIFICATION_FLAG = "EnergyRain::安全验证暂停"
+    private const val EXEC_COOLDOWN_MS = 30_000L
+    private const val LOOP_DELAY_MIN_MS = 8_000
+    private const val LOOP_DELAY_MAX_MS = 12_000
+    private const val SETTLEMENT_DELAY_MIN_MS = 12_000
+    private const val SETTLEMENT_DELAY_MAX_MS = 16_000
 
     /**
      * 上次执行能量雨的时间戳
@@ -34,19 +41,38 @@ object EnergyRainCoroutine {
         delay(delayTime)
     }
 
+    fun isVerificationRequiredResult(result: JSONObject): Boolean {
+        return result.optString("resultCode") == "RPC_VERIFICATION_REQUIRED" ||
+                RequestManager.isVerificationRequired(
+                    result.optString("resultCode"),
+                    result.optString("resultDesc")
+                        .ifEmpty { result.optString("memo") }
+                        .ifEmpty { result.optString("desc") }
+                        .ifEmpty { result.optString("errorMessage") }
+                )
+    }
+
+    private fun pauseForVerification(stage: String, result: JSONObject) {
+        Status.setFlagToday(ENERGY_RAIN_VERIFICATION_FLAG)
+        Log.record(TAG, "能量雨${stage}触发安全验证，当天停止能量雨流程: $result")
+    }
+
     /**
      * 执行能量雨功能
      */
     suspend fun execEnergyRain() {
         try {
+            if (Status.hasFlagToday(ENERGY_RAIN_VERIFICATION_FLAG)) {
+                Log.record(TAG, "今日能量雨已触发安全验证，跳过执行")
+                return
+            }
+
             // 执行频率检查：防止短时间内重复执行
             val currentTime = System.currentTimeMillis()
             val timeSinceLastExec = currentTime - lastExecuteTime
-            val cooldownSeconds = 3 // 冷却时间：3秒
 
-            if (timeSinceLastExec < cooldownSeconds * 1000) {
-                // 粗放点，delay 3秒
-                delay(cooldownSeconds * 1000.toLong())
+            if (timeSinceLastExec >= 0 && timeSinceLastExec < EXEC_COOLDOWN_MS) {
+                delay(EXEC_COOLDOWN_MS - timeSinceLastExec)
             }
 
             energyRain()
@@ -71,8 +97,16 @@ object EnergyRainCoroutine {
             val maxPlayLimit = 10
 
             do {
+                if (Status.hasFlagToday(ENERGY_RAIN_VERIFICATION_FLAG)) {
+                    break
+                }
+
                 val joEnergyRainHome = JSONObject(AntForestRpcCall.queryEnergyRainHome())
-                randomDelay(250, 400) // 随机延迟 300-400ms
+                randomDelay(500, 900)
+                if (isVerificationRequiredResult(joEnergyRainHome)) {
+                    pauseForVerification("查询", joEnergyRainHome)
+                    break
+                }
                 if (!ResChecker.checkRes(TAG, joEnergyRainHome)) {
                     Log.record(TAG, "查询能量雨状态失败")
                     break
@@ -85,7 +119,7 @@ object EnergyRainCoroutine {
                 if (canPlayToday) {
                     startEnergyRain()
                     playedCount++
-                    randomDelay(3000, 5000) // 随机延迟3-5秒
+                    randomDelay(LOOP_DELAY_MIN_MS, LOOP_DELAY_MAX_MS)
                     continue
                 }
 
@@ -93,6 +127,10 @@ object EnergyRainCoroutine {
                 if (canGrantStatus) {
                     Log.record(TAG, "有送能量雨的机会")
                     val joEnergyRainCanGrantList = JSONObject(AntForestRpcCall.queryEnergyRainCanGrantList())
+                    if (isVerificationRequiredResult(joEnergyRainCanGrantList)) {
+                        pauseForVerification("赠送列表查询", joEnergyRainCanGrantList)
+                        break
+                    }
                     val grantInfos = joEnergyRainCanGrantList.optJSONArray("grantInfos") ?: org.json.JSONArray()
                     val giveEnergyRainSet = AntForest.giveEnergyRainList!!.value
                     var granted = false
@@ -104,6 +142,10 @@ object EnergyRainCoroutine {
                             if (giveEnergyRainSet.contains(uid)) {
                                 val rainJsonObj = JSONObject(AntForestRpcCall.grantEnergyRainChance(uid))
                                 Log.record(TAG, "尝试送能量雨给【${UserMap.getMaskName(uid)}】")
+                                if (isVerificationRequiredResult(rainJsonObj)) {
+                                    pauseForVerification("赠送", rainJsonObj)
+                                    break
+                                }
                                 if (ResChecker.checkRes(TAG, rainJsonObj)) {
                                     Log.forest(
                                         "赠送能量雨机会给🌧️[${UserMap.getMaskName(uid)}]#${
@@ -123,6 +165,8 @@ object EnergyRainCoroutine {
                     }
                     if (granted) {
                         continue
+                    } else if (Status.hasFlagToday(ENERGY_RAIN_VERIFICATION_FLAG)) {
+                        break
                     } else {
                         Log.record(TAG, "今日无可送能量雨好友或已达到赠送上限")
                     }
@@ -139,7 +183,7 @@ object EnergyRainCoroutine {
                         break
                     }
                     val hasTaskToProcess = checkAndDoEndGameTask()//检查能量雨 游戏任务 并接取
-                    randomDelay(3000, 5000) // 随机延迟3-5秒
+                    randomDelay(LOOP_DELAY_MIN_MS, LOOP_DELAY_MAX_MS)
                     playedCount++
                     // 只有当有实际任务需要处理时才继续循环
                     if (hasTaskToProcess) {
@@ -195,6 +239,10 @@ object EnergyRainCoroutine {
         try {
             Log.record("开始执行能量雨🌧️")
             val joStart = JSONObject(AntForestRpcCall.startEnergyRain())
+            if (isVerificationRequiredResult(joStart)) {
+                pauseForVerification("开始", joStart)
+                return
+            }
 
             if (ResChecker.checkRes(TAG, joStart)) {
                 val token = joStart.getString("token")
@@ -205,8 +253,12 @@ object EnergyRainCoroutine {
                     sum += bubbleEnergyList.getInt(i)
                 }
 
-                randomDelay(5000, 5200) // 随机延迟 5-5.2秒，模拟真人玩游戏
+                randomDelay(SETTLEMENT_DELAY_MIN_MS, SETTLEMENT_DELAY_MAX_MS)
                 val resultJson = JSONObject(AntForestRpcCall.energyRainSettlement(sum, token))
+                if (isVerificationRequiredResult(resultJson)) {
+                    pauseForVerification("结算", resultJson)
+                    return
+                }
 
                 if (ResChecker.checkRes(TAG, resultJson)) {
                     val s = "收获能量雨🌧️[${sum}g]"
@@ -237,6 +289,10 @@ object EnergyRainCoroutine {
             // 1. 查询当前是否有可接或已接的游戏任务
             val response = AntForestRpcCall.queryEnergyRainEndGameList()
             val jo = JSONObject(response)
+            if (isVerificationRequiredResult(jo)) {
+                pauseForVerification("后续任务查询", jo)
+                return false
+            }
             if (!ResChecker.checkRes(TAG, jo)) {
                 //Log.error(TAG, "查询能量雨游戏任务失败 $jo")
                 return false
@@ -245,6 +301,10 @@ object EnergyRainCoroutine {
             if (jo.optBoolean("needInitTask", false)) {
                 // Log.record(TAG, "检测到新任务，准备接入[森林救援队]...")
                 val initRes = JSONObject(AntForestRpcCall.initTask("GAME_DONE_SLJYD"))
+                if (isVerificationRequiredResult(initRes)) {
+                    pauseForVerification("后续任务接入", initRes)
+                    return false
+                }
                 if (!ResChecker.checkRes(TAG, initRes)) {
                     // Log.record(TAG, "[森林救援队] 任务接入失败")
                     // 初始化失败，直接返回false

@@ -16,7 +16,6 @@ import fansirsqi.xposed.sesame.model.modelFieldExt.IntegerModelField
 import fansirsqi.xposed.sesame.model.modelFieldExt.SelectModelField
 import fansirsqi.xposed.sesame.model.modelFieldExt.StringModelField
 import fansirsqi.xposed.sesame.task.ModelTask
-import fansirsqi.xposed.sesame.task.TaskCommon
 import fansirsqi.xposed.sesame.util.*
 import fansirsqi.xposed.sesame.util.maps.UserMap
 import org.json.JSONArray
@@ -251,8 +250,8 @@ class AntSports : ModelTask() {
                     override fun afterHookedMethod(param: MethodHookParam) {
                         val originStep = param.result as Int
                         val step = tmpStepCount()
-                        // 早于 8 点或步数小于自定义步数时进行 hook
-                        if (TaskCommon.IS_AFTER_8AM && originStep < step) {
+                        // 只要本地步数低于配置步数就覆盖，避免8点前捐步读取到原始低步数。
+                        if (AntSportsStepSync.shouldOverrideDailyStep(originStep, step)) {
                             param.result = step
                         }
                     }

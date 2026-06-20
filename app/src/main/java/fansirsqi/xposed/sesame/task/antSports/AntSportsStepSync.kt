@@ -7,6 +7,10 @@ import fansirsqi.xposed.sesame.hook.ApplicationHook
 import fansirsqi.xposed.sesame.util.Log
 
 object AntSportsStepSync {
+    fun shouldOverrideDailyStep(originStep: Int, targetStep: Int): Boolean {
+        return targetStep > 0 && originStep < targetStep
+    }
+
     fun syncStep(step: Int, logTag: String): Boolean {
         return try {
             val loader = ApplicationHook.classLoader

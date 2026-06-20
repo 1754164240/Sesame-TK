@@ -11,6 +11,7 @@ import fansirsqi.xposed.sesame.data.General;
 import fansirsqi.xposed.sesame.data.RuntimeInfo;
 import fansirsqi.xposed.sesame.entity.RpcEntity;
 import fansirsqi.xposed.sesame.hook.ApplicationHook;
+import fansirsqi.xposed.sesame.hook.RequestManager;
 import fansirsqi.xposed.sesame.hook.rpc.intervallimit.RpcIntervalLimit;
 import fansirsqi.xposed.sesame.model.BaseModel;
 import fansirsqi.xposed.sesame.util.Log;
@@ -141,6 +142,14 @@ public class OldRpcBridge implements RpcBridge {
             Notify.updateStatusText("系统繁忙，可能需要滑动验证");
             Log.record(TAG,"系统繁忙，可能需要滑动验证");
             return null; // 返回 null
+        }
+        if (RequestManager.isVerificationRequired(
+                resultObject.optString("error", ""),
+                resultObject.optString("errorMessage", resultObject.optString("memo", ""))
+        )) {
+            RequestManager.handleVerificationRequired(method);
+            rpcEntity.setResponseObject(null, RequestManager.VERIFICATION_REQUIRED_RESPONSE);
+            return rpcEntity;
         }
         if (!resultObject.optBoolean("success")) {
             rpcEntity.setError(); // 设置为错误状态

@@ -23,6 +23,7 @@ class ForestChouChouLe {
         // 场景代码常量
         private const val SCENE_NORMAL = "ANTFOREST_NORMAL_DRAW"
         private const val SCENE_ACTIVITY = "ANTFOREST_ACTIVITY_DRAW"
+        private const val MAX_TASK_FAIL_COUNT = 3
 
         // 屏蔽的任务类型关键词
         private val BLOCKED_TYPES = setOf(
@@ -49,6 +50,10 @@ class ForestChouChouLe {
         // 扩展函数：简化 JSON 解析和检查
         private fun String.toJson(): JSONObject? = runCatching { JSONObject(this) }.getOrNull()
         private fun JSONObject.check(): Boolean = ResChecker.checkRes(TAG, this)
+
+        fun shouldSkipFailedTask(failedCount: Int): Boolean {
+            return failedCount >= MAX_TASK_FAIL_COUNT
+        }
 
         // 动态获取抽奖场景配置
         private fun getScenes(): List<Scene> {
@@ -291,6 +296,12 @@ class ForestChouChouLe {
                 true
             } else false
         } else if (type.startsWith("FOREST_NORMAL_DRAW") || type.startsWith("FOREST_ACTIVITY_DRAW")) {
+            val failedCount = taskTryCount[type]?.get() ?: 0
+            if (shouldSkipFailedTask(failedCount)) {
+                Log.record(TAG, "${s.name} 跳过失败过多任务: $name")
+                return false
+            }
+
             // 普通任务
             Log.record("${s.name} 执行任务(模拟耗时): $name")
             sleepCompat(100L) //
