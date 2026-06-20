@@ -39,7 +39,6 @@ import fansirsqi.xposed.sesame.ui.screen.content.HomeContent
 import fansirsqi.xposed.sesame.ui.screen.content.LogsContent
 import fansirsqi.xposed.sesame.ui.screen.content.SettingsContent
 import fansirsqi.xposed.sesame.ui.viewmodel.MainViewModel
-import fansirsqi.xposed.sesame.util.CommandUtil.serviceStatus
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -59,9 +58,6 @@ fun MainScreen(
     }
 
     var currentScreen by remember { mutableStateOf<BottomNavItem>(BottomNavItem.Home) } // 默认显示主页
-
-
-    val serviceStatus by serviceStatus.collectAsStateWithLifecycle()
 
     val isOneWordLoading by viewModel.isOneWordLoading.collectAsStateWithLifecycle()
     val prefs = context.getSharedPreferences(PREFERENCES_KEY, Context.MODE_PRIVATE)
@@ -142,7 +138,6 @@ fun MainScreen(
             when (currentScreen) {
                 BottomNavItem.Home -> HomeContent(
                     moduleStatus = moduleStatus,
-                    serviceStatus = serviceStatus,
                     deviceInfoMap = deviceInfoMap,
                     oneWord = oneWord,
                     isOneWordLoading = isOneWordLoading,

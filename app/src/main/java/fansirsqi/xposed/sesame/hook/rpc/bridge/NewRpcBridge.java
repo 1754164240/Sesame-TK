@@ -1,6 +1,5 @@
 package fansirsqi.xposed.sesame.hook.rpc.bridge;
 
-import fansirsqi.xposed.sesame.hook.Toast;
 import fansirsqi.xposed.sesame.util.*;
 
 import java.lang.reflect.Method;
@@ -25,9 +24,6 @@ import fansirsqi.xposed.sesame.model.BaseModel;
  */
 public class NewRpcBridge implements RpcBridge {
     private static final String TAG = NewRpcBridge.class.getSimpleName();
-    private static final long ALIPAY_START_DEBOUNCE_TIME = 8000L; // 目标应用启动防抖时间：8秒
-    private static volatile long lastAlipayStartTime = 0L; // 上次启动目标应用的时间戳
-    private static final Object alipayStartLock = new Object(); // 目标应用启动锁
     private ClassLoader loader;
     private Object newRpcInstance;
     private Method parseObjectMethod;
@@ -297,37 +293,8 @@ public class NewRpcBridge implements RpcBridge {
                         String response = rpcEntity.getResponseString();
                         String methodName = rpcEntity.getRequestMethod();
 
-                        // 检测安全验证错误，自动启动目标应用（带防抖和版本检查）
-
                         if (RequestManager.isVerificationRequired(errorCode, errorMessage)) {
                             RequestManager.handleVerificationRequired(methodName);
-                            // 检查版本号，只有版本低于等于10.6.58.99999才自动启动目标应用
-                            if (!ApplicationHook.shouldEnableSimplePageManager()) {
-                              //  Log.record(TAG, "目标应用版本不支持自动启动目标应用进行滑块验证，跳过");
-                                return verificationRequiredResponse(rpcEntity);
-                            }
-                            long currentTime = System.currentTimeMillis();
-                            long timeSinceLastStart = currentTime - lastAlipayStartTime;
-                            if (timeSinceLastStart < ALIPAY_START_DEBOUNCE_TIME) {
-                                 Log.record(TAG, "距离上次启动目标应用仅 " + timeSinceLastStart + "ms，跳过本次启动");
-                            } else {
-                                synchronized (alipayStartLock) {
-                                    // 双重检查，防止多线程竞争
-                                    currentTime = System.currentTimeMillis();
-                                    timeSinceLastStart = currentTime - lastAlipayStartTime;
-                                    if (timeSinceLastStart < ALIPAY_START_DEBOUNCE_TIME) {
-                                         Log.record(TAG, "距离上次启动目标应用仅 " + timeSinceLastStart + "ms，跳过本次启动（双重检查）");
-                                    } else {
-                                        lastAlipayStartTime = currentTime;
-                                         Log.record(TAG, "检测到安全验证错误，自动启动目标应用进行滑块中...");
-                                        Toast.INSTANCE.show(
-                                                "为了保障您的操作安全，请进行验证后继续,自动启动目标应用进行滑块中..."
-                                        );
-                                        // 使用增强的shell命令启动目标应用，
-                                        SwipeUtil.startAlipay(ApplicationHook.appContext);
-                                    }
-                                }
-                            }
                             return verificationRequiredResponse(rpcEntity);
                         }
 

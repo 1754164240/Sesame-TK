@@ -42,8 +42,6 @@ import fansirsqi.xposed.sesame.hook.rpc.bridge.RpcVersion
 import fansirsqi.xposed.sesame.hook.rpc.debug.DebugRpc
 import fansirsqi.xposed.sesame.hook.rpc.intervallimit.RpcIntervalLimit.clearIntervalLimit
 import fansirsqi.xposed.sesame.hook.server.ModuleHttpServerManager.startIfNeeded
-import fansirsqi.xposed.sesame.hook.simple.SimplePageManager.addHandler
-import fansirsqi.xposed.sesame.hook.simple.SimplePageManager.enableWindowMonitoring
 import fansirsqi.xposed.sesame.model.BaseModel.Companion.batteryPerm
 import fansirsqi.xposed.sesame.model.BaseModel.Companion.checkInterval
 import fansirsqi.xposed.sesame.model.BaseModel.Companion.debugMode
@@ -176,14 +174,7 @@ class ApplicationHook {
         VersionHook.installHook(classLoader)
         initReflection(classLoader!!)
 
-        // 4. 功能模块 Hook
-        try {
-            CaptchaHook.setupHook(classLoader!!)
-        } catch (t: Throwable) {
-            printStackTrace(TAG, "验证码Hook初始化失败", t)
-        }
-
-        // 5. 核心生命周期 Hook
+        // 4. 核心生命周期 Hook
         hookApplicationAttach(packageName)
         hookLauncherResume()
         hookServiceLifecycle(apkPath)
@@ -248,7 +239,6 @@ class ApplicationHook {
                             HookUtil.fuckAccounLimit(classLoader!!)
                         }
 
-                        initSimplePageManager()
                     }
                 })
         } catch (e: Exception) {
@@ -351,15 +341,6 @@ class ApplicationHook {
     private fun loadLibs() {
         loadNativeLibs(appContext!!, checkerDestFile)
         loadNativeLibs(appContext!!, dexkitDestFile)
-    }
-
-    // 滑块验证hook注册
-    private fun initSimplePageManager() {
-        if (shouldEnableSimplePageManager()) {
-            enableWindowMonitoring(classLoader)
-            addHandler("com.alipay.mobile.nebulax.xriver.activity.XRiverActivity", Captcha1Handler())
-            addHandler("com.eg.android.AlipayGphone.AlipayLogin", Captcha2Handler())
-        }
     }
 
     @SuppressLint("UnsafeDynamicallyLoadedCode")
@@ -491,26 +472,6 @@ class ApplicationHook {
         @Volatile
         var isHooked: Boolean = false
             private set
-
-        /**
-         * 检查目标应用版本是否需要启用SimplePageManager功能
-         * @return true表示版本低于等于10.6.58.99999，需要启用；false表示不需要
-         */
-        @JvmStatic
-        fun shouldEnableSimplePageManager(): Boolean {
-            if (!VersionHook.hasVersion() || alipayVersion.toString().isEmpty()) {
-                return false
-            }
-
-            val maxSupported = AlipayVersion("10.6.58.99999")
-            if (alipayVersion > maxSupported) {
-                // 只有在不支持时才打印警告
-                record(TAG, "目标应用版本 $alipayVersion 高于 10.6.58，不支持自动过滑块验证")
-                return false
-            }
-
-            return true
-        }
 
         @Volatile
         private var init = false
@@ -698,7 +659,7 @@ class ApplicationHook {
                 load(userId)
                 updateDay()
 
-                val successMsg = "Loaded SesameTk " + BuildConfig.VERSION_NAME + "✨"
+                val successMsg = "Loaded Sesame-VN " + BuildConfig.VERSION_NAME + "✨"
                 record(successMsg)
                 show(successMsg)
 

@@ -242,7 +242,7 @@ jobs:
           draft: false
           make_latest: true
           body: |
-            📦 内容同步自源仓库 [Sesame-TK](https://github.com/${{ github.repository }})
+            📦 内容同步自源仓库 [Sesame-VN](https://github.com/${{ github.repository }})
             
             ${{ github.event.release.body }}
             

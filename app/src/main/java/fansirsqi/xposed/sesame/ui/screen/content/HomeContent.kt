@@ -26,15 +26,12 @@ import fansirsqi.xposed.sesame.ui.MainActivity
 import fansirsqi.xposed.sesame.ui.screen.DeviceInfoCard
 import fansirsqi.xposed.sesame.ui.screen.card.ModuleStatusCard
 import fansirsqi.xposed.sesame.ui.screen.card.OneWordCard
-import fansirsqi.xposed.sesame.ui.screen.card.ServicesStatusCard
 import fansirsqi.xposed.sesame.ui.viewmodel.MainViewModel
-import fansirsqi.xposed.sesame.util.CommandUtil.ServiceStatus
 import fansirsqi.xposed.sesame.util.ToastUtil
 
 @Composable
 fun HomeContent(
     moduleStatus: MainViewModel.ModuleStatus,
-    serviceStatus: ServiceStatus,
     deviceInfoMap: Map<String, String>?,
     oneWord: String,
     isOneWordLoading: Boolean,
@@ -42,7 +39,6 @@ fun HomeContent(
     onEvent: (MainActivity.MainUiEvent) -> Unit
 ) {
     val context = LocalContext.current
-    var isServiceCardExpanded by remember { mutableStateOf(false) }
     var isStatusCardExpanded by remember { mutableStateOf(false) }
     LazyColumn(
         modifier = Modifier
@@ -57,7 +53,7 @@ fun HomeContent(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    "本应用开源免费,严禁倒卖!!\n如果你在闲鱼看到,欢迎给我们反馈",
+                    "bug反馈，请在github提issues",
                     textAlign = TextAlign.Center,
                     color = MaterialTheme.colorScheme.error,
                     fontWeight = FontWeight.Bold,
@@ -73,19 +69,6 @@ fun HomeContent(
                 onClick = {
                     if (moduleStatus is MainViewModel.ModuleStatus.NotActivated) {
                         isStatusCardExpanded = !isStatusCardExpanded//此处不可省略
-                    }
-                }
-            )
-        }
-
-        // 2. 服务权限
-        item {
-            ServicesStatusCard(
-                status = serviceStatus,
-                expanded = isServiceCardExpanded,
-                onClick = {
-                    if (serviceStatus is ServiceStatus.Inactive) {
-                        isServiceCardExpanded = !isServiceCardExpanded //此处不可省略
                     }
                 }
             )

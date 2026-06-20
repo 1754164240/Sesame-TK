@@ -10,7 +10,6 @@ import fansirsqi.xposed.sesame.service.ConnectionState
 import fansirsqi.xposed.sesame.service.LsposedServiceManager
 import fansirsqi.xposed.sesame.ui.screen.DeviceInfoUtil
 import fansirsqi.xposed.sesame.util.AssetUtil
-import fansirsqi.xposed.sesame.util.CommandUtil
 import fansirsqi.xposed.sesame.util.DataStore
 import fansirsqi.xposed.sesame.util.DirectoryWatcher
 import fansirsqi.xposed.sesame.util.FansirsqiUtil
@@ -99,10 +98,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             // 初始检查状态
             refreshModuleFrameworkStatus()
             refreshActiveUser()
-            // 🔥 新增：触发 CommandService 连接
-            // 连接成功后，AIDL 回调会自动更新 serviceStatus
-            CommandUtil.connect(getApplication())
-
             // 注册监听
             LsposedServiceManager.addConnectionListener(serviceListener)
             startConfigDirectoryObserver()
