@@ -28,12 +28,14 @@ class EnergyRainCoroutineTest {
     }
 
     @Test
-    fun `能量雨结算安全验证后会设置当天暂停标记`() {
+    fun `能量雨结算安全验证后不会设置当天暂停标记`() {
         val sourceText = File("src/main/java/fansirsqi/xposed/sesame/task/antForest/EnergyRainCoroutine.kt").readText()
 
         assertTrue(sourceText.contains("ENERGY_RAIN_VERIFICATION_FLAG"))
         assertTrue(sourceText.contains("pauseForVerification"))
         assertTrue(sourceText.contains("Status.hasFlagToday(ENERGY_RAIN_VERIFICATION_FLAG)"))
         assertTrue(sourceText.contains("Status.setFlagToday(ENERGY_RAIN_VERIFICATION_FLAG)"))
+        assertTrue(sourceText.contains("finishSettlementForVerification"))
+        assertFalse(sourceText.contains("pauseForVerification(\"结算\", resultJson)"))
     }
 }

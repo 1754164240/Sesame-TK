@@ -57,6 +57,10 @@ object EnergyRainCoroutine {
         Log.record(TAG, "能量雨${stage}触发安全验证，当天停止能量雨流程: $result")
     }
 
+    private fun finishSettlementForVerification(result: JSONObject) {
+        Log.record(TAG, "能量雨结算触发安全验证，本次结算结束，等待人工验证后可再次执行: $result")
+    }
+
     /**
      * 执行能量雨功能
      */
@@ -256,7 +260,7 @@ object EnergyRainCoroutine {
                 randomDelay(SETTLEMENT_DELAY_MIN_MS, SETTLEMENT_DELAY_MAX_MS)
                 val resultJson = JSONObject(AntForestRpcCall.energyRainSettlement(sum, token))
                 if (isVerificationRequiredResult(resultJson)) {
-                    pauseForVerification("结算", resultJson)
+                    finishSettlementForVerification(resultJson)
                     return
                 }
 
