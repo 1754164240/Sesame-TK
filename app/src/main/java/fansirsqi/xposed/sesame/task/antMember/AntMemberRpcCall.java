@@ -142,6 +142,76 @@ public class AntMemberRpcCall {
     }
 
     /**
+     * 查询会员签到页开宝箱任务。
+     */
+    public static String querySignFloatingBall() {
+        return RequestManager.requestString(
+                "com.alipay.amic.biz.rpc.signin.h5.querySignFloatingBall",
+                MemberTaskProtocol.buildTreasureBoxQueryArgs().toString()
+        );
+    }
+
+    /**
+     * 领取会员签到页开宝箱奖励。
+     */
+    public static String triggerSignFloatingBall(MemberTreasureBoxTask task) {
+        return RequestManager.requestString(
+                "com.alipay.amic.biz.rpc.signin.h5.triggerSignFloatingBall",
+                MemberTaskProtocol.buildTriggerTreasureBoxArgs(task).toString()
+        );
+    }
+
+    /**
+     * 查询限时游戏访问入口。
+     */
+    public static String queryGameEntranceInfo() {
+        return RequestManager.requestString(
+                "com.alipay.amic.biz.rpc.game.h5.GameCenterQueryFacade.queryGameEntranceInfo",
+                MemberTaskProtocol.buildGameEntranceQueryArgs().toString()
+        );
+    }
+
+    /**
+     * 访问游戏中心首页。
+     */
+    public static String queryMemberGameHome(MemberGameVisitContext context) {
+        return RequestManager.requestString(
+                "com.alipay.gamecenterhome.biz.rpc.queryHomePage",
+                MemberTaskProtocol.buildGameHomeArgs(context).toString()
+        );
+    }
+
+    /**
+     * 访问游戏中心活动模块。
+     */
+    public static String queryMemberGameModule(MemberGameVisitContext context) {
+        return RequestManager.requestString(
+                "com.alipay.gamecenteruprod.biz.rpc.walkgrid.queryGameModule",
+                MemberTaskProtocol.buildGameModuleArgs(context).toString()
+        );
+    }
+
+    /**
+     * 访问游戏中心活动主页。
+     */
+    public static String queryMemberWalkMain(MemberGameVisitContext context) {
+        return RequestManager.requestString(
+                "com.alipay.gamecenteruprod.biz.rpc.walkgrid.queryWalkMain",
+                MemberTaskProtocol.buildWalkMainArgs(context).toString()
+        );
+    }
+
+    /**
+     * 查询会员积分明细。
+     */
+    public static String queryMemberPointRecord() {
+        return RequestManager.requestString(
+                "com.alipay.alipaymember.biz.rpc.member.h5.queryPointRecordV2",
+                MemberTaskProtocol.buildPointRecordQueryArgs().toString()
+        );
+    }
+
+    /**
      * 游戏中心签到查询
      * 对应: com.alipay.gamecenteruprod.biz.rpc.v3.querySignInBall
      */

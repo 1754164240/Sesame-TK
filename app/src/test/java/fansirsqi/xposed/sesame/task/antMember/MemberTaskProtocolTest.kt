@@ -269,4 +269,168 @@ class MemberTaskProtocolTest {
         assertTrue(MemberTaskProtocol.isFinishSuccess(JSONObject("""{"errCode":"0"}""")))
         assertFalse(MemberTaskProtocol.isFinishSuccess(JSONObject("""{"errCode":"500"}""")))
     }
+
+    @Test
+    fun `广告任务过滤玩游戏进度任务但保留普通广告`() {
+        val response = JSONObject(
+            """
+            {
+              "resultData": {
+                "adTaskList": [{
+                  "adTask": true,
+                  "lightsAdExtMap": {"adId": "game-ad", "bizId": "game-biz"},
+                  "simpleTaskConfig": {"title": " 玩 游戏闯关得积分 "}
+                }, {
+                  "adTask": true,
+                  "lightsAdExtMap": {"adId": "normal-ad", "bizId": "normal-biz"},
+                  "simpleTaskConfig": {"title": "浏览会场得积分"}
+                }]
+              }
+            }
+            """.trimIndent()
+        )
+
+        val tasks = MemberTaskProtocol.parseAdTasks(response)
+
+        assertEquals(1, tasks.size)
+        assertEquals("normal-ad", tasks.single().adId)
+    }
+
+    @Test
+    fun `解析宝箱查询响应中的动态任务`() {
+        val response = JSONObject(
+            """
+            {
+              "success": true,
+              "taskType": "MULTIPLE_TIMER_TASK",
+              "currentTaskInfo": {
+                "awardNum": 1,
+                "bizNo": "dynamic-box",
+                "endDt": 1785191720354,
+                "taskStatus": "PROCESSING"
+              }
+            }
+            """.trimIndent()
+        )
+
+        val task = MemberTaskProtocol.parseTreasureBoxTask(response)
+
+        assertEquals("dynamic-box", task?.bizNo)
+        assertEquals("MULTIPLE_TIMER_TASK", task?.taskType)
+        assertEquals(1785191720354L, task?.endTime)
+        assertEquals(1, task?.awardNum)
+    }
+
+    @Test
+    fun `宝箱领取请求透传动态编号和任务类型`() {
+        val task = MemberTreasureBoxTask(
+            bizNo = "dynamic-box",
+            taskType = "MULTIPLE_TIMER_TASK",
+            endTime = 1785191720354L,
+            awardNum = 1
+        )
+
+        val request = MemberTaskProtocol.buildTriggerTreasureBoxArgs(task).getJSONObject(0)
+
+        assertEquals("dynamic-box", request.getString("bizNo"))
+        assertEquals("MULTIPLE_TIMER_TASK", request.getString("taskType"))
+        assertEquals(0, request.getJSONObject("extMap").length())
+        assertEquals(
+            "ch_appcenter__chsub_9patch",
+            request.getJSONObject("sourcePassMap").getString("source")
+        )
+    }
+
+    @Test
+    fun `动态游戏入口解码活动上下文`() {
+        val response = JSONObject(
+            """
+            {
+              "success": true,
+              "actionUrl": "alipays://platformapi/startapp?appId=2021003125685383&url=https%3A%2F%2Frender.alipay.com%2Findex.html%3FchInfo%3Dzfbhy_mc_xgmqck81%26tab%3Dpromote%26channelTaskPassThrough%3D%252522%25257B%25255C%252522sceneId%25255C%252522%25253A%25255C%252522CY26_JULY%25255C%252522%25252C%25255C%252522taskId%25255C%252522%25253A%25255C%252522hyjmwf07%25255C%252522%25257D%252522"
+            }
+            """.trimIndent()
+        )
+
+        val context = MemberTaskProtocol.parseGameVisitContext(response)
+
+        assertEquals("zfbhy_mc_xgmqck81", context?.source)
+        assertEquals("promote", context?.tab)
+        assertEquals("CY26_JULY", context?.sceneId)
+        assertEquals("hyjmwf07", context?.taskId)
+    }
+
+    @Test
+    fun `游戏访问请求使用动态活动参数且不携带前端版本戳`() {
+        val context = MemberGameVisitContext(
+            source = "dynamic-source",
+            tab = "promote",
+            sceneId = "dynamic-scene",
+            taskId = "dynamic-task"
+        )
+
+        val home = MemberTaskProtocol.buildGameHomeArgs(context).getJSONObject(0)
+        assertEquals("dynamic-source", home.getString("source"))
+        assertEquals("promote", home.getString("sourceTab"))
+        assertFalse(home.has("__git"))
+
+        val module = MemberTaskProtocol.buildGameModuleArgs(context).getJSONObject(0)
+        val passThrough = JSONObject(module.getString("channelTaskPassThrough"))
+        assertEquals("dynamic-scene", passThrough.getString("sceneId"))
+        assertEquals("dynamic-task", passThrough.getString("taskId"))
+        assertFalse(module.has("__git"))
+
+        val main = MemberTaskProtocol.buildWalkMainArgs(context).getJSONObject(0)
+        assertFalse(main.getBoolean("cumulativeRechargePopupShown"))
+        assertFalse(main.getBoolean("fallbackTaskPopupShownToday"))
+        assertFalse(main.getBoolean("firstPayPopupShown"))
+        assertEquals(module.getString("channelTaskPassThrough"), main.getString("channelTaskPassThrough"))
+    }
+
+    @Test
+    fun `积分明细识别当天限时游戏访问奖励`() {
+        val response = JSONObject(
+            """
+            {
+              "summaries": [{
+                "details": [
+                  {"date": "2026-07-27", "memo": "限时游戏访问奖励", "point": "+1"},
+                  {"date": "2026-07-28", "memo": "限时游戏访问奖励", "point": "+1"}
+                ]
+              }]
+            }
+            """.trimIndent()
+        )
+
+        assertTrue(
+            MemberTaskProtocol.hasPointRecord(
+                response,
+                "2026-07-28",
+                "限时游戏访问奖励",
+                "+1"
+            )
+        )
+        assertFalse(
+            MemberTaskProtocol.hasPointRecord(
+                response,
+                "2026-07-29",
+                "限时游戏访问奖励",
+                "+1"
+            )
+        )
+    }
+
+    @Test
+    fun `任务安全校验失败识别为预期业务拒绝`() {
+        assertTrue(
+            MemberTaskProtocol.isExpectedTaskRejection(
+                JSONObject("""{"success":false,"resultDesc":"任务全性校验失败"}""")
+            )
+        )
+        assertFalse(
+            MemberTaskProtocol.isExpectedTaskRejection(
+                JSONObject("""{"success":false,"resultDesc":"系统异常"}""")
+            )
+        )
+    }
 }

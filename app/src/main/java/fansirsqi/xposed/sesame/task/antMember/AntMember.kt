@@ -1055,6 +1055,9 @@ class AntMember : ModelTask() {
      */
     private suspend fun doAllMemberAvailableTask(): Unit = CoroutineUtils.run {
         try {
+            processMemberTreasureBox()
+            processLimitedGameVisit()
+
             val beforeProgress = queryMemberTaskProgress()
             if (beforeProgress?.completed == true) {
                 record(
@@ -1145,6 +1148,128 @@ class AntMember : ModelTask() {
         }
     }
 
+    private fun processMemberTreasureBox() {
+        try {
+            val response = JSONObject(AntMemberRpcCall.querySignFloatingBall())
+            if (!ResChecker.checkRes("$TAG.querySignFloatingBall", response) ||
+                response.optBoolean("allTaskCompleted")
+            ) {
+                return
+            }
+            val task = MemberTaskProtocol.parseTreasureBoxTask(response) ?: return
+            scheduleMemberTreasureBox(task)
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "processMemberTreasureBox err:", t)
+        }
+    }
+
+    private fun scheduleMemberTreasureBox(task: MemberTreasureBoxTask) {
+        val executeTime = max(System.currentTimeMillis(), task.endTime + 1_000L)
+        addChildTask(
+            ChildModelTask(
+                id = "member_treasure_box_${task.bizNo}",
+                group = "MEMBER_TREASURE_BOX",
+                suspendRunnable = { triggerMemberTreasureBox(task) },
+                execTime = executeTime
+            )
+        )
+        if (executeTime > System.currentTimeMillis() + 1_000L) {
+            record(
+                TAG,
+                "会员任务🎖️[开宝箱已预约]#" +
+                    SimpleDateFormat("HH:mm:ss", Locale.CHINA).format(Date(executeTime))
+            )
+        }
+    }
+
+    private fun triggerMemberTreasureBox(task: MemberTreasureBoxTask) {
+        try {
+            val response = JSONObject(AntMemberRpcCall.triggerSignFloatingBall(task))
+            if (!ResChecker.checkRes("$TAG.triggerSignFloatingBall", response)) {
+                return
+            }
+            val currentTask = response.optJSONObject("currentTaskInfo")
+            if (currentTask?.optString("taskStatus") != "SUCCESS") {
+                Log.error(TAG, "会员任务开宝箱未成功: ${response.optString("resultDesc")}")
+                return
+            }
+            val awardNum = currentTask.optInt("awardNum", task.awardNum)
+            Log.other("会员任务🎖️[开宝箱奖励]#获得积分$awardNum")
+
+            val nextTask = MemberTaskProtocol.parseTreasureBoxTask(response, "nextTaskInfo")
+            if (nextTask != null && isToday(nextTask.endTime)) {
+                scheduleMemberTreasureBox(nextTask)
+            }
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "triggerMemberTreasureBox err:", t)
+        }
+    }
+
+    private suspend fun processLimitedGameVisit() {
+        try {
+            val today = SimpleDateFormat("yyyy-MM-dd", Locale.CHINA).format(Date())
+            if (hasLimitedGameVisitReward(today)) {
+                record(TAG, "会员任务🎖️[限时游戏访问奖励今日已领取]")
+                return
+            }
+
+            val entranceResponse = JSONObject(AntMemberRpcCall.queryGameEntranceInfo())
+            if (!ResChecker.checkRes("$TAG.queryGameEntranceInfo", entranceResponse)) {
+                return
+            }
+            val context = MemberTaskProtocol.parseGameVisitContext(entranceResponse)
+            if (context == null) {
+                Log.error(TAG, "会员任务限时游戏入口参数解析失败")
+                return
+            }
+
+            val requests = listOf(
+                "queryMemberGameHome" to { AntMemberRpcCall.queryMemberGameHome(context) },
+                "queryMemberGameModule" to { AntMemberRpcCall.queryMemberGameModule(context) },
+                "queryMemberWalkMain" to { AntMemberRpcCall.queryMemberWalkMain(context) }
+            )
+            for ((name, request) in requests) {
+                val response = JSONObject(request())
+                if (!ResChecker.checkRes("$TAG.$name", response)) {
+                    return
+                }
+            }
+
+            delay(1_000L)
+            if (hasLimitedGameVisitReward(today)) {
+                Log.other("会员任务🎖️[限时游戏访问奖励]#获得积分1")
+            } else {
+                record(TAG, "会员任务🎖️[限时游戏访问已完成，积分暂未到账]")
+            }
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "processLimitedGameVisit err:", t)
+        }
+    }
+
+    private fun hasLimitedGameVisitReward(today: String): Boolean {
+        return try {
+            val response = JSONObject(AntMemberRpcCall.queryMemberPointRecord())
+            if (!ResChecker.checkRes("$TAG.queryMemberPointRecord", response)) {
+                false
+            } else {
+                MemberTaskProtocol.hasPointRecord(
+                    response,
+                    today,
+                    "限时游戏访问奖励",
+                    "+1"
+                )
+            }
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "queryMemberPointRecord err:", t)
+            false
+        }
+    }
+
+    private fun isToday(timeMillis: Long): Boolean {
+        val format = SimpleDateFormat("yyyy-MM-dd", Locale.CHINA)
+        return format.format(Date(timeMillis)) == format.format(Date())
+    }
+
     private suspend fun processMemberAdTask(task: MemberAdTask): Boolean {
         if (isTaskInBlacklist(task.title)) {
             record(TAG, "会员任务🎖️[跳过黑名单任务]#${task.title}")
@@ -1152,6 +1277,10 @@ class AntMember : ModelTask() {
         }
 
         val applyResponse = JSONObject(AntMemberRpcCall.applyMemberAdTask(task))
+        if (MemberTaskProtocol.isExpectedTaskRejection(applyResponse)) {
+            record(TAG, "会员任务🎖️[不可自动完成，已跳过]#${task.title}")
+            return false
+        }
         if (!ResChecker.checkRes("$TAG.applyMemberAdTask", applyResponse)) {
             Log.error(
                 TAG,
@@ -1169,6 +1298,10 @@ class AntMember : ModelTask() {
 
         val finishResponse = JSONObject(AntMemberRpcCall.taskFinish(adBizId))
         if (!MemberTaskProtocol.isFinishSuccess(finishResponse)) {
+            if (MemberTaskProtocol.isExpectedTaskRejection(finishResponse)) {
+                record(TAG, "会员任务🎖️[不可自动完成，已跳过]#${task.title}")
+                return false
+            }
             Log.error(
                 TAG,
                 "会员任务结算失败: ${task.title}#" +

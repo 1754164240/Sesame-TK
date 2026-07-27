@@ -2,6 +2,8 @@ package fansirsqi.xposed.sesame.task.antMember
 
 import org.json.JSONArray
 import org.json.JSONObject
+import java.net.URLDecoder
+import java.nio.charset.StandardCharsets
 import kotlin.math.max
 
 data class MemberAdTask(
@@ -47,6 +49,26 @@ data class MemberTaskProgress(
         get() = if (targetCount > 0) max(0, targetCount - currentCount) else Int.MAX_VALUE
 }
 
+data class MemberTreasureBoxTask(
+    val bizNo: String,
+    val taskType: String,
+    val endTime: Long,
+    val awardNum: Int
+)
+
+data class MemberGameVisitContext(
+    val source: String,
+    val tab: String,
+    val sceneId: String,
+    val taskId: String
+) {
+    val channelTaskPassThrough: String
+        get() = JSONObject()
+            .put("sceneId", sceneId)
+            .put("taskId", taskId)
+            .toString()
+}
+
 object MemberTaskProtocol {
     const val TASK_SPACE_CODE = "ant_member_xlight_task"
     const val SOURCE = "ch_appcenter__chsub_9patch"
@@ -89,6 +111,11 @@ object MemberTaskProtocol {
             }
 
             val config = task.optJSONObject("simpleTaskConfig") ?: JSONObject()
+            val title = config.optString("title")
+                .ifEmpty { extMap.optString("title", "会员广告任务") }
+            if (title.replace(Regex("\\s+"), "").startsWith("玩游戏")) {
+                continue
+            }
             val taskStage = config.optInt("taskStage")
             val stage = config.optJSONArray("stageVOList")
                 ?.optJSONObject(taskStage)
@@ -107,8 +134,7 @@ object MemberTaskProtocol {
                 MemberAdTask(
                     adId = adId,
                     adBizId = adBizId,
-                    title = config.optString("title")
-                        .ifEmpty { extMap.optString("title", "会员广告任务") },
+                    title = title,
                     awardNum = awardNum,
                     browseSeconds = config.optInt("browseSeconds"),
                     extMap = copiedExtMap
@@ -212,6 +238,142 @@ object MemberTaskProtocol {
     }
 
     @JvmStatic
+    fun buildTreasureBoxQueryArgs(): JSONArray {
+        return JSONArray().put(
+            JSONObject()
+                .put("extMap", JSONObject())
+                .put("sourcePassMap", buildSourcePassMap())
+        )
+    }
+
+    @JvmStatic
+    fun parseTreasureBoxTask(
+        response: JSONObject,
+        taskInfoKey: String = "currentTaskInfo"
+    ): MemberTreasureBoxTask? {
+        val taskInfo = response.optJSONObject(taskInfoKey) ?: return null
+        if (taskInfo.optString("taskStatus") in terminalStatuses + "SUCCESS") return null
+        val bizNo = taskInfo.optString("bizNo").ifEmpty { response.optString("bizNo") }
+        val taskType = response.optString("taskType")
+        if (bizNo.isEmpty() || taskType.isEmpty()) return null
+        return MemberTreasureBoxTask(
+            bizNo = bizNo,
+            taskType = taskType,
+            endTime = taskInfo.optLong("endDt"),
+            awardNum = taskInfo.optInt("awardNum")
+        )
+    }
+
+    @JvmStatic
+    fun buildTriggerTreasureBoxArgs(task: MemberTreasureBoxTask): JSONArray {
+        return JSONArray().put(
+            JSONObject()
+                .put("bizNo", task.bizNo)
+                .put("extMap", JSONObject())
+                .put("sourcePassMap", buildSourcePassMap())
+                .put("taskType", task.taskType)
+        )
+    }
+
+    @JvmStatic
+    fun buildGameEntranceQueryArgs(): JSONArray {
+        return JSONArray().put(
+            JSONObject().put("sourcePassMap", buildSourcePassMap())
+        )
+    }
+
+    @JvmStatic
+    fun parseGameVisitContext(response: JSONObject): MemberGameVisitContext? {
+        val outerParams = parseUrlQuery(response.optString("actionUrl"))
+        val innerUrl = outerParams["url"] ?: return null
+        val innerParams = parseUrlQuery(innerUrl)
+        val source = innerParams["chInfo"].orEmpty()
+            .ifEmpty { outerParams["chInfo"].orEmpty() }
+        val tab = innerParams["tab"].orEmpty()
+        var passThrough = innerParams["channelTaskPassThrough"].orEmpty()
+        repeat(4) {
+            val decoded = decodeUrlComponent(passThrough)
+            if (decoded == passThrough) return@repeat
+            passThrough = decoded
+        }
+        if (passThrough.startsWith("\"")) {
+            passThrough = runCatching {
+                JSONArray("[$passThrough]").getString(0)
+            }.getOrDefault(passThrough)
+        }
+        val taskContext = runCatching { JSONObject(passThrough) }.getOrNull() ?: return null
+        val sceneId = taskContext.optString("sceneId")
+        val taskId = taskContext.optString("taskId")
+        if (source.isEmpty() || tab.isEmpty() || sceneId.isEmpty() || taskId.isEmpty()) return null
+        return MemberGameVisitContext(source, tab, sceneId, taskId)
+    }
+
+    @JvmStatic
+    fun buildGameHomeArgs(context: MemberGameVisitContext): JSONArray {
+        return JSONArray().put(
+            JSONObject()
+                .put("deviceLevel", "high")
+                .put("mytabChInfo", "")
+                .put("source", context.source)
+                .put("sourceTab", context.tab)
+                .put("unityDeviceLevel", "high")
+                .put("userFatigueInfo", JSONObject().put("FEEDS_GUIDE_STEP", 0))
+        )
+    }
+
+    @JvmStatic
+    fun buildGameModuleArgs(context: MemberGameVisitContext): JSONArray {
+        return JSONArray().put(buildGameActivityArgs(context))
+    }
+
+    @JvmStatic
+    fun buildWalkMainArgs(context: MemberGameVisitContext): JSONArray {
+        return JSONArray().put(
+            buildGameActivityArgs(context)
+                .put("cumulativeRechargePopupShown", false)
+                .put("fallbackTaskPopupShownToday", false)
+                .put("firstPayPopupShown", false)
+        )
+    }
+
+    @JvmStatic
+    fun buildPointRecordQueryArgs(): JSONArray {
+        return JSONArray().put(
+            JSONObject()
+                .put("flowinSinceId", 0)
+                .put("init", true)
+                .put("pageSize", 20)
+                .put("sourcePassMap", buildSourcePassMap())
+                .put("type", 1)
+        )
+    }
+
+    @JvmStatic
+    fun hasPointRecord(
+        response: JSONObject,
+        date: String,
+        memo: String,
+        point: String
+    ): Boolean {
+        val summaries = response.optJSONArray("summaries") ?: return false
+        for (summaryIndex in 0 until summaries.length()) {
+            val details = summaries.optJSONObject(summaryIndex)
+                ?.optJSONArray("details")
+                ?: continue
+            for (detailIndex in 0 until details.length()) {
+                val detail = details.optJSONObject(detailIndex) ?: continue
+                if (detail.optString("date") == date &&
+                    detail.optString("memo") == memo &&
+                    detail.optString("point") == point
+                ) {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+
+    @JvmStatic
     fun parseProgress(response: JSONObject): MemberTaskProgress {
         val processList = response.optJSONArray("availableTaskProcessList") ?: JSONArray()
         var selected: JSONObject? = null
@@ -256,6 +418,17 @@ object MemberTaskProtocol {
             response.optString("errCode") == "0"
     }
 
+    @JvmStatic
+    fun isExpectedTaskRejection(response: JSONObject): Boolean {
+        val message = response.optString(
+            "errMsg",
+            response.optString("resultDesc", response.optString("resultMsg"))
+        )
+        return message.contains("任务") &&
+            message.contains("校验失败") &&
+            (message.contains("全性") || message.contains("安全性"))
+    }
+
     private fun collectTaskObjects(resultData: JSONObject): List<JSONObject> {
         val tasks = ArrayList<JSONObject>()
         appendObjects(resultData.optJSONArray("adTaskList"), tasks)
@@ -279,6 +452,33 @@ object MemberTaskProtocol {
         for (index in 0 until source.length()) {
             source.optJSONObject(index)?.let(destination::add)
         }
+    }
+
+    private fun buildGameActivityArgs(context: MemberGameVisitContext): JSONObject {
+        return JSONObject()
+            .put("channelTaskPassThrough", context.channelTaskPassThrough)
+            .put("deviceLevel", "high")
+            .put("source", context.source)
+            .put("unityDeviceLevel", "high")
+    }
+
+    private fun parseUrlQuery(url: String): Map<String, String> {
+        val query = url.substringAfter('?', "")
+        if (query.isEmpty()) return emptyMap()
+        return query.split('&')
+            .mapNotNull { part ->
+                val separator = part.indexOf('=')
+                if (separator < 0) return@mapNotNull null
+                decodeUrlComponent(part.substring(0, separator)) to
+                    decodeUrlComponent(part.substring(separator + 1))
+            }
+            .toMap()
+    }
+
+    private fun decodeUrlComponent(value: String): String {
+        return runCatching {
+            URLDecoder.decode(value, StandardCharsets.UTF_8.name())
+        }.getOrDefault(value)
     }
 
     private fun buildSourcePassMap(): JSONObject {
