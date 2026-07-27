@@ -10,7 +10,6 @@ import java.util.UUID;
 import fansirsqi.xposed.sesame.hook.ApplicationHook;
 import fansirsqi.xposed.sesame.hook.RequestManager;
 import fansirsqi.xposed.sesame.util.RandomUtil;
-import fansirsqi.xposed.sesame.util.TimeUtil;
 
 public class AntMemberRpcCall {
     private static String getUniqueId() {
@@ -92,17 +91,54 @@ public class AntMemberRpcCall {
                         + "\"],\"channel\":\"MRCH_SELF\",\"outBizNo\":\"" + getUniqueId() + "\"}]");
     }
 
-    public static String executeTask(String bizParam, String bizSubType, String bizType, Long taskConfigId) {
-        return RequestManager.requestString("alipay.antmember.biz.rpc.membertask.h5.executeTask",
-                "[{\"bizOutNo\":\"" + TimeUtil.getFormatDate().replaceAll("-", "") +
-                        "\",\"bizParam\":\"" + bizParam + "\",\"bizSubType\":\"" + bizSubType + "\",\"bizType\":\"" + bizType +
-                        "\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"}" +
-                        ",\"syncProcess\":true,\"taskConfigId\":\"" + taskConfigId + "\"}]");
+    /**
+     * 查询会员签到页任务墙。
+     */
+    public static String querySignPageTaskList() {
+        return RequestManager.requestString(
+                "com.alipay.amic.memtask.h5.MemTaskListQueryFacade.signPageTaskList",
+                MemberTaskProtocol.buildSignPageTaskListArgs().toString()
+        );
     }
 
-    public static String queryAllStatusTaskList() {
-        return RequestManager.requestString("alipay.antmember.biz.rpc.membertask.h5.queryAllStatusTaskList",
-                "[{\"sourceBusiness\":\"signInAd\",\"sourcePassMap\":{\"innerSource\":\"\",\"source\":\"myTab\",\"unid\":\"\"}}]");
+    /**
+     * 领取单个会员广告任务。
+     */
+    public static String applyMemberAdTask(MemberAdTask task) {
+        return RequestManager.requestString(
+                "com.alipay.amic.memtask.h5.MemTaskAdFacade.applyAdTask",
+                MemberTaskProtocol.buildApplyAdTaskArgs(task).toString()
+        );
+    }
+
+    /**
+     * 领取普通会员浏览任务。
+     */
+    public static String applyMemberTask(MemberBrowseTask task) {
+        return RequestManager.requestString(
+                "com.alipay.amic.memtask.h5.MemTaskManagerFacade.applyTask",
+                MemberTaskProtocol.buildApplyTaskArgs(task).toString()
+        );
+    }
+
+    /**
+     * 完成普通会员浏览任务。
+     */
+    public static String executeMemberTask(MemberBrowseTask task) {
+        return RequestManager.requestString(
+                "com.alipay.amic.memtask.h5.MemTaskManagerFacade.executeTask",
+                MemberTaskProtocol.buildExecuteTaskArgs(task, System.currentTimeMillis()).toString()
+        );
+    }
+
+    /**
+     * 查询会员积分累计任务进度。
+     */
+    public static String queryMemberTaskProgress() {
+        return RequestManager.requestString(
+                "com.alipay.alipaymember.biz.rpc.membertask.h5.queryTaskList",
+                MemberTaskProtocol.buildProgressQueryArgs().toString()
+        );
     }
 
     /**

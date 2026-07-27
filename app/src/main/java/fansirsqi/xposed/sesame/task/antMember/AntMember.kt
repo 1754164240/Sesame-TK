@@ -1048,31 +1048,177 @@ class AntMember : ModelTask() {
     }
 
     /**
-     * 会员任务-逛一逛
-     * 单次执行 1
+     * 会员任务
+     *
+     * 广告任务通过灯火广告上下文领取并结算；普通浏览任务按状态领取，
+     * 等待服务端下发的浏览时长后执行，最后复查会员累计任务进度。
      */
     private suspend fun doAllMemberAvailableTask(): Unit = CoroutineUtils.run {
         try {
-            val str = AntMemberRpcCall.queryAllStatusTaskList()
-            delay(500)
-            val jsonObject = JSONObject(str)
-            if (!ResChecker.checkRes(TAG, jsonObject)) {
-                Log.error(
-                    "$TAG.doAllMemberAvailableTask", "会员任务响应失败: " + jsonObject.getString("resultDesc")
+            val beforeProgress = queryMemberTaskProgress()
+            if (beforeProgress?.completed == true) {
+                record(
+                    TAG,
+                    "会员任务🎖️[今日已完成]#${beforeProgress.currentCount}/${beforeProgress.targetCount}个"
                 )
                 return@run
             }
-            if (!jsonObject.has("availableTaskList")) {
+
+            val queryResponse = JSONObject(AntMemberRpcCall.querySignPageTaskList())
+            if (!ResChecker.checkRes("$TAG.querySignPageTaskList", queryResponse)) {
+                Log.error(
+                    "$TAG.doAllMemberAvailableTask",
+                    "会员任务墙查询失败: ${queryResponse.optString("resultDesc")}"
+                )
                 return@run
             }
-            val taskList = jsonObject.getJSONArray("availableTaskList")
-            for (j in 0 until taskList.length()) {
-                val task = taskList.getJSONObject(j)
-                processTask(task)
+
+            val adTasks = MemberTaskProtocol.parseAdTasks(queryResponse)
+            val browseTasks = MemberTaskProtocol.parseBrowseTasks(queryResponse)
+            if (adTasks.isEmpty() && browseTasks.isEmpty()) {
+                record(TAG, "会员任务🎖️[暂无可执行任务]")
+                return@run
+            }
+
+            val remainingCount = beforeProgress?.remainingCount ?: Int.MAX_VALUE
+            var completedCount = 0
+
+            for (task in adTasks) {
+                if (completedCount >= remainingCount) break
+                try {
+                    if (processMemberAdTask(task)) {
+                        completedCount++
+                    }
+                } catch (t: Throwable) {
+                    Log.printStackTrace(
+                        TAG,
+                        "会员任务执行异常: ${task.title}(${task.adId})",
+                        t
+                    )
+                }
+            }
+
+            for (task in browseTasks) {
+                if (completedCount >= remainingCount) break
+                try {
+                    if (processMemberBrowseTask(task)) {
+                        completedCount++
+                    }
+                } catch (t: Throwable) {
+                    Log.printStackTrace(
+                        TAG,
+                        "会员浏览任务执行异常: ${task.title}(${task.configId})",
+                        t
+                    )
+                }
+            }
+
+            delay(500)
+            val afterProgress = queryMemberTaskProgress()
+            if (afterProgress != null) {
+                val increased = max(
+                    0,
+                    afterProgress.currentCount - (beforeProgress?.currentCount ?: 0)
+                )
+                record(
+                    TAG,
+                    "会员任务🎖️[进度复查]#${afterProgress.currentCount}/${afterProgress.targetCount}个" +
+                        "，本次增加$increased 个，已领取${afterProgress.receivedAwardPoint}" +
+                        "/${afterProgress.totalAwardPoint}积分"
+                )
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "doAllMemberAvailableTask err:", t)
         }
+    }
+
+    private fun queryMemberTaskProgress(): MemberTaskProgress? {
+        return try {
+            val response = JSONObject(AntMemberRpcCall.queryMemberTaskProgress())
+            if (!ResChecker.checkRes("$TAG.queryMemberTaskProgress", response)) {
+                return null
+            }
+            MemberTaskProtocol.parseProgress(response)
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "queryMemberTaskProgress err:", t)
+            null
+        }
+    }
+
+    private suspend fun processMemberAdTask(task: MemberAdTask): Boolean {
+        if (isTaskInBlacklist(task.title)) {
+            record(TAG, "会员任务🎖️[跳过黑名单任务]#${task.title}")
+            return false
+        }
+
+        val applyResponse = JSONObject(AntMemberRpcCall.applyMemberAdTask(task))
+        if (!ResChecker.checkRes("$TAG.applyMemberAdTask", applyResponse)) {
+            Log.error(
+                TAG,
+                "会员任务领取失败: ${task.title}#" + applyResponse.optString("resultDesc")
+            )
+            return false
+        }
+
+        val adBizId = applyResponse.optJSONObject("resultData")
+            ?.optString("adBizId")
+            .orEmpty()
+            .ifEmpty { task.adBizId }
+        record(TAG, "会员任务🎖️[开始浏览]#${task.title}")
+        delay(task.waitMillis)
+
+        val finishResponse = JSONObject(AntMemberRpcCall.taskFinish(adBizId))
+        if (!MemberTaskProtocol.isFinishSuccess(finishResponse)) {
+            Log.error(
+                TAG,
+                "会员任务结算失败: ${task.title}#" +
+                    finishResponse.optString("errMsg", finishResponse.optString("resultDesc"))
+            )
+            return false
+        }
+
+        val rewardAmount = finishResponse.optJSONObject("extendInfo")
+            ?.optJSONObject("rewardInfo")
+            ?.optString("rewardAmount")
+            .orEmpty()
+            .ifEmpty { task.awardNum.takeIf { it > 0 }?.toString().orEmpty() }
+        Log.other(
+            "会员任务🎖️[${task.title}]#" +
+                if (rewardAmount.isEmpty()) "任务已结算" else "获得积分$rewardAmount"
+        )
+        return true
+    }
+
+    private suspend fun processMemberBrowseTask(task: MemberBrowseTask): Boolean {
+        if (isTaskInBlacklist(task.title)) {
+            record(TAG, "会员任务🎖️[跳过黑名单任务]#${task.title}")
+            return false
+        }
+
+        if (task.needsApply) {
+            val applyResponse = JSONObject(AntMemberRpcCall.applyMemberTask(task))
+            if (!ResChecker.checkRes("$TAG.applyMemberTask", applyResponse)) {
+                Log.error(
+                    TAG,
+                    "会员任务领取失败: ${task.title}#${applyResponse.optString("resultDesc")}"
+                )
+                return false
+            }
+        }
+
+        record(TAG, "会员任务🎖️[开始浏览]#${task.title}")
+        delay(task.waitMillis)
+        val executeResponse = JSONObject(AntMemberRpcCall.executeMemberTask(task))
+        if (!MemberTaskProtocol.isFinishSuccess(executeResponse)) {
+            Log.error(
+                TAG,
+                "会员任务执行失败: ${task.title}#${executeResponse.optString("resultDesc")}"
+            )
+            return false
+        }
+
+        Log.other("会员任务🎖️[${task.title}]#任务已完成")
+        return true
     }
 
     /**
@@ -1333,68 +1479,6 @@ class AntMember : ModelTask() {
             }
         } catch (t: Throwable) {
             Log.printStackTrace("$TAG.collectInsuredGold", t)
-        }
-    }
-
-    /**
-     * 执行会员任务 类型1
-     * @param task 单个任务对象
-     */
-    @Throws(JSONException::class)
-    private suspend fun processTask(task: JSONObject): Unit = CoroutineUtils.run {
-        val taskConfigInfo = task.getJSONObject("taskConfigInfo")
-        val name = taskConfigInfo.getString("name")
-        val id = taskConfigInfo.getLong("id")
-        val awardParamPoint = taskConfigInfo.getJSONObject("awardParam").getString("awardParamPoint")
-        val targetBusiness = taskConfigInfo.getJSONArray("targetBusiness").getString(0)
-        val targetBusinessArray: Array<String?> = targetBusiness.split("#".toRegex()).dropLastWhile { it.isEmpty() }.toTypedArray()
-        if (targetBusinessArray.size < 3) {
-            Log.error(TAG, "processTask target param err:" + targetBusinessArray.contentToString())
-            return@run
-        }
-        val bizType = targetBusinessArray[0]
-        val bizSubType = targetBusinessArray[1]
-        val bizParam = targetBusinessArray[2]
-        delay(16000)
-        val str = AntMemberRpcCall.executeTask(bizParam, bizSubType, bizType, id)
-        val jo = JSONObject(str)
-        if (!ResChecker.checkRes(TAG + "执行会员任务失败:", jo)) {
-            Log.error(TAG, "执行任务失败:" + jo.optString("resultDesc"))
-            return@run
-        }
-        if (checkMemberTaskFinished(id)) {
-            Log.other("会员任务🎖️[$name]#获得积分$awardParamPoint")
-        }
-    }
-
-    /**
-     * 查询指定会员任务是否完成
-     * @param taskId 任务id
-     */
-    private suspend fun checkMemberTaskFinished(taskId: Long): Boolean {
-        return try {
-            val str = AntMemberRpcCall.queryAllStatusTaskList()
-            delay(500)
-            val jsonObject = JSONObject(str)
-            if (!ResChecker.checkRes(TAG + "查询会员任务状态失败:", jsonObject)) {
-                Log.error(
-                    "$TAG.checkMemberTaskFinished", "会员任务响应失败: " + jsonObject.getString("resultDesc")
-                )
-            }
-            if (!jsonObject.has("availableTaskList")) {
-                return true
-            }
-            val taskList = jsonObject.getJSONArray("availableTaskList")
-            for (i in 0..<taskList.length()) {
-                val taskConfigInfo = taskList.getJSONObject(i).getJSONObject("taskConfigInfo")
-                val id = taskConfigInfo.getLong("id")
-                if (taskId == id) {
-                    return false
-                }
-            }
-            true
-        } catch (_: JSONException) {
-            false
         }
     }
 
