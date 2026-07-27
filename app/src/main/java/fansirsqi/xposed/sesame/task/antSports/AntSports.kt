@@ -16,6 +16,7 @@ import fansirsqi.xposed.sesame.model.modelFieldExt.IntegerModelField
 import fansirsqi.xposed.sesame.model.modelFieldExt.SelectModelField
 import fansirsqi.xposed.sesame.model.modelFieldExt.StringModelField
 import fansirsqi.xposed.sesame.task.ModelTask
+import fansirsqi.xposed.sesame.task.RunnerExecutionPolicy
 import fansirsqi.xposed.sesame.util.*
 import fansirsqi.xposed.sesame.util.maps.UserMap
 import org.json.JSONArray
@@ -96,6 +97,11 @@ class AntSports : ModelTask() {
      * @brief 任务名称
      */
     override fun getName(): String = "运动"
+
+    override val runnerExecutionPolicy: RunnerExecutionPolicy =
+        RunnerExecutionPolicy.START_ONLY
+
+    override val runnerTimeoutMillis: Long = 30_000L
 
     /**
      * @brief 所属任务分组

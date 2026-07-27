@@ -10,7 +10,6 @@ import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.NetworkUtils
 import fansirsqi.xposed.sesame.util.Notify
 import fansirsqi.xposed.sesame.util.TimeUtil
-import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * RPC 请求管理器 (带熔断与兜底机制)
@@ -23,8 +22,7 @@ object RequestManager {
     const val VERIFICATION_REQUIRED_RESPONSE =
         """{"success":false,"resultCode":"RPC_VERIFICATION_REQUIRED","resultDesc":"触发安全验证，请人工验证后继续"}"""
 
-    // 连续失败计数器
-    private val errorCount = AtomicInteger(0)
+    private val recoveryPolicy = RpcRecoveryPolicy()
 
     @JvmStatic
     fun isEmptyRpcResponse(result: String?): Boolean {
@@ -42,8 +40,12 @@ object RequestManager {
 
     @JvmStatic
     fun handleVerificationRequired(method: String?) {
-        Log.record(TAG, "检测到安全验证，暂停后续RPC请求: $method")
         ApplicationHook.setOffline(true)
+        if (recoveryPolicy.onVerificationRequired() != RecoveryDecision.WAIT_FOR_MANUAL_VERIFICATION) {
+            return
+        }
+
+        Log.record(TAG, "检测到安全验证，暂停后续RPC请求: $method")
         if (BaseModel.errNotify.value) {
             Notify.sendNewNotification(
                 "${TimeUtil.getTimeStr()} | 触发安全验证",
@@ -59,9 +61,8 @@ object RequestManager {
     private inline fun executeRpc(methodLog: String?, block: (RpcBridge) -> String?): String {
         // 1. 【前置检查】如果已经离线，直接中断并尝试恢复
         if (ApplicationHook.offline) {
-            Log.record(TAG, "当前处于离线状态，拦截请求: $methodLog")
-            handleOfflineRecovery()
-            return EMPTY_RPC_RESPONSE
+            recoveryPolicy.handleExternalOffline(::handleOfflineRecovery)
+            return blockedResponse()
         }
 
         // 2. 获取 Bridge (包含网络检查)
@@ -69,7 +70,7 @@ object RequestManager {
         val bridge = getRpcBridge()
         if (bridge == null) {
             handleFailure("Network/Bridge Unavailable", "网络或Bridge不可用")
-            return ""
+            return EMPTY_RPC_RESPONSE
         }
 
         // 3. 执行请求
@@ -85,39 +86,54 @@ object RequestManager {
             // 失败：增加计数，检查兜底
             handleFailure(methodLog ?: "Unknown", "返回数据为空")
             return EMPTY_RPC_RESPONSE
-        } else {
-            // 成功：重置计数器
-            if (errorCount.get() > 0) {
-                errorCount.set(0)
-                Log.record(TAG, "RPC 恢复正常，错误计数重置")
-            }
-            return result.orEmpty()
         }
+
+        if (result == VERIFICATION_REQUIRED_RESPONSE || ApplicationHook.offline) {
+            return blockedResponse()
+        }
+
+        val hadFailure = recoveryPolicy.failureCount > 0 ||
+            recoveryPolicy.blockReason != RpcBlockReason.NONE
+        recoveryPolicy.onSuccess()
+        if (hadFailure) {
+            Log.record(TAG, "RPC 恢复正常，错误计数重置")
+        }
+        return result.orEmpty()
     }
 
     /**
      * 处理失败逻辑：计数、报警、熔断
      */
     private fun handleFailure(method: String, reason: String) {
-        val currentCount = errorCount.incrementAndGet()
-        // 假设 BaseModel 有个方法获取这个配置，或者直接用常量
         val maxCount = BaseModel.setMaxErrorCount.value
+        val decision = recoveryPolicy.onNetworkFailure(maxCount)
+        val currentCount = recoveryPolicy.failureCount
 
         Log.error(TAG, "RPC 失败 ($currentCount/$maxCount) | Method: $method | Reason: $reason")
 
-        // 触发兜底阈值
-        if (currentCount >= maxCount) {
+        if (decision == RecoveryDecision.SCHEDULE_REOPEN) {
             Log.record(TAG, "🔴 连续失败次数达到阈值，触发熔断兜底机制！")
-            // 1. 设置离线状态，停止后续任务
             ApplicationHook.setOffline(true)
-            // 2. 发送通知 (根据用户配置)
             if (BaseModel.errNotify.value) {
                 val msg = "${TimeUtil.getTimeStr()} | 网络异常次数超过阈值[$maxCount]"
                 Notify.sendNewNotification(msg, "RPC 连续失败，脚本已暂停")
             }
-            // 3. 立即尝试一次恢复
             handleOfflineRecovery()
         }
+    }
+
+    private fun blockedResponse(): String {
+        recoveryPolicy.onBlockedRequest()
+        return if (recoveryPolicy.blockReason == RpcBlockReason.VERIFICATION) {
+            VERIFICATION_REQUIRED_RESPONSE
+        } else {
+            EMPTY_RPC_RESPONSE
+        }
+    }
+
+    @JvmStatic
+    fun onRpcBridgeReady() {
+        recoveryPolicy.onSuccess()
     }
 
     /**
@@ -226,7 +242,7 @@ object RequestManager {
         if (rpcEntity == null) return
         // requestObject 不涉及返回值判断，但同样需要离线检查
         if (ApplicationHook.offline) {
-            handleOfflineRecovery()
+            recoveryPolicy.handleExternalOffline(::handleOfflineRecovery)
             return
         }
 
@@ -238,9 +254,7 @@ object RequestManager {
 
         try {
             bridge.requestObject(rpcEntity, tryCount, retryInterval)
-            // requestObject 没有返回值，假设只要不抛异常就算成功？
-            // 或者保守一点，不重置 errorCount，也不增加 errorCount
-            errorCount.set(0)
+            recoveryPolicy.onRequestCompletedWithoutResponse()
         } catch (e: Throwable) {
             Log.printStackTrace(TAG, "requestObject 异常: ${rpcEntity.methodName}", e)
             handleFailure(rpcEntity.methodName ?: "Unknown", "Exception")

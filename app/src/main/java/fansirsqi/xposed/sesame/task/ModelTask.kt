@@ -41,6 +41,11 @@ import java.util.concurrent.atomic.AtomicInteger
  * @author Sesame-TK Team
  */
 abstract class ModelTask : Model() {
+    open val runnerExecutionPolicy: RunnerExecutionPolicy =
+        RunnerExecutionPolicy.AWAIT_COMPLETION
+
+    open val runnerTimeoutMillis: Long = 10 * 60 * 1000L
+
     /** 任务协程作用域 */
     private var taskScope: CoroutineScope? = null
     

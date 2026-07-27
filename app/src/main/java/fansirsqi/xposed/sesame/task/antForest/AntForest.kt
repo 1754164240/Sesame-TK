@@ -31,6 +31,7 @@ import fansirsqi.xposed.sesame.model.modelFieldExt.SelectAndCountModelField
 import fansirsqi.xposed.sesame.model.modelFieldExt.SelectModelField
 import fansirsqi.xposed.sesame.model.modelFieldExt.StringModelField
 import fansirsqi.xposed.sesame.task.ModelTask
+import fansirsqi.xposed.sesame.task.RunnerExecutionPolicy
 import fansirsqi.xposed.sesame.task.TaskCommon
 import fansirsqi.xposed.sesame.task.TaskStatus
 import fansirsqi.xposed.sesame.task.antForest.ForestUtil.hasBombCard
@@ -280,6 +281,11 @@ class AntForest : ModelTask(), EnergyCollectCallback {
     override fun getName(): String {
         return "蚂蚁森林"
     }
+
+    override val runnerExecutionPolicy: RunnerExecutionPolicy =
+        RunnerExecutionPolicy.START_ONLY
+
+    override val runnerTimeoutMillis: Long = 30_000L
 
     override fun getGroup(): ModelGroup {
         return ModelGroup.FOREST
@@ -1287,7 +1293,13 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 val animalName = extInfo.getJSONObject("animal").getString("name")
                 val response = AntForestRpcCall.collectAnimalRobEnergy(propId, propType, shortDay)
                 val responseObj = JSONObject(response)
-                if (ResChecker.checkRes(TAG + "收取动物派遣能量失败:", responseObj)) {
+                if (
+                    AntForestResponsePolicy.isAnimalEnergyAlreadyCollected(
+                        responseObj.optString("resultCode")
+                    )
+                ) {
+                    Log.record(TAG, "动物派遣能量已被其他请求收取")
+                } else if (ResChecker.checkRes(TAG + "收取动物派遣能量失败:", responseObj)) {
                     val energy = extInfo.optInt("energy", 0)
                     totalCollected += energy
                     val str = "收取[" + animalName + "]派遣能量🦩[" + energy + "g]"
@@ -1764,6 +1776,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         // 2. 获取用户名（用于日志）
         val userName = getAndCacheUserName(userId, userHomeObj, null)
         var waitingBubblesCount = 0
+        val invalidWaitingTimes = mutableMapOf<EnergyWaitingTimeResult, Int>()
 
         // 3. 保护罩/炸弹卡日志记录（仅针对好友，仅做显示，实际拦截在collectEnergy）
         val isSelf = selfId == userId
@@ -1829,7 +1842,13 @@ class AntForest : ModelTask(), EnergyCollectCallback {
 
                     // 等待成熟的能量球，添加到蹲点队列
                     val produceTime = bubble.optLong("produceTime", 0L)
-                    if (produceTime > 0 && produceTime > serverTime) {
+                    if (produceTime > 0) {
+                        val timeResult = EnergyWaitingTimePolicy.validate(produceTime, serverTime)
+                        if (timeResult != EnergyWaitingTimeResult.VALID) {
+                            invalidWaitingTimes[timeResult] =
+                                invalidWaitingTimes.getOrDefault(timeResult, 0) + 1
+                            continue
+                        }
                         // 检查保护罩时间（仅好友）：如果保护罩覆盖整个成熟期，跳过蹲点
                         // 自己的账号：无论是否有保护罩都要添加蹲点（到时间后直接收取）
                         if (!isSelf && shouldSkipWaitingTaskDueToProtection(userHomeObj, produceTime, serverTime)) {
@@ -1865,6 +1884,19 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                     continue
                 }
             }
+        }
+
+        if (invalidWaitingTimes.isNotEmpty()) {
+            val summary = invalidWaitingTimes.entries.joinToString("，") { (reason, count) ->
+                val reasonName = when (reason) {
+                    EnergyWaitingTimeResult.EXPIRED -> "已过期"
+                    EnergyWaitingTimeResult.TOO_FAR -> "超远未来"
+                    EnergyWaitingTimeResult.CROSS_DAY -> "跨日异常"
+                    EnergyWaitingTimeResult.VALID -> "有效"
+                }
+                "$reasonName${count}个"
+            }
+            Log.record(TAG, "[$userName] 蹲点时间异常汇总：$summary")
         }
 
         // 5. 打印调试信息

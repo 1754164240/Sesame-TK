@@ -4,9 +4,11 @@ import android.annotation.SuppressLint
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.TimeUtil
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -166,6 +168,7 @@ object EnergyWaitingManager {
 
     // 蹲点任务存储
     private val waitingTasks = ConcurrentHashMap<String, WaitingTask>()
+    private val runningTasks = UniqueTaskRegistry<Job>()
 
     // 智能重试策略
     private val smartRetryStrategy = SmartRetryStrategy()
@@ -186,9 +189,6 @@ object EnergyWaitingManager {
     // 最小间隔时间（毫秒） - 精确蹲点模式，快速收取
     private const val MIN_INTERVAL_MS = 500L  // 最小0.5秒（精确蹲点模式）
     private const val MAX_INTERVAL_MS = 1500L // 最大1.5秒（精确蹲点模式）
-
-    // 最大等待时间（毫秒） - 8小时
-    private const val MAX_WAIT_TIME_MS = 8 * 60 * 60 * 1000L
 
     // 基础检查间隔（毫秒）
     private const val BASE_CHECK_INTERVAL_MS = 30000L // 30秒检查一次
@@ -242,6 +242,12 @@ object EnergyWaitingManager {
         bombEndTime: Long = 0,
         userHomeObj: JSONObject? = null
     ) {
+        if (
+            EnergyWaitingTimePolicy.validate(produceTime, System.currentTimeMillis()) !=
+            EnergyWaitingTimeResult.VALID
+        ) {
+            return
+        }
         managerScope.launch {
             taskMutex.withLock {
                 val currentTime = System.currentTimeMillis()
@@ -292,21 +298,6 @@ object EnergyWaitingManager {
                      Log.record(TAG, "⭐️ [主号|$userName]不检查保护罩，到时间直接收取")
                 }
 
-                // 注释：原本的时间有效性检查已删除
-                // 因为 addWaitingTask 只在 produceTime > serverTime 时被调用
-                // 所以 produceTime <= currentTime 的情况几乎不会发生
-
-                // 检查等待时间是否过长
-                val waitTime = produceTime - currentTime
-                if (waitTime > MAX_WAIT_TIME_MS) {
-                     Log.record(TAG, "能量球[$bubbleId]等待时间过长(${waitTime/1000/60}分钟)，跳过蹲点")
-                    // 移除过长的任务
-                    waitingTasks.remove(taskId)
-                    EnergyWaitingPersistence.saveTasks(waitingTasks)
-                    return@withLock
-                }
-
-
                 val task = WaitingTask(
                     userId = userId,
                     userName = userName,
@@ -318,8 +309,8 @@ object EnergyWaitingManager {
                 )
 
                 // 移除旧任务（如果存在）
+                runningTasks.remove(taskId)?.cancel()
                 waitingTasks.remove(taskId)
-                EnergyWaitingPersistence.saveTasks(waitingTasks)
 
                 // 添加新任务
                 waitingTasks[taskId] = task
@@ -359,7 +350,7 @@ object EnergyWaitingManager {
      * 核心原则：不提前收取，严格按时机执行
      */
     private fun startPreciseWaitingCoroutine(task: WaitingTask) {
-        managerScope.launch {
+        val job = managerScope.launch(start = CoroutineStart.LAZY) {
             try {
                 val currentTime = System.currentTimeMillis()
                 val preciseCollectTime = calculatePreciseCollectTime(task)
@@ -481,14 +472,26 @@ object EnergyWaitingManager {
                     // 重试延迟
                     val retryDelay = smartRetryStrategy.getRetryDelay(task.retryCount, e.message)
                      Log.record(TAG, "精确蹲点任务[${task.taskId}]将在${retryDelay/1000}秒后重试")
-                    delay(retryDelay)
-                    startPreciseWaitingCoroutine(retryTask)
+                    managerScope.launch {
+                        delay(retryDelay)
+                        startPreciseWaitingCoroutine(retryTask)
+                    }
                 } else {
                     Log.error(TAG, "精确蹲点任务[${task.taskId}]不满足重试条件，放弃")
                     waitingTasks.remove(task.taskId)
                     EnergyWaitingPersistence.saveTasks(waitingTasks)
                 }
+            } finally {
+                val currentJob = coroutineContext[Job]
+                if (currentJob != null) {
+                    runningTasks.remove(task.taskId, currentJob)
+                }
             }
+        }
+        if (runningTasks.register(task.taskId, job)) {
+            job.start()
+        } else {
+            job.cancel()
         }
     }
 
@@ -608,77 +611,44 @@ object EnergyWaitingManager {
                 UserEnergyPatternManager.updateUserPattern(task.userId, result, executeTime)
                 // 处理结果
 
-                if (result.success) {
-                    if (result.energyCount > 0) {
+                when (EnergyWaitingResultPolicy.decide(result)) {
+                    WaitingCollectDecision.REMOVE_COMPLETE -> {
                         Log.record(TAG,"✅ 蹲点收取[${task.getUserTypeTag()}${task.userName}]成功${result.energyCount}g(耗时${executeTime}ms)")
                         waitingTasks.remove(task.taskId) // 成功后移除任务
                         EnergyWaitingPersistence.saveTasks(waitingTasks) // 保存更新
-                    } else {
-                        Log.record(TAG, "⚠️ 蹲点收取[${task.getUserTypeTag()}${task.userName}]异常：返回0能量(${result.message})")
-
-                        // 判断是否需要重试
+                    }
+                    WaitingCollectDecision.REMOVE_TERMINAL -> {
+                        Log.record(
+                            TAG,
+                            "蹲点收取[${task.getUserTypeTag()}${task.userName}]已终止：${result.message}"
+                        )
+                        waitingTasks.remove(task.taskId)
+                        EnergyWaitingPersistence.saveTasks(waitingTasks)
+                    }
+                    WaitingCollectDecision.RETRY -> {
+                        val resultType = if (result.success) "返回0能量" else "失败"
+                        Log.record(
+                            TAG,
+                            "蹲点收取[${task.getUserTypeTag()}${task.userName}]$resultType：${result.message}"
+                        )
                         if (task.retryCount < task.maxRetries) {
                             val retryTask = task.withRetry()
                             waitingTasks[task.taskId] = retryTask
-                            val retryDelay = 5000L // 5秒后重试
-                            Log.record(TAG, "  → 5秒后重试(${retryTask.retryCount}/${task.maxRetries})")
-
+                            val retryDelay = if (result.message.contains("频繁")) 10000L else 5000L
+                            Log.record(
+                                TAG,
+                                "  → ${retryDelay / 1000}秒后重试(${retryTask.retryCount}/${task.maxRetries})"
+                            )
                             managerScope.launch {
                                 delay(retryDelay)
-                                startPreciseWaitingCoroutine(retryTask)
+                                if (waitingTasks.containsKey(task.taskId)) {
+                                    startPreciseWaitingCoroutine(retryTask)
+                                }
                             }
                         } else {
                             Log.record(TAG, "  → 已达最大重试次数")
                             waitingTasks.remove(task.taskId)
                             EnergyWaitingPersistence.saveTasks(waitingTasks)
-                        }
-                    }
-                } else {
-                    Log.record(TAG, "❌ 蹲点收取[${task.getUserTypeTag()}${task.userName}]失败：${result.message}")
-
-                    // 根据失败原因决定是否重试
-                    when {
-                        result.hasShield || result.hasBomb -> {
-                            Log.record(TAG, "  → 检测到保护罩/炸弹卡")
-                            waitingTasks.remove(task.taskId)
-                            EnergyWaitingPersistence.saveTasks(waitingTasks) // 保存更新
-                        }
-                        result.message.contains("用户无可收取的能量球") -> {
-                            Log.record(TAG, "  → 能量球已不存在，移除任务")
-                            waitingTasks.remove(task.taskId)
-                            EnergyWaitingPersistence.saveTasks(waitingTasks) // 保存更新
-                        }
-                        result.message.contains("无法查询用户能量信息") -> {
-                            Log.record(TAG, "  → 用户能量信息查询失败，移除任务")
-                            waitingTasks.remove(task.taskId)
-                            EnergyWaitingPersistence.saveTasks(waitingTasks) // 保存更新
-                        }
-                        else -> {
-                            // 可重试的错误，主动触发重试
-                            if (task.retryCount < task.maxRetries) {
-                                val retryTask = task.withRetry()
-                                waitingTasks[task.taskId] = retryTask
-
-                                // 根据错误类型决定重试延迟
-                                val retryDelay = when {
-                                    result.message.contains("网络") -> 5000L // 5秒
-                                    result.message.contains("频繁") -> 10000L // 10秒
-                                    else -> 5000L // 默认5秒
-                                }
-
-                                Log.record(TAG, "  → ${retryDelay/1000}秒后重试(${retryTask.retryCount}/${task.maxRetries})")
-
-                                managerScope.launch {
-                                    delay(retryDelay)
-                                    if (waitingTasks.containsKey(task.taskId)) {
-                                        startPreciseWaitingCoroutine(retryTask)
-                                    }
-                                }
-                            } else {
-                                Log.record(TAG, "  → 已达最大重试次数")
-                                waitingTasks.remove(task.taskId)
-                                EnergyWaitingPersistence.saveTasks(waitingTasks)
-                            }
                         }
                     }
                 }

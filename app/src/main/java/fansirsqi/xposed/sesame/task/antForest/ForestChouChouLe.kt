@@ -25,16 +25,6 @@ class ForestChouChouLe {
         private const val SCENE_ACTIVITY = "ANTFOREST_ACTIVITY_DRAW"
         private const val MAX_TASK_FAIL_COUNT = 3
 
-        // 屏蔽的任务类型关键词
-        private val BLOCKED_TYPES = setOf(
-            "FOREST_NORMAL_DRAW_SHARE",
-            "FOREST_ACTIVITY_DRAW_SHARE",
-            "FOREST_ACTIVITY_DRAW_XS" // 玩游戏得新机会
-        )
-
-        // 屏蔽的任务名称关键词
-        private val BLOCKED_NAMES = setOf("玩游戏得", "开宝箱")
-
         /**
          * 抽奖场景数据类
          */
@@ -95,6 +85,7 @@ class ForestChouChouLe {
     }
 
     private val taskTryCount = ConcurrentHashMap<String, AtomicInteger>()
+    private val captureWaitTasks = ConcurrentHashMap.newKeySet<String>()
 
     fun chouChouLe() {
         runCatching {
@@ -257,8 +248,8 @@ class ForestChouChouLe {
      * 判断任务是否在屏蔽列表中
      */
     private fun isBlockedTask(taskType: String, taskName: String): Boolean {
-        return BLOCKED_TYPES.any { taskType.contains(it) } ||
-                BLOCKED_NAMES.any { taskName.contains(it) }
+        return ForestDrawTaskPolicy.actionFor(taskType, taskName) ==
+            ForestDrawTaskAction.WAIT_FOR_CAPTURE
     }
 
     /**
@@ -279,58 +270,92 @@ class ForestChouChouLe {
 
         Log.record("${s.name} 任务: $taskName [$taskStatus]")
 
+        val taskKey = "${s.code}:$taskCode:$taskType"
         return when (taskStatus) {
-            TaskStatus.TODO.name -> handleTodoTask(s, taskName, taskCode, taskType)
-            TaskStatus.FINISHED.name -> handleFinishedTask(s, taskName, taskCode, taskType)
+            TaskStatus.TODO.name -> handleTodoTask(s, taskName, taskCode, taskType, taskKey)
+            TaskStatus.FINISHED.name -> handleFinishedTask(s, taskName, taskCode, taskType, taskKey)
+            TaskStatus.RECEIVED.name -> {
+                taskTryCount.remove(taskKey)
+                false
+            }
             else -> false
         }
     }
 
-    private fun handleTodoTask(s: Scene, name: String, code: String, type: String): Boolean {
-        return if (type == "NORMAL_DRAW_EXCHANGE_VITALITY") {
-            // 活力值兑换
-            Log.record("${s.name} 兑换活力值: $name")
-            val res = AntForestRpcCall.exchangeTimesFromTaskopengreen(s.id, s.code, SOURCE, code, type).toJson()
-            if (res != null && res.check()) {
-                Log.forest("${s.name} 🧾 $name 兑换成功")
-                true
-            } else false
-        } else if (type.startsWith("FOREST_NORMAL_DRAW") || type.startsWith("FOREST_ACTIVITY_DRAW")) {
-            val failedCount = taskTryCount[type]?.get() ?: 0
-            if (shouldSkipFailedTask(failedCount)) {
-                Log.record(TAG, "${s.name} 跳过失败过多任务: $name")
-                return false
+    private fun handleTodoTask(
+        s: Scene,
+        name: String,
+        code: String,
+        type: String,
+        taskKey: String
+    ): Boolean {
+        val action = ForestDrawTaskPolicy.actionFor(type, name)
+        if (action == ForestDrawTaskAction.WAIT_FOR_CAPTURE) {
+            if (captureWaitTasks.add(taskKey)) {
+                Log.record(TAG, "${s.name} 任务等待补充抓包，已跳过: $name [$type]")
             }
+            return false
+        }
 
-            // 普通任务
-            Log.record("${s.name} 执行任务(模拟耗时): $name")
-            sleepCompat(100L) //
+        val attemptedCount = taskTryCount[taskKey]?.get() ?: 0
+        if (shouldSkipFailedTask(attemptedCount)) {
+            Log.record(TAG, "${s.name} 跳过失败过多任务: $name")
+            return false
+        }
+        val currentAttempt = taskTryCount.computeIfAbsent(taskKey) { AtomicInteger(0) }.incrementAndGet()
 
-            val result = if (type.contains("XLIGHT")) {
+        val result = when (action) {
+            ForestDrawTaskAction.EXCHANGE_VITALITY -> {
+                Log.record("${s.name} 兑换活力值: $name")
+                AntForestRpcCall.exchangeTimesFromTaskopengreen(s.id, s.code, SOURCE, code, type)
+            }
+            ForestDrawTaskAction.FINISH_XLIGHT -> {
+                Log.record("${s.name} 执行任务(模拟耗时): $name")
+                sleepCompat(100L)
                 AntForestRpcCall.finishTask4Chouchoule(type, code)
-            } else {
+            }
+            ForestDrawTaskAction.FINISH_STANDARD -> {
+                Log.record("${s.name} 执行任务(模拟耗时): $name")
+                sleepCompat(100L)
                 AntForestRpcCall.finishTaskopengreen(type, code)
             }
+            ForestDrawTaskAction.WAIT_FOR_CAPTURE -> return false
+        }
 
-            val resJson = result.toJson()
-            if (resJson != null && resJson.check()) {
-                Log.forest("${s.name} 🧾 $name")
-                true
-            } else {
-                val count = taskTryCount.computeIfAbsent(type) { AtomicInteger(0) }.incrementAndGet()
-                Log.error(TAG, "${s.name} 任务失败($count): $name")
-                false
-            }
+        val resJson = result.toJson()
+        return if (resJson != null && resJson.check()) {
+            Log.forest("${s.name} 🧾 $name")
+            true
         } else {
+            val retryable = resJson == null || ForestDrawTaskPolicy.isRetryableFailure(
+                resultCode = resJson.optString("resultCode"),
+                resultDescription = resJson.optString(
+                    "resultDesc",
+                    resJson.optString("memo", resJson.optString("desc"))
+                )
+            )
+            if (!retryable) {
+                taskTryCount[taskKey]?.set(MAX_TASK_FAIL_COUNT)
+                Log.error(TAG, "${s.name} 任务不可重试，已停止: $name")
+            } else {
+                Log.error(TAG, "${s.name} 任务失败($currentAttempt): $name")
+            }
             false
         }
     }
 
-    private fun handleFinishedTask(s: Scene, name: String, code: String, type: String): Boolean {
+    private fun handleFinishedTask(
+        s: Scene,
+        name: String,
+        code: String,
+        type: String,
+        taskKey: String
+    ): Boolean {
         Log.record("${s.name} 领取奖励: $name")
         sleepCompat(100L)
         val res = AntForestRpcCall.receiveTaskAwardopengreen(SOURCE, code, type).toJson()
         return if (res != null && res.check()) {
+            taskTryCount.remove(taskKey)
             Log.forest("${s.name} 🧾 $name 奖励领取成功")
             true
         } else {

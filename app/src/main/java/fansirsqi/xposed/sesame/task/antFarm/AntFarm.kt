@@ -25,6 +25,7 @@ import fansirsqi.xposed.sesame.model.modelFieldExt.SelectModelField
 import fansirsqi.xposed.sesame.model.modelFieldExt.StringModelField
 import fansirsqi.xposed.sesame.task.AnswerAI.AnswerAI
 import fansirsqi.xposed.sesame.task.ModelTask
+import fansirsqi.xposed.sesame.task.RunnerExecutionPolicy
 import fansirsqi.xposed.sesame.task.TaskStatus
 import fansirsqi.xposed.sesame.task.antFarm.AntFarmFamily.familyClaimRewardList
 import fansirsqi.xposed.sesame.task.antFarm.AntFarmFamily.familySign
@@ -111,6 +112,11 @@ class AntFarm : ModelTask() {
     override fun getName(): String {
         return "蚂蚁庄园"
     }
+
+    override val runnerExecutionPolicy: RunnerExecutionPolicy =
+        RunnerExecutionPolicy.START_ONLY
+
+    override val runnerTimeoutMillis: Long = 30_000L
 
     override fun getGroup(): ModelGroup {
         return ModelGroup.FARM
@@ -970,13 +976,26 @@ class AntFarm : ModelTask() {
 
     private suspend fun paradiseCoinExchangeBenefit() {
         try {
-            val jo = JSONObject(AntFarmRpcCall.getMallHome())
-
-            if (!ResChecker.checkRes(TAG, jo)) {
-                Log.error(TAG, "小鸡乐园币💸[未获取到可兑换权益]")
-                return
+            val mallItemSimpleList = when (
+                val result = ParadiseMallHomeParser.parse(AntFarmRpcCall.getMallHome())
+            ) {
+                is ParadiseMallHomeResult.RpcFailure -> {
+                    Log.error(
+                        TAG,
+                        "小鸡乐园币💸[商城RPC失败: ${result.code} ${result.description}]"
+                    )
+                    return
+                }
+                ParadiseMallHomeResult.SchemaChanged -> {
+                    Log.error(TAG, "小鸡乐园币💸[商城响应缺少权益列表，需要重新抓取接口]")
+                    return
+                }
+                ParadiseMallHomeResult.Empty -> {
+                    Log.record(TAG, "小鸡乐园币💸[当前没有可兑换权益]")
+                    return
+                }
+                is ParadiseMallHomeResult.Items -> result.items
             }
-            val mallItemSimpleList = jo.getJSONArray("mallItemSimpleList")
             for (i in 0..<mallItemSimpleList.length()) {
                 val mallItemInfo = mallItemSimpleList.getJSONObject(i)
                 val oderInfo: String?

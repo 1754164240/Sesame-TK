@@ -23,4 +23,64 @@ class ForestChouChouLeTest {
         assertTrue(sourceText.contains("shouldSkipFailedTask"))
         assertTrue(sourceText.contains("跳过失败过多任务"))
     }
+
+    @Test
+    fun `未知游戏任务必须等待抓包而不是调用通用完成接口`() {
+        assertTrue(
+            ForestDrawTaskPolicy.actionFor(
+                taskType = "FOREST_NORMAL_DRAW_GAME_UNKNOWN",
+                taskName = "玩游戏完成一局"
+            ) == ForestDrawTaskAction.WAIT_FOR_CAPTURE
+        )
+        assertTrue(
+            ForestDrawTaskPolicy.actionFor(
+                taskType = "FOREST_ACTIVITY_DRAW_UNKNOWN",
+                taskName = "开宝箱"
+            ) == ForestDrawTaskAction.WAIT_FOR_CAPTURE
+        )
+    }
+
+    @Test
+    fun `已知非游戏任务仍按协议分发`() {
+        assertTrue(
+            ForestDrawTaskPolicy.actionFor(
+                taskType = "NORMAL_DRAW_EXCHANGE_VITALITY",
+                taskName = "兑换活力值"
+            ) == ForestDrawTaskAction.EXCHANGE_VITALITY
+        )
+        assertTrue(
+            ForestDrawTaskPolicy.actionFor(
+                taskType = "FOREST_NORMAL_DRAW_XLIGHT_BROWSE",
+                taskName = "浏览广告"
+            ) == ForestDrawTaskAction.FINISH_XLIGHT
+        )
+        assertTrue(
+            ForestDrawTaskPolicy.actionFor(
+                taskType = "FOREST_NORMAL_DRAW_BROWSE",
+                taskName = "浏览页面"
+            ) == ForestDrawTaskAction.FINISH_STANDARD
+        )
+    }
+
+    @Test
+    fun `明确不可重试的抽抽乐错误立即停止`() {
+        assertFalse(
+            ForestDrawTaskPolicy.isRetryableFailure(
+                resultCode = "ILLEGAL_ARGUMENT",
+                resultDescription = "参数错误"
+            )
+        )
+        assertFalse(
+            ForestDrawTaskPolicy.isRetryableFailure(
+                resultCode = "UNKNOWN",
+                resultDescription = "不支持rpc完成的任务"
+            )
+        )
+        assertTrue(
+            ForestDrawTaskPolicy.isRetryableFailure(
+                resultCode = "SYSTEM_BUSY",
+                resultDescription = "系统繁忙"
+            )
+        )
+    }
 }

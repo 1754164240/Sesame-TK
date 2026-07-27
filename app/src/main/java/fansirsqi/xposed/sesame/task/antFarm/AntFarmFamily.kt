@@ -17,6 +17,12 @@ import java.util.Calendar
 import java.util.Objects
 import kotlin.math.abs
 
+enum class FamilyEatResponseAction {
+    REFRESH_MEMBERS_ONCE,
+    SKIP_CONCURRENT,
+    CHECK_STANDARD_RESPONSE
+}
+
 data object AntFarmFamily {
     private const val TAG = "小鸡家庭"
     private const val FAMILY_WALK_DONATE_FLAG = "antFarm::familyWalkDonate"
@@ -372,21 +378,35 @@ data object AntFarmFamily {
                 return
             }
             val jo = JSONObject(AntFarmRpcCall.familyEatTogether(groupId, familyUserIds.toJSONArray(), array))
-            if (ResChecker.checkRes(TAG, jo)) {
-                Log.farm("家庭任务🏠请客" + periodName + "#消耗美食" + familyUserIds.size + "份")
-            } else if (jo.optString("resultCode") == "FAMILY12") {
-                Log.record("家庭任务🏠请客吃美食#家庭成员发生变化，刷新成员后重试")
-                retryFamilyEatTogether(periodName)
-            } else if (isFamilyEatTogetherConcurrentError(jo.optString("resultCode"))) {
-                Log.record("家庭任务🏠请客吃美食#远端并发处理中，本轮跳过")
+            when (classifyFamilyEatResponse(jo.optString("resultCode"))) {
+                FamilyEatResponseAction.REFRESH_MEMBERS_ONCE -> {
+                    Log.record("家庭任务🏠请客吃美食#家庭成员发生变化，刷新成员后重试")
+                    retryFamilyEatTogether(periodName)
+                }
+                FamilyEatResponseAction.SKIP_CONCURRENT -> {
+                    Log.record("家庭任务🏠请客吃美食#远端并发处理中，本轮跳过")
+                }
+                FamilyEatResponseAction.CHECK_STANDARD_RESPONSE -> {
+                    if (ResChecker.checkRes(TAG, jo)) {
+                        Log.farm("家庭任务🏠请客" + periodName + "#消耗美食" + familyUserIds.size + "份")
+                    }
+                }
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "familyEatTogether err:",t)
         }
     }
 
+    fun classifyFamilyEatResponse(resultCode: String?): FamilyEatResponseAction {
+        return when (resultCode) {
+            "FAMILY12" -> FamilyEatResponseAction.REFRESH_MEMBERS_ONCE
+            "FAMILY27" -> FamilyEatResponseAction.SKIP_CONCURRENT
+            else -> FamilyEatResponseAction.CHECK_STANDARD_RESPONSE
+        }
+    }
+
     fun isFamilyEatTogetherConcurrentError(resultCode: String?): Boolean {
-        return resultCode == "FAMILY27"
+        return classifyFamilyEatResponse(resultCode) == FamilyEatResponseAction.SKIP_CONCURRENT
     }
 
     private fun retryFamilyEatTogether(periodName: String) {
@@ -406,12 +426,20 @@ data object AntFarmFamily {
             }
             GlobalThreadPools.sleepCompat(FAMILY_EAT_RETRY_DELAY_MS)
             val retryRes = JSONObject(AntFarmRpcCall.familyEatTogether(groupId, familyUserIds.toJSONArray(), array))
-            if (ResChecker.checkRes(TAG, retryRes)) {
-                Log.farm("家庭任务🏠请客" + periodName + "#刷新成员后重试成功")
-            } else if (isFamilyEatTogetherConcurrentError(retryRes.optString("resultCode"))) {
-                Log.record("家庭任务🏠请客吃美食#重试遇到远端并发，本轮跳过:$retryRes")
-            } else {
-                Log.error(TAG, "家庭任务🏠请客吃美食#重试失败:$retryRes")
+            when (classifyFamilyEatResponse(retryRes.optString("resultCode"))) {
+                FamilyEatResponseAction.REFRESH_MEMBERS_ONCE -> {
+                    Log.record("家庭任务🏠请客吃美食#刷新后成员仍变化，本轮停止")
+                }
+                FamilyEatResponseAction.SKIP_CONCURRENT -> {
+                    Log.record("家庭任务🏠请客吃美食#重试遇到远端并发，本轮跳过:$retryRes")
+                }
+                FamilyEatResponseAction.CHECK_STANDARD_RESPONSE -> {
+                    if (ResChecker.checkRes(TAG, retryRes)) {
+                        Log.farm("家庭任务🏠请客" + periodName + "#刷新成员后重试成功")
+                    } else {
+                        Log.error(TAG, "家庭任务🏠请客吃美食#重试失败:$retryRes")
+                    }
+                }
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "retryFamilyEatTogether err:", t)

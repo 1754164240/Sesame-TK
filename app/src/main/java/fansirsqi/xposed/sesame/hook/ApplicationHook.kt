@@ -664,6 +664,7 @@ class ApplicationHook {
                 show(successMsg)
 
                 offline = false
+                RequestManager.onRpcBridgeReady()
                 init = true
                 execHandler()
                 return true

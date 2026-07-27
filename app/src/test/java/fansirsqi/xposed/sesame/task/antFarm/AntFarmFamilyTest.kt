@@ -1,6 +1,7 @@
 package fansirsqi.xposed.sesame.task.antFarm
 
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -32,5 +33,21 @@ class AntFarmFamilyTest {
         assertTrue(sourceText.contains("FAMILY_EAT_RETRY_DELAY_MS"))
         assertTrue(sourceText.contains("isFamilyEatTogetherConcurrentError"))
         assertTrue(sourceText.contains("并发"))
+    }
+
+    @Test
+    fun `家庭请客业务码在通用响应检查前分类`() {
+        assertEquals(
+            FamilyEatResponseAction.REFRESH_MEMBERS_ONCE,
+            AntFarmFamily.classifyFamilyEatResponse("FAMILY12")
+        )
+        assertEquals(
+            FamilyEatResponseAction.SKIP_CONCURRENT,
+            AntFarmFamily.classifyFamilyEatResponse("FAMILY27")
+        )
+        assertEquals(
+            FamilyEatResponseAction.CHECK_STANDARD_RESPONSE,
+            AntFarmFamily.classifyFamilyEatResponse("SUCCESS")
+        )
     }
 }

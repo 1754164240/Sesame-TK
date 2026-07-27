@@ -8,6 +8,7 @@ import fansirsqi.xposed.sesame.util.TimeUtil
 import fansirsqi.xposed.sesame.util.maps.UserMap
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -75,12 +76,19 @@ data class WaitingTaskPersistData(
  */
 object EnergyWaitingPersistence {
     private const val TAG = "EnergyWaitingPersistence"
+    private const val SAVE_DEBOUNCE_MS = 200L
 
     // 任务最大保存时间（8小时，超过此时间的任务视为过期）
     private const val MAX_TASK_AGE_MS = 8 * 60 * 60 * 1000L
 
     // 协程作用域
     private val persistenceScope = CoroutineScope(Dispatchers.IO)
+    private val pendingSnapshots = LatestSnapshotQueue<PersistenceSnapshot>()
+
+    private data class PersistenceSnapshot(
+        val dataStoreKey: String,
+        val tasks: List<WaitingTaskPersistData>
+    )
 
     /**
      * 获取当前账号的 DataStore 存储键
@@ -103,19 +111,32 @@ object EnergyWaitingPersistence {
      * @param tasks 当前活跃的蹲点任务
      */
     fun saveTasks(tasks: Map<String, EnergyWaitingManager.WaitingTask>) {
+        val snapshot = PersistenceSnapshot(
+            dataStoreKey = getDataStoreKey(),
+            tasks = tasks.values.map(WaitingTaskPersistData::fromWaitingTask)
+        )
+        if (pendingSnapshots.submit(snapshot)) {
+            launchSaveWorker()
+        }
+    }
+
+    private fun launchSaveWorker() {
         persistenceScope.launch {
-            try {
-                val persistDataList = tasks.values.map { task ->
-                    WaitingTaskPersistData.fromWaitingTask(task)
+            delay(SAVE_DEBOUNCE_MS)
+            do {
+                val snapshot = pendingSnapshots.takeLatest()
+                if (snapshot != null) {
+                    try {
+                        DataStore.put(snapshot.dataStoreKey, snapshot.tasks)
+                        Log.record(
+                            TAG,
+                            "保存${snapshot.tasks.size}个蹲点任务到持久化存储 (key: ${snapshot.dataStoreKey})"
+                        )
+                    } catch (e: Exception) {
+                        Log.printStackTrace(TAG, "保存蹲点任务失败:", e)
+                    }
                 }
-
-                val dataStoreKey = getDataStoreKey()
-                DataStore.put(dataStoreKey, persistDataList)
-
-                Log.record(TAG, "✅ 保存${persistDataList.size}个蹲点任务到持久化存储 (key: $dataStoreKey)")
-            } catch (e: Exception) {
-                Log.printStackTrace(TAG, "保存蹲点任务失败:", e)
-            }
+            } while (pendingSnapshots.finish())
         }
     }
 
@@ -174,9 +195,14 @@ object EnergyWaitingPersistence {
      */
     fun clearTasks() {
         try {
-            val dataStoreKey = getDataStoreKey()
-            DataStore.put(dataStoreKey, emptyList<WaitingTaskPersistData>())
-            Log.record(TAG, "清空持久化存储 (key: $dataStoreKey)")
+            val snapshot = PersistenceSnapshot(
+                dataStoreKey = getDataStoreKey(),
+                tasks = emptyList()
+            )
+            if (pendingSnapshots.submit(snapshot)) {
+                launchSaveWorker()
+            }
+            Log.record(TAG, "已提交清空持久化存储请求 (key: ${snapshot.dataStoreKey})")
         } catch (e: Exception) {
             Log.error(TAG, "清空持久化存储失败: ${e.message}")
         }
