@@ -135,12 +135,14 @@ jobs:
           x86_64_file=$(basename "${{ steps.extract_apks.outputs.signed_x86_64 }}")
           universal_file=$(basename "${{ steps.extract_apks.outputs.signed_universal }}")
           version="${{ github.ref_name }}"
+          release_date=$(date +%F)
           echo "arm64_file=$arm64_file" >> $GITHUB_OUTPUT
           echo "armv7_file=$armv7_file" >> $GITHUB_OUTPUT
           echo "x86_file=$x86_file" >> $GITHUB_OUTPUT
           echo "x86_64_file=$x86_64_file" >> $GITHUB_OUTPUT
           echo "universal_file=$universal_file" >> $GITHUB_OUTPUT
           echo "version=$version" >> $GITHUB_OUTPUT
+          echo "release_date=$release_date" >> $GITHUB_OUTPUT
 
       - name: 🎨 Generate APKS Checksum
         run: |
@@ -197,7 +199,7 @@ jobs:
         if: github.event_name == 'release' && github.event.action == 'published'
         uses: softprops/action-gh-release@v2
         with:
-          name: ${{ steps.extract_info.outputs.version }}
+          name: ${{ steps.extract_info.outputs.release_date }}
           files: |
             ${{ steps.extract_apks.outputs.signed_arm64 }}
             ${{ steps.extract_apks.outputs.signed_armv7 }}
@@ -226,7 +228,7 @@ jobs:
       - name: 🔁 Sync Release to Target Repository
         uses: softprops/action-gh-release@v2
         with:
-          name: ${{ steps.extract_info.outputs.version }} # 发布的名称。默认为标签名称
+          name: ${{ steps.extract_info.outputs.release_date }} # 发布的名称。默认为标签名称
           files: |
             ${{ steps.extract_apks.outputs.signed_arm64 }}
             ${{ steps.extract_apks.outputs.signed_armv7 }}
