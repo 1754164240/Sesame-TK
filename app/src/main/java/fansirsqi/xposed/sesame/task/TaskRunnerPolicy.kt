@@ -1,6 +1,7 @@
 package fansirsqi.xposed.sesame.task
 
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicBoolean
 
 enum class RunnerExecutionPolicy {
     AWAIT_COMPLETION,
@@ -13,6 +14,7 @@ enum class TaskRunOutcome {
     TIMED_OUT,
     SKIPPED_OFFLINE,
     SKIPPED_FILTERED,
+    SKIPPED_RUNNING,
     FAILED
 }
 
@@ -37,7 +39,8 @@ class TaskRunCounter {
             TaskRunOutcome.STARTED_BACKGROUND -> startedBackground.incrementAndGet()
             TaskRunOutcome.TIMED_OUT -> timedOut.incrementAndGet()
             TaskRunOutcome.SKIPPED_OFFLINE,
-            TaskRunOutcome.SKIPPED_FILTERED -> skipped.incrementAndGet()
+            TaskRunOutcome.SKIPPED_FILTERED,
+            TaskRunOutcome.SKIPPED_RUNNING -> skipped.incrementAndGet()
             TaskRunOutcome.FAILED -> failed.incrementAndGet()
         }
     }
@@ -61,8 +64,20 @@ class TaskRunCounter {
     }
 }
 
+class TaskExecutionGate {
+    private val running = AtomicBoolean(false)
+
+    fun tryAcquire(): Boolean = running.compareAndSet(false, true)
+
+    fun release() {
+        running.set(false)
+    }
+}
+
 object TaskRunnerPolicy {
     fun shouldStart(isOffline: Boolean, isManualRunning: Boolean): Boolean {
         return !isOffline && !isManualRunning
     }
+
+    fun shouldScheduleNext(isActive: Boolean): Boolean = isActive
 }

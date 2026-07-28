@@ -2,21 +2,20 @@ package fansirsqi.xposed.sesame.task.antSports
 
 import fansirsqi.xposed.sesame.data.Status
 import fansirsqi.xposed.sesame.data.StatusFlags
-import fansirsqi.xposed.sesame.hook.ApplicationHook
 import fansirsqi.xposed.sesame.util.Log
 import java.util.concurrent.atomic.AtomicBoolean
 
 object AntSportsStepSync {
-    private const val RPC_MANAGER_CLASS =
-        "com.alibaba.health.pedometer.intergation.rpc.RpcManager"
-
-    @Volatile
-    private var cachedClass: Class<*>? = null
-
-    @Volatile
-    private var cachedMethods: ResolvedStepSyncMethods? = null
-
     private val diagnosticLogged = AtomicBoolean(false)
+    private val client = object : FamilyWalkStepSyncClient {
+        override fun queryDonationSteps(): String = AntSportsRpcCall.queryDonationSteps()
+
+        override fun walkDonateSignInfo(step: Int): String {
+            return AntSportsRpcCall.walkDonateSignInfo(step)
+        }
+
+        override fun donateWalkHome(step: Int): String = AntSportsRpcCall.donateWalkHome(step)
+    }
 
     fun shouldOverrideDailyStep(originStep: Int, targetStep: Int): Boolean {
         return targetStep > 0 && originStep < targetStep
@@ -24,55 +23,25 @@ object AntSportsStepSync {
 
     fun syncStep(step: Int, logTag: String): Boolean {
         return try {
-            val loader = ApplicationHook.classLoader
-            if (loader == null) {
-                Log.error(logTag, "ClassLoader is null, 跳过同步步数")
-                return false
-            }
-
-            val managerClass = loader.loadClass(RPC_MANAGER_CLASS)
-            val methods = resolveMethods(managerClass)
-            if (methods == null) {
+            val result = FamilyWalkStepSync.sync(step, client)
+            if (result.outcome != FamilyWalkStepSyncOutcome.VERIFIED) {
                 if (diagnosticLogged.compareAndSet(false, true)) {
                     Log.error(
                         logTag,
-                        "无法唯一定位步数同步方法，当前方法签名:\n" +
-                            StepSyncMethodResolver.describeMethods(managerClass)
+                        "家庭捐步未能确认目标步数: 目标=$step, 查询=${result.verifiedStep}, " +
+                            "状态=${result.outcome}"
                     )
                 }
                 return false
             }
 
-            val rpcManager = methods.factory.invoke(null)
-            val success = methods.syncMethod.invoke(
-                rpcManager,
-                step,
-                java.lang.Boolean.FALSE,
-                "system"
-            ) as? Boolean ?: false
-
-            if (success) {
-                Log.other("同步步数🏃🏻‍♂️[$step 步]")
-                Status.setFlagToday(StatusFlags.FLAG_ANTSPORTS_SYNC_STEP_DONE)
-            } else {
-                Log.error(logTag, "同步运动步数失败:$step")
-            }
-            success
+            diagnosticLogged.set(false)
+            Log.other("同步步数🏃🏻‍♂️[${result.verifiedStep} 步]")
+            Status.setFlagToday(StatusFlags.FLAG_ANTSPORTS_SYNC_STEP_DONE)
+            true
         } catch (t: Throwable) {
             Log.printStackTrace(logTag, t)
             false
         }
-    }
-
-    @Synchronized
-    private fun resolveMethods(managerClass: Class<*>): ResolvedStepSyncMethods? {
-        if (cachedClass === managerClass) {
-            return cachedMethods
-        }
-
-        cachedClass = managerClass
-        cachedMethods = StepSyncMethodResolver.resolve(managerClass)
-        diagnosticLogged.set(false)
-        return cachedMethods
     }
 }

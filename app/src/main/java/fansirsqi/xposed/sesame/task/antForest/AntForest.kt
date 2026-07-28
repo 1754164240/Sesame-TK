@@ -1594,7 +1594,8 @@ class AntForest : ModelTask(), EnergyCollectCallback {
     private fun collectEnergy(
         userId: String?,
         userHomeObj: JSONObject?,
-        fromTag: String?
+        fromTag: String?,
+        waitingTimeSummary: WaitingTimeAnomalySummary? = null
     ): JSONObject? {
         try {
             if (userHomeObj == null) {
@@ -1627,7 +1628,13 @@ class AntForest : ModelTask(), EnergyCollectCallback {
 
             // 4. 获取所有可收集的能量球 (extractBubbleInfo 内部已包含"收自己阈值"的逻辑)
             val availableBubbles: MutableList<Long> = ArrayList()
-            extractBubbleInfo(userHomeObj, serverTime, availableBubbles, userId)
+            extractBubbleInfo(
+                userHomeObj,
+                serverTime,
+                availableBubbles,
+                userId,
+                waitingTimeSummary
+            )
 
             if (availableBubbles.isEmpty()) {
                 // 记录空森林的时间戳，避免本轮重复检查
@@ -1760,7 +1767,8 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         userHomeObj: JSONObject,
         serverTime: Long,
         availableBubbles: MutableList<Long>,
-        userId: String?
+        userId: String?,
+        waitingTimeSummary: WaitingTimeAnomalySummary? = null
     ) {
         // 1. 获取能量球数组（兼容组队模式）
         val jaBubbles = if (isTeam(userHomeObj)) {
@@ -1776,7 +1784,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         // 2. 获取用户名（用于日志）
         val userName = getAndCacheUserName(userId, userHomeObj, null)
         var waitingBubblesCount = 0
-        val invalidWaitingTimes = mutableMapOf<EnergyWaitingTimeResult, Int>()
+        val anomalySummary = waitingTimeSummary ?: WaitingTimeAnomalySummary()
 
         // 3. 保护罩/炸弹卡日志记录（仅针对好友，仅做显示，实际拦截在collectEnergy）
         val isSelf = selfId == userId
@@ -1845,8 +1853,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                     if (produceTime > 0) {
                         val timeResult = EnergyWaitingTimePolicy.validate(produceTime, serverTime)
                         if (timeResult != EnergyWaitingTimeResult.VALID) {
-                            invalidWaitingTimes[timeResult] =
-                                invalidWaitingTimes.getOrDefault(timeResult, 0) + 1
+                            anomalySummary.record(timeResult)
                             continue
                         }
                         // 检查保护罩时间（仅好友）：如果保护罩覆盖整个成熟期，跳过蹲点
@@ -1886,17 +1893,10 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             }
         }
 
-        if (invalidWaitingTimes.isNotEmpty()) {
-            val summary = invalidWaitingTimes.entries.joinToString("，") { (reason, count) ->
-                val reasonName = when (reason) {
-                    EnergyWaitingTimeResult.EXPIRED -> "已过期"
-                    EnergyWaitingTimeResult.TOO_FAR -> "超远未来"
-                    EnergyWaitingTimeResult.CROSS_DAY -> "跨日异常"
-                    EnergyWaitingTimeResult.VALID -> "有效"
-                }
-                "$reasonName${count}个"
+        if (waitingTimeSummary == null) {
+            anomalySummary.describe().takeIf { it.isNotEmpty() }?.let { summary ->
+                Log.record(TAG, "[$userName] 蹲点时间异常汇总：$summary")
             }
-            Log.record(TAG, "[$userName] 蹲点时间异常汇总：$summary")
         }
 
         // 5. 打印调试信息
@@ -2181,8 +2181,10 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         val visitedInSession = mutableSetOf<String>()
         // 空参数对象，仅为了满足接口签名（如果接口允许传null这里可以改为null）
         val emptyParam = JSONObject()
+        val anomalySummary = WaitingTimeAnomalySummary()
 
         Log.record(TAG, "开始找能量 (服务器自动轮询)")
+        EnergyWaitingPersistence.beginBatch()
 
         try {
             loop@ for (attempt in 1..maxAttempts) {
@@ -2262,7 +2264,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                     // 注意：这里不需要传给服务器 skipUsers，因为我们单纯不收，服务器下次轮询可能还会给，但被上面的 visitedInSession 拦截
                 } else {
                     // I. 收取能量
-                    collectEnergy(friendId, friendHomeObj, "takeLook")
+                    collectEnergy(friendId, friendHomeObj, "takeLook", anomalySummary)
                     foundCount++
                     consecutiveEmpty = 0 // 重置空计数
 
@@ -2273,6 +2275,10 @@ class AntForest : ModelTask(), EnergyCollectCallback {
         } catch (e: Exception) {
             Log.printStackTrace(TAG, "找能量流程异常", e)
         } finally {
+            EnergyWaitingPersistence.endBatch()
+            anomalySummary.describe().takeIf { it.isNotEmpty() }?.let { summary ->
+                Log.record(TAG, "找能量蹲点时间异常汇总：$summary")
+            }
             // 逻辑结束后的状态处理
             if (shouldCooldown) {
                 nextTakeLookTime = System.currentTimeMillis() + TAKE_LOOK_COOLDOWN_MS
@@ -2483,27 +2489,36 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             Log.record(TAG, "📋 开始处理${friendList.length()}个${sourceName}（并发数:60）")
             Log.record(TAG, "👥 ${friendNames.joinToString(" | ")}")
             val startTime = System.currentTimeMillis()
+            val anomalySummary = WaitingTimeAnomalySummary()
 
             // 使用协程并发处理每个好友（带并发控制）
-            val friendJobs = mutableListOf<Deferred<Unit>>()
-            for (i in 0..<friendList.length()) {
-                val friendObj = friendList.getJSONObject(i)
-                val job = async {
-                    concurrencyLimiter.acquire()
-                    try {
-                        // 直接调用内部方法，减少一层包装以提高性能
-                        processEnergyInternal(friendObj, flag)
-                    } catch (e: Exception) {
-                        Log.printStackTrace(TAG, "处理好友异常", e)
-                    } finally {
-                        concurrencyLimiter.release()
+            EnergyWaitingPersistence.beginBatch()
+            try {
+                val friendJobs = mutableListOf<Deferred<Unit>>()
+                for (i in 0..<friendList.length()) {
+                    val friendObj = friendList.getJSONObject(i)
+                    val job = async {
+                        concurrencyLimiter.acquire()
+                        try {
+                            // 直接调用内部方法，减少一层包装以提高性能
+                            processEnergyInternal(friendObj, flag, anomalySummary)
+                        } catch (e: Exception) {
+                            Log.printStackTrace(TAG, "处理好友异常", e)
+                        } finally {
+                            concurrencyLimiter.release()
+                        }
                     }
+                    friendJobs.add(job)
                 }
-                friendJobs.add(job)
-            }
 
-            // 等待所有好友处理完成
-            friendJobs.awaitAll()
+                // 等待所有好友处理完成
+                friendJobs.awaitAll()
+            } finally {
+                EnergyWaitingPersistence.endBatch()
+                anomalySummary.describe().takeIf { it.isNotEmpty() }?.let { summary ->
+                    Log.record(TAG, "${sourceName}蹲点时间异常汇总：$summary")
+                }
+            }
             val elapsed = System.currentTimeMillis() - startTime
             Log.record(TAG, "✅ ${sourceName}处理完成，耗时${elapsed}ms，平均${elapsed / friendList.length()}ms/人")
 
@@ -2525,7 +2540,11 @@ class AntForest : ModelTask(), EnergyCollectCallback {
      * @param flag 标记是普通好友还是PK好友
      */
     @Throws(Exception::class)
-    private fun processEnergyInternal(obj: JSONObject, flag: String?) {
+    private fun processEnergyInternal(
+        obj: JSONObject,
+        flag: String?,
+        waitingTimeSummary: WaitingTimeAnomalySummary? = null
+    ) {
         if (errorWait) return
         val userId = obj.getString("userId")
         if (userId == selfId) return  // 跳过自己
@@ -2550,7 +2569,12 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 return
             }
             Log.record(TAG, "  正在查询PK好友 [$userName$userId] 的主页...")
-            collectEnergy(userId, queryFriendHome(userId, "PKContest"), "pk")
+            collectEnergy(
+                userId,
+                queryFriendHome(userId, "PKContest"),
+                "pk",
+                waitingTimeSummary
+            )
         } else { // 普通好友
             val needCollectEnergy =
                 collectEnergy!!.value && !jsonCollectMap.contains(userId)
@@ -2565,7 +2589,12 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             if (needCollectEnergy) {
                 // 即使排行榜信息显示没有可收能量，也进去检查，以便添加蹲点任务
                 Log.record(TAG, "  正在查询好友 [$userName$userId] 的主页...")
-                userHomeObj = collectEnergy(userId, queryFriendHome(userId, null), "friend")
+                userHomeObj = collectEnergy(
+                    userId,
+                    queryFriendHome(userId, null),
+                    "friend",
+                    waitingTimeSummary
+                )
             }
             if (needHelpProtect) {
                 val isProtected = isIsProtected(userId)

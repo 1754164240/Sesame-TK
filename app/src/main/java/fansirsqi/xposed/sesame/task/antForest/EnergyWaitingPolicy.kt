@@ -2,8 +2,7 @@ package fansirsqi.xposed.sesame.task.antForest
 
 import java.util.Calendar
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.atomic.AtomicInteger
 
 enum class EnergyWaitingTimeResult {
     VALID,
@@ -75,18 +74,80 @@ object EnergyWaitingResultPolicy {
 }
 
 class LatestSnapshotQueue<T> {
-    private val latest = AtomicReference<T?>(null)
-    private val writerActive = AtomicBoolean(false)
+    private var latest: T? = null
+    private var writerActive = false
+    private var batchDepth = 0
 
-    fun submit(snapshot: T): Boolean {
-        latest.set(snapshot)
-        return writerActive.compareAndSet(false, true)
+    @Synchronized
+    fun beginBatch() {
+        batchDepth++
     }
 
-    fun takeLatest(): T? = latest.getAndSet(null)
+    @Synchronized
+    fun endBatch(): Boolean {
+        if (batchDepth > 0) {
+            batchDepth--
+        }
+        if (batchDepth > 0 || latest == null || writerActive) {
+            return false
+        }
+        writerActive = true
+        return true
+    }
 
+    @Synchronized
+    fun submit(snapshot: T): Boolean {
+        latest = snapshot
+        if (batchDepth > 0 || writerActive) {
+            return false
+        }
+        writerActive = true
+        return true
+    }
+
+    @Synchronized
+    fun peekLatest(): T? = latest
+
+    @Synchronized
+    fun takeLatest(): T? {
+        if (batchDepth > 0) {
+            return null
+        }
+        return latest.also { latest = null }
+    }
+
+    @Synchronized
     fun finish(): Boolean {
-        writerActive.set(false)
-        return latest.get() != null && writerActive.compareAndSet(false, true)
+        writerActive = false
+        if (batchDepth > 0 || latest == null) {
+            return false
+        }
+        writerActive = true
+        return true
+    }
+}
+
+class WaitingTimeAnomalySummary {
+    private val counts = ConcurrentHashMap<EnergyWaitingTimeResult, AtomicInteger>()
+
+    fun record(result: EnergyWaitingTimeResult) {
+        if (result != EnergyWaitingTimeResult.VALID) {
+            counts.computeIfAbsent(result) { AtomicInteger() }.incrementAndGet()
+        }
+    }
+
+    fun snapshot(): Map<EnergyWaitingTimeResult, Int> {
+        return counts.mapValues { it.value.get() }
+    }
+
+    fun describe(): String {
+        val names = mapOf(
+            EnergyWaitingTimeResult.EXPIRED to "已过期",
+            EnergyWaitingTimeResult.TOO_FAR to "超远未来",
+            EnergyWaitingTimeResult.CROSS_DAY to "跨日异常"
+        )
+        return names.entries.mapNotNull { (result, name) ->
+            counts[result]?.get()?.takeIf { it > 0 }?.let { "$name${it}个" }
+        }.joinToString("，")
     }
 }

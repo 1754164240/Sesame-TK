@@ -52,10 +52,9 @@ import fansirsqi.xposed.sesame.model.BaseModel.Companion.sendHookData
 import fansirsqi.xposed.sesame.model.BaseModel.Companion.sendHookDataUrl
 import fansirsqi.xposed.sesame.model.BaseModel.Companion.wakenAtTimeList
 import fansirsqi.xposed.sesame.model.Model
+import fansirsqi.xposed.sesame.task.CoroutineTaskRunner
 import fansirsqi.xposed.sesame.task.MainTask
-import fansirsqi.xposed.sesame.task.MainTask.Companion.newInstance
-import fansirsqi.xposed.sesame.task.ModelTask.Companion.stopAllTask
-import fansirsqi.xposed.sesame.task.TaskRunnerAdapter
+import fansirsqi.xposed.sesame.task.ModelTask.Companion.stopAllTaskAndJoin
 import fansirsqi.xposed.sesame.task.antForest.AntForest
 import fansirsqi.xposed.sesame.task.customTasks.CustomTask
 import fansirsqi.xposed.sesame.task.customTasks.ManualTask
@@ -86,6 +85,7 @@ import fansirsqi.xposed.sesame.util.maps.UserMap.currentUid
 import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam
 import org.luckypray.dexkit.DexKitBridge
+import kotlinx.coroutines.runBlocking
 import java.io.File
 import java.lang.AutoCloseable
 import java.lang.reflect.InvocationTargetException
@@ -301,7 +301,7 @@ class ApplicationHook {
                     DexKitBridge.create(apkPath).use { _ ->
                         record(TAG, "Hook DexKit successfully")
                     }
-                    mainTask = newInstance("主任务") { runMainTaskLogic() }
+                    mainTask = MainTask("主任务") { runMainTaskLogic() }
                     dayCalendar = Calendar.getInstance()
                     if (initHandler()) {
                         init = true
@@ -525,7 +525,7 @@ class ApplicationHook {
             deoptimizeMethod = m
         }
 
-        private fun runMainTaskLogic() {
+        private suspend fun runMainTaskLogic() {
             try {
                 TaskLock().use { _ ->
                     if (!init || !Config.isLoaded()) return
@@ -546,7 +546,7 @@ class ApplicationHook {
                     }
 
                     lastExecTime = currentTime
-                    TaskRunnerAdapter().run()
+                    CoroutineTaskRunner(Model.modelArray.toList()).run()
                 }
             } catch (e: IllegalStateException) {
                 record(TAG, "⚠️ " + e.message)
@@ -692,10 +692,10 @@ class ApplicationHook {
         @Synchronized
         fun destroyHandler() {
             try {
+                stopHandler()
                 shutdownAndRestart()
 
                 if (service != null) {
-                    stopHandler()
                     destroyData()
                     Status.unload()
                     stop()
@@ -715,7 +715,6 @@ class ApplicationHook {
                         rpcBridge!!.unload()
                         rpcBridge = null
                     }
-                    stopAllTask()
                 }
             } catch (th: Throwable) {
                 printStackTrace(TAG, "stopHandler err:", th)
@@ -727,8 +726,10 @@ class ApplicationHook {
         }
 
         private fun stopHandler() {
-            if (mainTask != null) mainTask!!.stopTask()
-            stopAllTask()
+            runBlocking {
+                mainTask?.stopTaskAndJoin()
+                stopAllTaskAndJoin()
+            }
         }
 
         // --- 杂项方法 ---

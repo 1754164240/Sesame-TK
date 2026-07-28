@@ -14,8 +14,12 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import java.util.concurrent.ConcurrentHashMap
 
@@ -87,12 +91,17 @@ class CoroutineTaskRunner(allModels: List<Model>) {
 
         } catch (e: CancellationException) {
             Log.record(TAG, "🚫 任务流程被取消")
+            withContext(NonCancellable) {
+                taskList.forEach { it.stopTaskAndJoin() }
+            }
             throw e
         } catch (e: Exception) {
             Log.printStackTrace(TAG, "任务流程异常", e)
         } finally {
             printExecutionSummary(startTime, System.currentTimeMillis())
-            scheduleNext()
+            if (TaskRunnerPolicy.shouldScheduleNext(currentCoroutineContext().isActive)) {
+                scheduleNext()
+            }
         }
     }
 
@@ -154,9 +163,12 @@ class CoroutineTaskRunner(allModels: List<Model>) {
             task.addRunCents()
 
             val outcome = withTimeout(timeout) {
-                val job = task.startTask(force = false, rounds = 1)
+                val launchResult = task.launchTask(force = false, rounds = 1)
+                val job = launchResult.job
 
-                when (task.runnerExecutionPolicy) {
+                if (!launchResult.started) {
+                    TaskRunOutcome.SKIPPED_RUNNING
+                } else when (task.runnerExecutionPolicy) {
                     RunnerExecutionPolicy.START_ONLY -> {
                         if (job.isActive) {
                             TaskRunOutcome.STARTED_BACKGROUND
@@ -182,6 +194,8 @@ class CoroutineTaskRunner(allModels: List<Model>) {
                     Log.record(TAG, "✨ 后台启动: $taskId (启动耗时: ${time}ms)")
                 TaskRunOutcome.FAILED ->
                     Log.error(TAG, "❌ 任务异常结束: $taskId (耗时: ${time}ms)")
+                TaskRunOutcome.SKIPPED_RUNNING ->
+                    Log.record(TAG, "⏭️ 跳过: $taskId 仍在运行")
                 else -> Unit
             }
 
@@ -189,7 +203,7 @@ class CoroutineTaskRunner(allModels: List<Model>) {
             val time = System.currentTimeMillis() - startTime
             runCounter.record(TaskRunOutcome.TIMED_OUT)
             Log.error(TAG, "⏰ 超时: $taskId (${time}ms > ${timeout}ms)")
-            task.stopTask()
+            task.stopTaskAndJoin()
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {

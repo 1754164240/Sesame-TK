@@ -48,12 +48,22 @@ abstract class ModelTask : Model() {
 
     /** 任务协程作用域 */
     private var taskScope: CoroutineScope? = null
+
+    /** 任务生命周期锁，保证停止与重新启动不会交叉修改 Job 引用 */
+    private val taskLifecycleLock = Any()
+
+    /** 当前顶层业务任务，用于在销毁模型前等待实际业务退出 */
+    @Volatile
+    private var currentTaskJob: Job? = null
     
     /** 子任务映射表，存储当前任务的所有子任务 */
     private val childTaskMap: MutableMap<String, ChildModelTask> = ConcurrentHashMap()
     
     /** 执行互斥锁，防止重复执行 */
     private val executionMutex = Mutex()
+
+    /** 在任务进入协程队列前阻止重复启动 */
+    private val executionGate = TaskExecutionGate()
     
     /** 任务运行次数计数器 */
     var runCents: Int = 0
@@ -73,22 +83,19 @@ abstract class ModelTask : Model() {
      * 准备任务执行环境
      */
     override fun prepare() {
-        if (taskScope == null) {
-            taskScope = CoroutineScope(
-                Dispatchers.Default + 
-                SupervisorJob() + 
-                CoroutineName("ModelTask-${getName()}")
-            )
-        }
+        getOrCreateTaskScope("ModelTask-${getName()}")
     }
 
     /**
      * 确保协程作用域初始化
      */
-    private fun ensureTaskScope() {
-        if (taskScope == null || !taskScope!!.isActive) {
-            taskScope =
-                CoroutineScope(Dispatchers.Default + SupervisorJob() + CoroutineName("Task-$id"))
+    private fun getOrCreateTaskScope(scopeName: String = "Task-$id"): CoroutineScope {
+        return synchronized(taskLifecycleLock) {
+            taskScope?.takeIf { it.isActive } ?: CoroutineScope(
+                Dispatchers.Default + SupervisorJob() + CoroutineName(scopeName)
+            ).also {
+                taskScope = it
+            }
         }
     }
 
@@ -166,7 +173,6 @@ abstract class ModelTask : Model() {
      * @param childTask 要添加的子任务
      */
     private suspend fun addChildTaskSuspend(childTask: ChildModelTask) {
-        ensureTaskScope()
         val childId = childTask.id
         
         // 取消已存在的同ID任务
@@ -223,8 +229,8 @@ abstract class ModelTask : Model() {
      * @return 始终返回true
      */
     fun addChildTask(childTask: ChildModelTask): Boolean {
-        ensureTaskScope()
-        taskScope!!.launch(start = CoroutineStart.UNDISPATCHED) {
+        val scope = getOrCreateTaskScope()
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
             addChildTaskSuspend(childTask)
         }
         return true
@@ -235,22 +241,28 @@ abstract class ModelTask : Model() {
      * @param force 是否强制重启
      * @param rounds 执行轮数，默认2轮
      */
-    fun startTask(
+    data class TaskLaunchResult(
+        val job: Job,
+        val started: Boolean
+    )
+
+    fun launchTask(
         force: Boolean = false,
         rounds: Int = 2
-    ): Job {
-        ensureTaskScope()
-        
-        return taskScope!!.launch {
+    ): TaskLaunchResult {
+        if (force) {
+            stopTask()
+        }
+        val scope = getOrCreateTaskScope()
+
+        val acquiredGate = !force && executionGate.tryAcquire()
+        if (!force && !acquiredGate) {
+            Log.record(TAG, "任务 ${getName()} 正在运行，跳过启动")
+            return TaskLaunchResult(Job().apply { complete() }, false)
+        }
+
+        val job = scope.launch(start = CoroutineStart.LAZY) {
             executionMutex.withLock {
-                if (isRunning && !force) {
-                    Log.record(TAG, "任务 ${getName()} 正在运行，跳过启动")
-                    return@withLock
-                }
-                if (isRunning && force) {
-                    Log.record(TAG, "强制重启任务 ${getName()}")
-                    stopTask()
-                }
                 if (!isEnable || check() != true) {
                     Log.record(TAG, "任务 ${getName()} 不满足执行条件")
                     return@withLock
@@ -271,6 +283,28 @@ abstract class ModelTask : Model() {
                 }
             }
         }
+        synchronized(taskLifecycleLock) {
+            currentTaskJob = job
+        }
+        job.invokeOnCompletion {
+            synchronized(taskLifecycleLock) {
+                if (currentTaskJob === job) {
+                    currentTaskJob = null
+                }
+            }
+            if (acquiredGate) {
+                executionGate.release()
+            }
+        }
+        job.start()
+        return TaskLaunchResult(job, true)
+    }
+
+    fun startTask(
+        force: Boolean = false,
+        rounds: Int = 2
+    ): Job {
+        return launchTask(force, rounds).job
     }
 
     /**
@@ -320,34 +354,48 @@ abstract class ModelTask : Model() {
         }
     }
 
-    /**
-     * 停止任务（协程版本）
-     * 注意：此方法是非阻塞的，会异步取消任务
-     */
-    @OptIn(DelicateCoroutinesApi::class)
-    open fun stopTask() {
-        // 立即标记为非运行状态
+    private fun cancelTaskAndSnapshotJobs(): List<Job> {
         isRunning = false
-        
-        // 取消协程作用域（这会自动取消所有子协程）
-        taskScope?.cancel()
-        taskScope = null
-        
-        // 异步清理子任务映射
-        // 使用 GlobalScope 确保清理逻辑能够完成，即使父作用域已被取消
-        kotlinx.coroutines.GlobalScope.launch(Dispatchers.Default) {
-            try {
-                childTaskMap.values.forEach { childTask ->
-                    try {
-                        childTask.cancel()
-                    } catch (e: Exception) {
-                        Log.printStackTrace("stopTask err", e)
-                    }
+
+        return synchronized(taskLifecycleLock) {
+            val scope = taskScope
+            val jobs = buildList {
+                currentTaskJob?.let(::add)
+                scope?.coroutineContext?.get(Job)?.let(::add)
+                childTaskMap.values.mapNotNullTo(this) { it.job }
+            }.distinct()
+
+            childTaskMap.values.forEach { childTask ->
+                try {
+                    childTask.cancel()
+                } catch (e: Exception) {
+                    Log.printStackTrace("stopTask err", e)
                 }
-                childTaskMap.clear()
-            } catch (e: Exception) {
-                Log.printStackTrace("stopTask err", e)
             }
+            childTaskMap.clear()
+            currentTaskJob?.cancel()
+            scope?.cancel()
+            currentTaskJob = null
+            taskScope = null
+            jobs
+        }
+    }
+
+    /**
+     * 非阻塞停止任务，兼容现有 Java 调用。
+     */
+    open fun stopTask() {
+        cancelTaskAndSnapshotJobs()
+    }
+
+    /**
+     * 停止任务并等待顶层任务及全部子任务真正退出。
+     */
+    suspend fun stopTaskAndJoin() {
+        val callerJob = currentCoroutineContext()[Job]
+        val jobs = cancelTaskAndSnapshotJobs().filterNot { it === callerJob }
+        withContext(NonCancellable) {
+            jobs.joinAll()
         }
     }
 
@@ -591,25 +639,32 @@ abstract class ModelTask : Model() {
         /** 日志标签 */
         private const val TAG = "ModelTask"
         
-        /** 全局任务管理器协程作用域 */
-        private val globalTaskScope = CoroutineScope(
-            Dispatchers.Default + SupervisorJob() + CoroutineName("GlobalTaskManager")
-        )
-
         /**
-         * 停止所有任务（协程版本）
+         * 非阻塞停止所有任务，兼容现有 Java 调用。
          */
         @JvmStatic
         fun stopAllTask() {
-            globalTaskScope.launch {
-                for (model in modelArray) {
-                    if (model is ModelTask) {
-                        try {
-                            model.stopTask()
-                        } catch (e: Exception) {
-                            Log.printStackTrace("停止任务异常", e)
-                        }
+            for (model in modelArray) {
+                if (model is ModelTask) {
+                    try {
+                        model.stopTask()
+                    } catch (e: Exception) {
+                        Log.printStackTrace("停止任务异常", e)
                     }
+                }
+            }
+        }
+
+        /**
+         * 停止所有任务并等待实际业务 Job 退出。
+         */
+        @JvmStatic
+        suspend fun stopAllTaskAndJoin() {
+            for (model in modelArray.filterIsInstance<ModelTask>()) {
+                try {
+                    model.stopTaskAndJoin()
+                } catch (e: Exception) {
+                    Log.printStackTrace("等待任务停止异常", e)
                 }
             }
         }

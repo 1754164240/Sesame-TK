@@ -38,11 +38,39 @@ class TaskRunnerPolicyTest {
     }
 
     @Test
+    fun `运行中的后台任务不会被下一轮重复排队`() {
+        val gate = TaskExecutionGate()
+
+        assertTrue(gate.tryAcquire())
+        assertFalse(gate.tryAcquire())
+        gate.release()
+        assertTrue(gate.tryAcquire())
+    }
+
+    @Test
+    fun `任务流取消后不再调度下一次执行`() {
+        assertTrue(TaskRunnerPolicy.shouldScheduleNext(isActive = true))
+        assertFalse(TaskRunnerPolicy.shouldScheduleNext(isActive = false))
+    }
+
+    @Test
     fun `调度器不再依赖任务显示名称白名单`() {
         val source = File("src/main/java/fansirsqi/xposed/sesame/task/TaskRunner.kt").readText()
 
         assertFalse(source.contains("TIMEOUT_WHITELIST"))
         assertTrue(source.contains("runnerExecutionPolicy"))
         assertTrue(source.contains("ApplicationHook.offline"))
+    }
+
+    @Test
+    fun `任务销毁使用可等待的停止流程`() {
+        val modelTaskSource =
+            File("src/main/java/fansirsqi/xposed/sesame/task/ModelTask.kt").readText()
+        val applicationHookSource =
+            File("src/main/java/fansirsqi/xposed/sesame/hook/ApplicationHook.kt").readText()
+
+        assertTrue(modelTaskSource.contains("suspend fun stopTaskAndJoin()"))
+        assertTrue(modelTaskSource.contains("suspend fun stopAllTaskAndJoin()"))
+        assertTrue(applicationHookSource.contains("stopAllTaskAndJoin()"))
     }
 }

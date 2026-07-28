@@ -120,6 +120,16 @@ object EnergyWaitingPersistence {
         }
     }
 
+    fun beginBatch() {
+        pendingSnapshots.beginBatch()
+    }
+
+    fun endBatch() {
+        if (pendingSnapshots.endBatch()) {
+            launchSaveWorker()
+        }
+    }
+
     private fun launchSaveWorker() {
         persistenceScope.launch {
             delay(SAVE_DEBOUNCE_MS)

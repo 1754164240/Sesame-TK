@@ -327,7 +327,7 @@ class AntSports : ModelTask() {
             if (minExchangeCount.value > 0 &&
                 currentUid != null &&
                 Status.canExchangeToday(currentUid)) {
-                queryWalkStep(loader)
+                queryWalkStep()
             }
 
             // 文体中心
@@ -363,14 +363,7 @@ class AntSports : ModelTask() {
      * 步数同步任务
      */
     private fun syncStepTask() {
-        addChildTask(
-            ChildModelTask(
-                "syncStep",
-                Runnable {
-                    AntSportsStepSync.syncStep(tmpStepCount(), TAG)
-                }
-            )
-        )
+        AntSportsStepSync.syncStep(tmpStepCount(), TAG)
     }
 
     /**
@@ -1317,13 +1310,12 @@ class AntSports : ModelTask() {
     /**
      * @brief 查询行走步数，并根据条件自动捐步
      */
-    private fun queryWalkStep(loader: ClassLoader) {
+    private fun queryWalkStep() {
         try {
-            var s = AntSportsRpcCall.queryWalkStep()
+            var s = AntSportsRpcCall.queryDonationSteps()
             var jo = JSONObject(s)
             if (ResChecker.checkRes(TAG, jo)) {
-                jo = jo.getJSONObject("dailyStepModel")
-                val produceQuantity = jo.getInt("produceQuantity")
+                val produceQuantity = jo.getInt("stepCount")
                 val hour = TimeUtil.getFormatTime().split(":").first().toInt()
 
                 if (produceQuantity >= minExchangeCount.value || hour >= latestExchangeTime.value) {

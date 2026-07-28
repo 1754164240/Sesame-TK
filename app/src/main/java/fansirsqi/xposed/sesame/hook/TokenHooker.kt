@@ -4,10 +4,12 @@ import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.maps.IdMapManager
 import fansirsqi.xposed.sesame.util.maps.VipDataIdMap
 import org.json.JSONObject
+import java.util.concurrent.atomic.AtomicBoolean
 
 object TokenHooker {
 
     private const val TAG = "TokenHooker"
+    private val missingTokenLogged = AtomicBoolean(false)
 
     /**
      * 方法名 -> handler
@@ -52,21 +54,14 @@ object TokenHooker {
      */
     private fun handleAntFarmToken(userId: String, paramsJson: JSONObject) {
         try {
-            val positionRequest = paramsJson.optJSONObject("positionRequest") ?: run {
-                Log.error(TAG, "未找到 positionRequest")
+            val token = ReferTokenParser.parse(paramsJson)
+            if (token == null) {
+                if (missingTokenLogged.compareAndSet(false, true)) {
+                    Log.record(TAG, "本次广告请求未携带 referToken，已跳过")
+                }
                 return
             }
-
-            val referInfo = positionRequest.optJSONObject("referInfo") ?: run {
-                Log.error(TAG, "未找到 referInfo")
-                return
-            }
-
-            val token = referInfo.optString("referToken", "")
-            if (token.isEmpty()) {
-                Log.error(TAG, "referToken 为空")
-                return
-            }
+            missingTokenLogged.set(false)
 
             // 保存逻辑
             val vipData = IdMapManager.getInstance(VipDataIdMap::class.java)

@@ -80,6 +80,33 @@ class EnergyWaitingPolicyTest {
         assertFalse(queue.finish())
     }
 
+    @Test
+    fun `扫描批次结束前不启动写入并只保存最终快照`() {
+        val queue = LatestSnapshotQueue<List<String>>()
+
+        queue.beginBatch()
+        assertFalse(queue.submit(listOf("first")))
+        assertFalse(queue.submit(listOf("second")))
+        assertEquals(listOf("second"), queue.peekLatest())
+        assertTrue(queue.endBatch())
+        assertEquals(listOf("second"), queue.takeLatest())
+        assertFalse(queue.finish())
+    }
+
+    @Test
+    fun `时间异常按扫描批次汇总`() {
+        val summary = WaitingTimeAnomalySummary()
+
+        summary.record(EnergyWaitingTimeResult.TOO_FAR)
+        summary.record(EnergyWaitingTimeResult.TOO_FAR)
+        summary.record(EnergyWaitingTimeResult.CROSS_DAY)
+
+        assertEquals(2, summary.snapshot()[EnergyWaitingTimeResult.TOO_FAR])
+        assertEquals(1, summary.snapshot()[EnergyWaitingTimeResult.CROSS_DAY])
+        assertTrue(summary.describe().contains("超远未来2个"))
+        assertTrue(summary.describe().contains("跨日异常1个"))
+    }
+
     private fun localTime(year: Int, month: Int, day: Int, hour: Int, minute: Int): Long {
         return Calendar.getInstance().apply {
             clear()
