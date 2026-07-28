@@ -906,4 +906,69 @@ public class AntForestRpcCall {
                         "}]");
     }
 
+    /** 查询 1V1 能量挑战入口信息 */
+    public static String queryEnergyPvpInfo() {
+        try {
+            JSONObject extInfo = new JSONObject().put("checkReward", true);
+            JSONObject arg = new JSONObject()
+                    .put("extInfo", extInfo.toString())
+                    .put("queryBizType", "energyPvpInfo")
+                    .put("source", "chInfo_ch_appcenter__chsub_9patch");
+            return RequestManager.requestString(
+                    "alipay.antforest.forest.h5.queryMiscInfo",
+                    new JSONArray().put(arg).toString()
+            );
+        } catch (JSONException e) {
+            Log.printStackTrace("AntForestRpcCall", "构造 1V1 入口请求失败", e);
+            return "";
+        }
+    }
+
+    /** 查询 1V1 当前和上一场记录 */
+    public static String queryPvpHomeInfo() {
+        try {
+            JSONObject arg = new JSONObject()
+                    .put("queryWaitToReceive", true)
+                    .put("source", "chInfo_ch_appcenter__chsub_9patch");
+            return RequestManager.requestString(
+                    "alipay.antforest.forest.h5.queryPvpHomeInfo",
+                    new JSONArray().put(arg).toString()
+            );
+        } catch (JSONException e) {
+            Log.printStackTrace("AntForestRpcCall", "构造 1V1 主页请求失败", e);
+            return "";
+        }
+    }
+
+    /** 领取已结算的 1V1 奖励 */
+    public static String receivePvpRewards() {
+        try {
+            JSONObject arg = new JSONObject()
+                    .put("source", "chInfo_ch_appcenter__chsub_9patch");
+            return RequestManager.requestString(
+                    "alipay.antforest.forest.h5.receivePvpRewards",
+                    new JSONArray().put(arg).toString()
+            );
+        } catch (JSONException e) {
+            Log.printStackTrace("AntForestRpcCall", "构造 1V1 领奖请求失败", e);
+            return "";
+        }
+    }
+
+    /** 查询 1V1 历史记录，用于领奖后复查 */
+    public static String queryPvpBattleRecords(int pageSize) {
+        try {
+            JSONObject arg = new JSONObject()
+                    .put("pageSize", Math.max(1, pageSize))
+                    .put("source", "chInfo_ch_appcenter__chsub_9patch");
+            return RequestManager.requestString(
+                    "alipay.antforest.forest.h5.queryPvpBattleRecords",
+                    new JSONArray().put(arg).toString()
+            );
+        } catch (JSONException e) {
+            Log.printStackTrace("AntForestRpcCall", "构造 1V1 记录请求失败", e);
+            return "";
+        }
+    }
+
 }

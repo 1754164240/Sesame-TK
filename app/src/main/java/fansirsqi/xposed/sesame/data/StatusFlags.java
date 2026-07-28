@@ -90,4 +90,20 @@ public final class StatusFlags {
     public static final String FLAG_ANTSTALL_THROW_MANURE_LIMIT =
             "Flag_AntStall_Throw_Manure_Limit";
 
+    // ============================================================
+    // 福气鱼池
+    // ============================================================
+
+    /** 今日自动钓鱼次数 */
+    public static final String FLAG_ANTFISHPOND_FISH_COUNT =
+            "AntFishPond::fishCount";
+
+    /** 今日是否已提示缺少风控令牌 */
+    public static final String FLAG_ANTFISHPOND_RISK_TOKEN_MISSING =
+            "AntFishPond::riskTokenMissing";
+
+    /** 森林 1V1 能量挑战今日是否已处理 */
+    public static final String FLAG_ANTFOREST_ENERGY_PVP_CHALLENGE_DONE =
+            "AntForest::energyPvpChallengeDone";
+
 }
