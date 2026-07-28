@@ -11,7 +11,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import de.robv.android.xposed.XposedHelpers;
+import fansirsqi.xposed.sesame.hook.modern.ReflectionHelper;
 import fansirsqi.xposed.sesame.data.General;
 import fansirsqi.xposed.sesame.entity.RpcEntity;
 import fansirsqi.xposed.sesame.hook.ApplicationHook;
@@ -83,13 +83,13 @@ public class NewRpcBridge implements RpcBridge {
     public void load() throws Exception {
         loader = ApplicationHook.classLoader;
         try {
-            Object service = XposedHelpers.callStaticMethod(XposedHelpers.findClass("com.alipay.mobile.nebulacore.Nebula", loader), "getService");
-            Object extensionManager = XposedHelpers.callMethod(service, "getExtensionManager");
+            Object service = ReflectionHelper.callStaticMethod(ReflectionHelper.findClass("com.alipay.mobile.nebulacore.Nebula", loader), "getService");
+            Object extensionManager = ReflectionHelper.callMethod(service, "getExtensionManager");
             Method getExtensionByName = extensionManager.getClass().getDeclaredMethod("createExtensionInstance", Class.class);
             getExtensionByName.setAccessible(true);
             newRpcInstance = getExtensionByName.invoke(null, loader.loadClass("com.alibaba.ariver.commonability.network.rpc.RpcBridgeExtension"));
             if (newRpcInstance == null) {
-                Object nodeExtensionMap = XposedHelpers.callMethod(extensionManager, "getNodeExtensionMap");
+                Object nodeExtensionMap = ReflectionHelper.callMethod(extensionManager, "getNodeExtensionMap");
                 if (nodeExtensionMap != null) {
                     @SuppressWarnings("unchecked")
                     Map<Object, Map<String, Object>> map = (Map<Object, Map<String, Object>>) nodeExtensionMap;
@@ -247,12 +247,12 @@ public class NewRpcBridge implements RpcBridge {
                                                 // 获取 JSON 字符串，失败时重试一次
                                                 String jsonString = null;
                                                 try {
-                                                    jsonString = (String) XposedHelpers.callMethod(obj, "toJSONString");
+                                                    jsonString = (String) ReflectionHelper.callMethod(obj, "toJSONString");
                                                 } catch (Exception e) {
                                                     // 第一次失败，尝试重试
                                                     try {
                                                         GlobalThreadPools.sleepCompat(100L);
-                                                        jsonString = (String) XposedHelpers.callMethod(obj, "toJSONString");
+                                                        jsonString = (String) ReflectionHelper.callMethod(obj, "toJSONString");
                                                     } catch (Exception retryException) {
                                                         // 重试后仍失败，记录日志并标记错误，触发外层RPC重试
                                                         Log.record(TAG, "toJSONString 重试后仍然失败，将触发整个 RPC 请求重试: " + retryException.getMessage());
@@ -263,8 +263,8 @@ public class NewRpcBridge implements RpcBridge {
                                                 }
 
                                                 rpcEntity.setResponseObject(obj, jsonString);
-                                                if (!(Boolean) XposedHelpers.callMethod(obj, "containsKey", "success")
-                                                        && !(Boolean) XposedHelpers.callMethod(obj, "containsKey", "isSuccess")) {
+                                                if (!(Boolean) ReflectionHelper.callMethod(obj, "containsKey", "success")
+                                                        && !(Boolean) ReflectionHelper.callMethod(obj, "containsKey", "isSuccess")) {
                                                     rpcEntity.setError();
                                                     if (shouldShowErrorLog(rpcEntity.getRequestMethod())) {
                                                         Log.error(TAG, "new rpc response1 | id: " + rpcEntity.hashCode() + " | method: " + rpcEntity.getRequestMethod() + "\n " +
@@ -288,8 +288,8 @@ public class NewRpcBridge implements RpcBridge {
                         return rpcEntity;
                     }
                     try {
-                        String errorCode = (String) XposedHelpers.callMethod(rpcEntity.getResponseObject(), "getString", "error");
-                        String errorMessage = (String) XposedHelpers.callMethod(rpcEntity.getResponseObject(), "getString", "errorMessage");
+                        String errorCode = (String) ReflectionHelper.callMethod(rpcEntity.getResponseObject(), "getString", "error");
+                        String errorMessage = (String) ReflectionHelper.callMethod(rpcEntity.getResponseObject(), "getString", "errorMessage");
                         String response = rpcEntity.getResponseString();
                         String methodName = rpcEntity.getRequestMethod();
 

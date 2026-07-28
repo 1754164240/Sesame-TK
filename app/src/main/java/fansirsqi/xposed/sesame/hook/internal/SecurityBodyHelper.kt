@@ -1,6 +1,6 @@
 package fansirsqi.xposed.sesame.hook.internal
 
-import de.robv.android.xposed.XposedHelpers
+import fansirsqi.xposed.sesame.hook.modern.ReflectionHelper
 import fansirsqi.xposed.sesame.hook.ApplicationHook
 import fansirsqi.xposed.sesame.util.Log
 
@@ -45,8 +45,8 @@ object SecurityBodyHelper {
                 return null
             }
             // 获取 SecurityGuardManager 实例
-            val securityGuardManager = XposedHelpers.callStaticMethod(
-                XposedHelpers.findClass("com.alibaba.wireless.security.open.SecurityGuardManager", classLoader),
+            val securityGuardManager = ReflectionHelper.callStaticMethod(
+                ReflectionHelper.findClass("com.alibaba.wireless.security.open.SecurityGuardManager", classLoader),
                 "getInstance",
                 appContext
             ) ?: run {
@@ -55,7 +55,7 @@ object SecurityBodyHelper {
             }
 
             // 获取 ISecurityBodyComponent 实例
-            val securityBodyComponent = XposedHelpers.callMethod(
+            val securityBodyComponent = ReflectionHelper.callMethod(
                 securityGuardManager,
                 "getSecurityBodyComp"
             ) ?: run {
@@ -65,7 +65,7 @@ object SecurityBodyHelper {
 
             // 调用 getSecurityBodyDataEx 方法，参数与 SecurityBodyWuaBridgeExtension 中完全一致
             // getSecurityBodyDataEx((String) null, (String) null, "", (HashMap) null, type, 0)
-            val result = XposedHelpers.callMethod(
+            val result = ReflectionHelper.callMethod(
                 securityBodyComponent,
                 "getSecurityBodyDataEx",
                 null as String?,

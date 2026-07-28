@@ -2,10 +2,10 @@ package fansirsqi.xposed.sesame.hook
 
 import android.content.pm.PackageInfo
 import androidx.core.content.pm.PackageInfoCompat
-import de.robv.android.xposed.XC_MethodHook
-import de.robv.android.xposed.XposedHelpers
 import fansirsqi.xposed.sesame.data.General
 import fansirsqi.xposed.sesame.entity.AlipayVersion
+import fansirsqi.xposed.sesame.hook.modern.ModernXposedRuntime
+import fansirsqi.xposed.sesame.hook.modern.ReflectionHelper
 import fansirsqi.xposed.sesame.util.Log.printStackTrace
 import fansirsqi.xposed.sesame.util.Log.record
 import lombok.Getter
@@ -44,17 +44,19 @@ object VersionHook {
         }
 
         try {
-            XposedHelpers.findAndHookMethod(
+            val packageManagerClass = ReflectionHelper.findClass(
                 "android.app.ApplicationPackageManager",
-                classLoader,
+                classLoader
+            )
+            val getPackageInfoMethod = ReflectionHelper.findMethodExact(
+                packageManagerClass,
                 "getPackageInfo",
                 String::class.java,
-                Int::class.javaPrimitiveType,
-                object : XC_MethodHook() {
-                    @Throws(Throwable::class)
-                    override fun afterHookedMethod(param: MethodHookParam) {
+                Int::class.javaPrimitiveType
+            )
+            ModernXposedRuntime.hook(getPackageInfoMethod, after = { invocation ->
                         try {
-                            val packageInfo = param.result as PackageInfo?
+                            val packageInfo = invocation.result as PackageInfo?
 
                             // 只处理目标应用的包信息
                             if (packageInfo != null &&
@@ -78,9 +80,7 @@ object VersionHook {
                             // 静默处理异常,避免影响应用正常运行
                             printStackTrace(TAG, t)
                         }
-                    }
-                }
-            )
+            })
 
             hookInstalled = true
             record(TAG, "✅ 版本号 Hook 安装成功")

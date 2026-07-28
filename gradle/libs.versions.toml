@@ -2,7 +2,7 @@
 activity-compose = "1.12.1"
 
 android = "4.1.1.4"
-android-plugin = "8.9.3"
+android-plugin = "9.3.0"
 cmdAndroid = "0.8.2"
 constraintlayout = "2.2.1"
 
@@ -25,8 +25,8 @@ lombok = "1.18.42"
 okhttp = "5.3.2"
 jackson = "2.20.1"
 jackson-annotations = "2.20"
-xposed-api = "100"
-xposed-service = "100-1.0.0"
+xposed-api = "102.0.0"
+xposed-service = "102.0.0"
 
 #noinspection GradleDependency
 jackson-compatible = "2.13.5"
@@ -99,7 +99,6 @@ material3 = { group = "androidx.compose.material3", name = "material3", version.
 [plugins]
 android-application = { id = "com.android.application", version.ref = "android-plugin" }
 android-library = { id = "com.android.library", version.ref = "android-plugin" }
-kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 rikka-tools-refine = { id = "dev.rikka.tools.refine", version.ref = "hiddenapi" }
 

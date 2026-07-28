@@ -1,10 +1,9 @@
 package fansirsqi.xposed.sesame.hook
 
-import de.robv.android.xposed.XC_MethodHook
-import de.robv.android.xposed.XC_MethodReplacement
-import de.robv.android.xposed.XposedHelpers
 import fansirsqi.xposed.sesame.data.General
 import fansirsqi.xposed.sesame.entity.UserEntity
+import fansirsqi.xposed.sesame.hook.modern.ModernXposedRuntime
+import fansirsqi.xposed.sesame.hook.modern.ReflectionHelper
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.maps.UserMap
 import org.json.JSONObject
@@ -29,14 +28,13 @@ object HookUtil {
             val jsonClassName = General.JSON_OBJECT_NAME // 替换为你项目中的实际 JSON 类名
 
             val jsonClass = Class.forName(jsonClassName, false, classLoader)
-            val appClass = XposedHelpers.findClass("com.alibaba.ariver.app.api.App", classLoader)
-            val pageClass = XposedHelpers.findClass("com.alibaba.ariver.app.api.Page", classLoader)
-            val apiContextClass = XposedHelpers.findClass("com.alibaba.ariver.engine.api.bridge.model.ApiContext", classLoader)
-            val bridgeCallbackClass = XposedHelpers.findClass("com.alibaba.ariver.engine.api.bridge.extension.BridgeCallback", classLoader)
-
-            XposedHelpers.findAndHookMethod(
-                className,
-                classLoader,
+            val appClass = ReflectionHelper.findClass("com.alibaba.ariver.app.api.App", classLoader)
+            val pageClass = ReflectionHelper.findClass("com.alibaba.ariver.app.api.Page", classLoader)
+            val apiContextClass = ReflectionHelper.findClass("com.alibaba.ariver.engine.api.bridge.model.ApiContext", classLoader)
+            val bridgeCallbackClass = ReflectionHelper.findClass("com.alibaba.ariver.engine.api.bridge.extension.BridgeCallback", classLoader)
+            val rpcClass = ReflectionHelper.findClass(className, classLoader)
+            val rpcMethod = ReflectionHelper.findMethodExact(
+                rpcClass,
                 "rpc",
                 String::class.java,
                 Boolean::class.javaPrimitiveType,
@@ -53,13 +51,15 @@ object HookUtil {
                 appClass,
                 pageClass,
                 apiContextClass,
-                bridgeCallbackClass,
-                object : XC_MethodHook() {
-                    override fun beforeHookedMethod(param: MethodHookParam) {
-                        val args = param.args
+                bridgeCallbackClass
+            )
+            ModernXposedRuntime.hook(
+                rpcMethod,
+                before = { invocation ->
+                        val args = invocation.args
                         if (args.size > 15) {// 参数校验
                             // 1. 获取方法名
-                            val methodName = args[0] as? String ?: return
+                            val methodName = args[0] as? String ?: return@hook
                             // 2. 获取参数 (这是一个反射得到的 com.alibaba.fastjson.JSONObject 对象)
                             val rawParams = args[4]
 
@@ -78,12 +78,11 @@ object HookUtil {
                                 this[1] = args[0] ?: "null" // method name
                                 this[2] = args[4] ?: "null" // params
                             }
-                            rpcHookMap[callback] = recordArray
+                            callback?.let { rpcHookMap[it] = recordArray }
                         }
-                    }
-
-                    override fun afterHookedMethod(param: MethodHookParam) {
-                        val args = param.args
+                },
+                after = { invocation ->
+                        val args = invocation.args
                         if (args.size > 15) {
                             val callback = args[15]
                             val recordArray = rpcHookMap.remove(callback)
@@ -123,8 +122,8 @@ object HookUtil {
                                 }
                             }
                         }
-                    }
-                })
+                }
+            )
             Log.record(TAG, "Hook RpcBridgeExtension#rpc 成功")
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "Hook RpcBridgeExtension#rpc 失败", t)
@@ -134,28 +133,38 @@ object HookUtil {
     fun hookOtherService(classLoader: ClassLoader) {
         try {
             //hook 服务不在后台
-            XposedHelpers.findAndHookMethod(
+            val monitorClass = ReflectionHelper.findClass(
                 "com.alipay.mobile.common.fgbg.FgBgMonitorImpl",
-                classLoader, "isInBackground",
-                XC_MethodReplacement.returnConstant(false))
-            XposedHelpers.findAndHookMethod(
-                "com.alipay.mobile.common.fgbg.FgBgMonitorImpl",
-                classLoader,
-                "isInBackground",
-                Boolean::class.javaPrimitiveType,
-                XC_MethodReplacement.returnConstant(false)
+                classLoader
             )
-            XposedHelpers.findAndHookMethod(
-                "com.alipay.mobile.common.fgbg.FgBgMonitorImpl",
-                classLoader, "isInBackgroundV2",
-                XC_MethodReplacement.returnConstant(false))
+            ModernXposedRuntime.replaceWithConstant(
+                ReflectionHelper.findMethodExact(monitorClass, "isInBackground"),
+                false
+            )
+            ModernXposedRuntime.replaceWithConstant(
+                ReflectionHelper.findMethodExact(
+                    monitorClass,
+                    "isInBackground",
+                    Boolean::class.javaPrimitiveType!!
+                ),
+                false
+            )
+            ModernXposedRuntime.replaceWithConstant(
+                ReflectionHelper.findMethodExact(monitorClass, "isInBackgroundV2"),
+                false
+            )
             //hook 服务在前台
-            XposedHelpers.findAndHookMethod(
+            val miscUtilsClass = ReflectionHelper.findClass(
                 "com.alipay.mobile.common.transport.utils.MiscUtils",
-                classLoader,
-                "isAtFrontDesk",
-                classLoader.loadClass("android.content.Context"),
-                XC_MethodReplacement.returnConstant(true)
+                classLoader
+            )
+            ModernXposedRuntime.replaceWithConstant(
+                ReflectionHelper.findMethodExact(
+                    miscUtilsClass,
+                    "isAtFrontDesk",
+                    classLoader.loadClass("android.content.Context")
+                ),
+                true
             )
         } catch (e: Exception) {
             Log.printStackTrace(TAG, "hookOtherService 失败", e)
@@ -170,14 +179,14 @@ object HookUtil {
             val className = "com.alibaba.ariver.engine.common.bridge.internal.DefaultBridgeCallback"
             val jsonClassName = General.JSON_OBJECT_NAME
             val jsonClass = Class.forName(jsonClassName, false, classLoader)
-            XposedHelpers.findAndHookMethod(className, classLoader, "sendJSONResponse", jsonClass, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
-                    val callback = param.thisObject
+            val callbackClass = ReflectionHelper.findClass(className, classLoader)
+            val responseMethod = ReflectionHelper.findMethodExact(callbackClass, "sendJSONResponse", jsonClass)
+            ModernXposedRuntime.hook(responseMethod, before = { invocation ->
+                    val callback = invocation.thisObject
                     val recordArray = rpcHookMap[callback]
-                    if (recordArray != null && param.args.isNotEmpty()) {
-                        recordArray[3] = param.args[0].toString()
+                    if (recordArray != null && invocation.args.isNotEmpty()) {
+                        recordArray[3] = invocation.args[0].toString()
                     }
-                }
             })
             Log.record(TAG, "Hook DefaultBridgeCallback#sendJSONResponse 成功")
         } catch (t: Throwable) {
@@ -191,31 +200,30 @@ object HookUtil {
      */
     fun fuckAccounLimit(classLoader: ClassLoader) {
         Log.record(TAG, "Hook AccountManagerListAdapter#getCount")
-        XposedHelpers.findAndHookMethod(
-            "com.alipay.mobile.security.accountmanager.data.AccountManagerListAdapter",  // target class
-            classLoader, "getCount",  // method name
-            object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+        val adapterClass = ReflectionHelper.findClass(
+            "com.alipay.mobile.security.accountmanager.data.AccountManagerListAdapter",
+            classLoader
+        )
+        val getCountMethod = ReflectionHelper.findMethodExact(adapterClass, "getCount")
+        ModernXposedRuntime.hook(getCountMethod, after = { invocation ->
                     // 获取真实账号列表大小
                     try {
-                        val list = XposedHelpers.getObjectField(param.thisObject, "queryAccountList") as? List<*>
+                        val list = ReflectionHelper.getObjectField(invocation.thisObject, "queryAccountList") as? List<*>
                         if (list != null) {
-                            param.result = list.size  // 设置返回值为真实数量
+                            invocation.result = list.size  // 设置返回值为真实数量
                             val now = System.currentTimeMillis()
                             if (now - lastToastTime > 1000 * 60) { // 每N秒最多显示一次
                                 Toast.show("🎉 TK已尝试为您突破限制")
                                 lastToastTime = now
                             }
                         }
-                        return
 //                        Log.runtime(TAG, "Hook AccountManagerListAdapter#getCount but return is null")
                     } catch (e: Throwable) {
                         // 错误日志处理（你可以替换为自己的日志方法）
                         e.printStackTrace()
                         Log.error(TAG, "Hook AccountManagerListAdapter#getCount failed: ${e.message}")
                     }
-                }
-            })
+        })
         Log.record(TAG, "Hook AccountManagerListAdapter#getCount END")
     }
 
@@ -223,11 +231,11 @@ object HookUtil {
     fun getMicroApplicationContext(classLoader: ClassLoader): Any? {
         if (microContextCache != null) return microContextCache
         return runCatching {
-            val appClass = XposedHelpers.findClass(
+            val appClass = ReflectionHelper.findClass(
                 "com.alipay.mobile.framework.AlipayApplication", classLoader
             )
-            val appInstance = XposedHelpers.callStaticMethod(appClass, "getInstance")
-            XposedHelpers.callMethod(appInstance, "getMicroApplicationContext")
+            val appInstance = ReflectionHelper.callStaticMethod(appClass, "getInstance")
+            ReflectionHelper.callMethod(appInstance, "getMicroApplicationContext")
                 .also { microContextCache = it }
         }.onFailure {
             Log.printStackTrace(TAG, it)
@@ -236,23 +244,23 @@ object HookUtil {
 
     fun getServiceObject(classLoader: ClassLoader, serviceName: String): Any? = runCatching {
         val microContext = getMicroApplicationContext(classLoader)
-        XposedHelpers.callMethod(microContext, "findServiceByInterface", serviceName)
+        ReflectionHelper.callMethod(microContext, "findServiceByInterface", serviceName)
     }.onFailure {
         Log.printStackTrace(TAG, it)
     }.getOrNull()
 
     fun getUserObject(classLoader: ClassLoader): Any? = runCatching {
         val serviceClassName = "com.alipay.mobile.personalbase.service.SocialSdkContactService"
-        val serviceClass = XposedHelpers.findClass(serviceClassName, classLoader)
+        val serviceClass = ReflectionHelper.findClass(serviceClassName, classLoader)
         val serviceObject = getServiceObject(classLoader, serviceClass.name)
-        XposedHelpers.callMethod(serviceObject, "getMyAccountInfoModelByLocal")
+        ReflectionHelper.callMethod(serviceObject, "getMyAccountInfoModelByLocal")
     }.onFailure {
         Log.printStackTrace(TAG, it)
     }.getOrNull()
 
     fun getUserId(classLoader: ClassLoader): String? = runCatching {
         val userObject = getUserObject(classLoader)
-        XposedHelpers.getObjectField(userObject, "userId") as? String
+        ReflectionHelper.getObjectField(userObject, "userId") as? String
     }.onFailure {
         Log.printStackTrace(TAG, it)
     }.getOrNull()
@@ -264,16 +272,16 @@ object HookUtil {
             UserMap.setCurrentUserId(selfId) //有些地方要用到 要set一下
             val clsUserIndependentCache = classLoader.loadClass("com.alipay.mobile.socialcommonsdk.bizdata.UserIndependentCache")
             val clsAliAccountDaoOp = classLoader.loadClass("com.alipay.mobile.socialcommonsdk.bizdata.contact.data.AliAccountDaoOp")
-            val aliAccountDaoOp = XposedHelpers.callStaticMethod(clsUserIndependentCache, "getCacheObj", clsAliAccountDaoOp)
-            val allFriends = XposedHelpers.callMethod(aliAccountDaoOp, "getAllFriends") as? List<*> ?: emptyList<Any>()
+            val aliAccountDaoOp = ReflectionHelper.callStaticMethod(clsUserIndependentCache, "getCacheObj", clsAliAccountDaoOp)
+            val allFriends = ReflectionHelper.callMethod(aliAccountDaoOp, "getAllFriends") as? List<*> ?: emptyList<Any>()
             if (allFriends.isEmpty()) return
             val friendClass = allFriends.firstOrNull()?.javaClass ?: return
-            val userIdField = XposedHelpers.findField(friendClass, "userId")
-            val accountField = XposedHelpers.findField(friendClass, "account")
-            val nameField = XposedHelpers.findField(friendClass, "name")
-            val nickNameField = XposedHelpers.findField(friendClass, "nickName")
-            val remarkNameField = XposedHelpers.findField(friendClass, "remarkName")
-            val friendStatusField = XposedHelpers.findField(friendClass, "friendStatus")
+            val userIdField = ReflectionHelper.findField(friendClass, "userId")
+            val accountField = ReflectionHelper.findField(friendClass, "account")
+            val nameField = ReflectionHelper.findField(friendClass, "name")
+            val nickNameField = ReflectionHelper.findField(friendClass, "nickName")
+            val remarkNameField = ReflectionHelper.findField(friendClass, "remarkName")
+            val friendStatusField = ReflectionHelper.findField(friendClass, "friendStatus")
             var selfEntity: UserEntity? = null
             allFriends.forEach { userObject ->
                 runCatching {

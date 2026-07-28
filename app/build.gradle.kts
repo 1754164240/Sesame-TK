@@ -5,7 +5,6 @@ import java.util.TimeZone
 
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.rikka.tools.refine)
 }
@@ -15,7 +14,12 @@ var isCIBuild: Boolean = System.getenv("CI").toBoolean()
 
 android {
     namespace = "fansirsqi.xposed.sesame"
-    compileSdk = 36
+    buildToolsVersion = "37.0.0"
+    compileSdk {
+        version = release(37) {
+            minorApiLevel = 0
+        }
+    }
     packaging {
         jniLibs {
             useLegacyPackaging = true
@@ -80,12 +84,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlin {
-        compilerOptions {
-            jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
-        }
-    }
-
     signingConfigs {
         getByName("debug") {
         }
@@ -111,7 +109,7 @@ android {
 
     sourceSets {
         getByName("main") {
-            jniLibs.srcDirs("src/main/jniLibs")
+            jniLibs.directories.add("src/main/jniLibs")
         }
     }
     val cmakeFile = file("src/main/cpp/CMakeLists.txt")
@@ -125,13 +123,20 @@ android {
         }
     }
 
-    applicationVariants.all {
-        val variant = this
-        variant.outputs.all {
-            val output = this
-            val abiName = output.filters.find { it.filterType == "ABI" }?.identifier ?: "universal"
-            val fileName = "Sesame-VN-${abiName}-${variant.versionName}.apk"
-            (output as com.android.build.gradle.internal.api.BaseVariantOutputImpl).outputFileName = fileName
+}
+
+androidComponents {
+    onVariants(selector().all()) { variant ->
+        variant.outputs.forEach { output ->
+            val abiName = output.filters
+                .find { it.filterType == com.android.build.api.variant.FilterConfiguration.FilterType.ABI }
+                ?.identifier
+                ?: "universal"
+            output.outputFileName.set(
+                output.versionName.map { versionName ->
+                    "Sesame-VN-$abiName-$versionName.apk"
+                }
+            )
         }
     }
 }
@@ -191,11 +196,10 @@ dependencies {
     implementation(libs.material)                   // Material Design 组件
     implementation(libs.webkit)                     // WebView 组件
 
-    // 仅编译时依赖 - Xposed 相关
-    compileOnly(files("libs/api-82.jar"))          // Xposed API 82
-    compileOnly(files("libs/api-100.aar"))         // Xposed API 100 https://github.com/libxposed/api
-    implementation(files("libs/interface-100.aar")) // Xposed 模块接口 https://github.com/libxposed/api
-    implementation(files("libs/service-100-1.0.0.aar"))  // https://github.com/libxposed/service
+    // libxposed 102 现代模块接口与服务
+    compileOnly(files("libs/api-102.0.0.aar"))
+    implementation(files("libs/interface-102.0.0.aar"))
+    implementation(files("libs/service-102.0.0.aar"))
 
     // 代码生成和工具库
     compileOnly(libs.lombok)                       // Lombok 注解处理器（编译时）

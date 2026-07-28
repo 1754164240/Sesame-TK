@@ -5,6 +5,7 @@
 
 | 日期 | 模块 | 功能改动 |
 | --- | --- | --- |
+| 2026-07-28 | libxposed / 构建系统 | 模块入口和 Hook 运行时迁移至 libxposed 102，仅保留现代 API 入口；移除 API 82/100、旧版 Xposed 兼容层和 `xposed_init`；模块最低框架 API 调整为 101，目标 API 调整为 102。 |
 | 2026-07-28 | 任务调度 / 运动步数 / 蚂蚁森林 / RPC Hook | 配置重载和任务超时时会取消并等待实际业务 Job 退出，避免旧任务与新一轮重叠；阻止森林、庄园和运动后台任务在第二轮重复排队；运动步数改用家庭捐步接口同步并二次查询确认，兼容 `resultCode=200`；修正 `positionRequest` 位于 `requestData[0]` 时的 Token 提取；合并森林蹲点异常日志和持久化写入，减少重复任务与日志刷屏。 |
 | 2026-07-27 | RPC / 任务调度 / 运动步数 / 蚂蚁森林 / 小鸡乐园 / 小鸡家庭 | 增加 RPC 熔断、单次恢复和安全验证人工暂停机制；按任务执行策略区分完成、后台运行、超时与离线跳过；运动步数改为按方法签名定位同步入口；森林抽抽乐未知游戏任务等待抓包并限制失败重试；修复乐园权益空响应误报、能量蹲点重复任务与日志风暴，以及家庭请客和动物派遣的幂等业务码误报。 |
 | 2026-07-27 | 会员任务 | 适配新版会员任务墙协议，支持广告任务和普通浏览任务的领取、等待、执行与结算；增加会员积分累计进度复查、黑名单过滤和单任务异常隔离，移除已失效的旧版会员任务接口。 |
@@ -16,6 +17,18 @@
 | 2026-04-02 | 蚂蚁森林 / 能量雨 | 将能量雨执行时机前移到蚂蚁森林主流程更靠前的位置。 |
 | 2026-04-01 | 品牌与界面 / README / 发布流程 | 项目标识调整为 Sesame-VN；去除界面水印和查看异常日志验证；更新 README 展示内容与 Android 发布 workflow 配置。 |
 
+## 运行与构建要求
+
+- 模块仅支持现代 libxposed，`minApiVersion=101`，`targetApiVersion=102`，不再支持 API 82/100 旧入口。
+- Android 应用要求 Android 8.0（API 26）及以上；项目使用 `compileSdk=37.0`、`targetSdk=36` 和 Build Tools `37.0.0`。
+- libxposed 依赖使用 `app/libs` 中的 `api-102.0.0.aar`、`interface-102.0.0.aar` 和 `service-102.0.0.aar`。
+- 构建环境使用 JDK 17 及以上、Gradle 9.5.0 和 Android Gradle Plugin 9.3.0。
+
+```powershell
+.\gradlew.bat :app:testDebugUnitTest
+.\gradlew.bat :app:assembleDebug
+.\gradlew.bat :app:assembleRelease
+```
 
 > [!TIP]
 > ## 授权说明

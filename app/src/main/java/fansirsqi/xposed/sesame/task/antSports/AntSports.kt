@@ -1,12 +1,12 @@
 package fansirsqi.xposed.sesame.task.antSports
 
 import android.annotation.SuppressLint
-import de.robv.android.xposed.XC_MethodHook
-import de.robv.android.xposed.XposedHelpers
 import fansirsqi.xposed.sesame.data.Status
 import fansirsqi.xposed.sesame.data.StatusFlags
 import fansirsqi.xposed.sesame.entity.AlipayUser
 import fansirsqi.xposed.sesame.hook.ApplicationHook
+import fansirsqi.xposed.sesame.hook.modern.ModernXposedRuntime
+import fansirsqi.xposed.sesame.hook.modern.ReflectionHelper
 import fansirsqi.xposed.sesame.model.BaseModel
 import fansirsqi.xposed.sesame.model.ModelFields
 import fansirsqi.xposed.sesame.model.ModelGroup
@@ -248,21 +248,19 @@ class AntSports : ModelTask() {
      */
     override fun boot(classLoader: ClassLoader) {
         try {
-            XposedHelpers.findAndHookMethod(
+            val pedometerClass = ReflectionHelper.findClass(
                 "com.alibaba.health.pedometer.core.datasource.PedometerAgent",
-                classLoader,
-                "readDailyStep",
-                object : XC_MethodHook() {
-                    override fun afterHookedMethod(param: MethodHookParam) {
-                        val originStep = param.result as Int
+                classLoader
+            )
+            val readDailyStepMethod = ReflectionHelper.findMethodExact(pedometerClass, "readDailyStep")
+            ModernXposedRuntime.hook(readDailyStepMethod, after = { invocation ->
+                        val originStep = invocation.result as Int
                         val step = tmpStepCount()
                         // 只要本地步数低于配置步数就覆盖，避免8点前捐步读取到原始低步数。
                         if (AntSportsStepSync.shouldOverrideDailyStep(originStep, step)) {
-                            param.result = step
+                            invocation.result = step
                         }
-                    }
-                }
-            )
+            })
             Log.record(TAG, "hook readDailyStep successfully")
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "hook readDailyStep err:", t)
