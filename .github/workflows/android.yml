@@ -202,10 +202,6 @@ jobs:
           name: ${{ steps.extract_info.outputs.release_date }}
           files: |
             ${{ steps.extract_apks.outputs.signed_arm64 }}
-#            ${{ steps.extract_apks.outputs.signed_armv7 }}
-#            ${{ steps.extract_apks.outputs.signed_x86 }}
-#            ${{ steps.extract_apks.outputs.signed_x86_64 }}
-#            ${{ steps.extract_apks.outputs.signed_universal }}
           tag_name: ${{ steps.extract_info.outputs.version}}
           draft: false
           append_body: true
@@ -214,9 +210,6 @@ jobs:
           body: |
             > ## 下载说明
             <b>- arm64-v8a:</b> 适用于64位ARM设备 (主流新手机)
-#            <b>- armeabi-v7a:</b> 适用于32位ARM设备 (旧款手机)
-#            <b>- x86 / x86_64:</b> 主要用于PC上的安卓模拟器
-#            <b>- universal:</b> 通用版 (不确定时使用，体积较大)
             >
             > **如果不确定，请下载 `universal` 版本。**
 
@@ -245,8 +238,4 @@ jobs:
             
             > ## 下载说明
             <b>- arm64-v8a:</b> 适用于64位ARM设备 (主流新手机)
-#            <b>- armeabi-v7a:</b> 适用于32位ARM设备 (旧款手机)
-#            <b>- x86 / x86_64:</b> 主要用于PC上的安卓模拟器
-#            <b>- universal:</b> 通用版 (不确定时使用，体积较大)
             >
-#            > **如果不确定，请下载 `universal` 版本。**
