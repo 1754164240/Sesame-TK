@@ -64,6 +64,12 @@ public class AntMemberRpcCall {
                 "[{\"scene\":\"activityCenter\"}]");
     }
 
+    /* 完成会员广告任务 */
+    public static String taskFinish(String bizId) {
+        return RequestManager.requestString("com.alipay.adtask.biz.mobilegw.service.task.finish",
+                "[{\"bizId\":\"" + bizId + "\"}]");
+    }
+
     public static String taskReceive(String taskCode) {
         return RequestManager.requestString("alipay.mrchservbase.sqyj.task.receive",
                 "[{\"compId\":\"ZTS_TASK_RECEIVE\",\"extInfo\":{\"taskCode\":\"" + taskCode + "\"}}]");
@@ -112,6 +118,26 @@ public class AntMemberRpcCall {
         return RequestManager.requestString(
                 "com.alipay.amic.memtask.h5.MemTaskListQueryFacade.querySingleTaskProcessDetail",
                 MemberTaskProtocol.buildSingleTaskDetailArgs(taskProcessId).toString()
+        );
+    }
+
+    /**
+     * 查询会员广告任务详情。
+     */
+    public static String querySingleAdTaskProcessDetail(String configId, String adBizId) {
+        return RequestManager.requestString(
+                "com.alipay.amic.memtask.h5.MemTaskListQueryFacade.querySingleTaskProcessDetail",
+                MemberTaskProtocol.buildSingleAdTaskDetailArgs(configId, adBizId).toString()
+        );
+    }
+
+    /**
+     * 按合并后的会员任务状态领取广告任务。
+     */
+    public static String applyMemberAdTask(MemberTaskState task) {
+        return RequestManager.requestString(
+                "com.alipay.amic.memtask.h5.MemTaskAdFacade.applyAdTask",
+                MemberTaskProtocol.buildApplyAdTaskArgs(task).toString()
         );
     }
 

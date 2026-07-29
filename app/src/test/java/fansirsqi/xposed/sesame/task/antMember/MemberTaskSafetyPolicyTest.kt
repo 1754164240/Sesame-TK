@@ -6,9 +6,9 @@ import org.junit.Test
 class MemberTaskSafetyPolicyTest {
 
     @Test
-    fun `未知任务配置不自动执行`() {
+    fun `未知配置编号的浏览任务允许执行`() {
         assertEquals(
-            MemberTaskDecision.SKIP_UNSUPPORTED,
+            MemberTaskDecision.EXECUTE_BROWSE,
             MemberTaskSafetyPolicy.classify(
                 MemberTaskCandidate(
                     configId = "unknown",
@@ -20,7 +20,7 @@ class MemberTaskSafetyPolicyTest {
     }
 
     @Test
-    fun `白名单浏览任务允许执行`() {
+    fun `已有配置编号的浏览任务允许执行`() {
         assertEquals(
             MemberTaskDecision.EXECUTE_BROWSE,
             MemberTaskSafetyPolicy.classify(
@@ -48,9 +48,9 @@ class MemberTaskSafetyPolicyTest {
     }
 
     @Test
-    fun `金融动作优先于白名单被阻断`() {
+    fun `浏览任务不因标题关键词被阻断`() {
         assertEquals(
-            MemberTaskDecision.SKIP_FINANCIAL,
+            MemberTaskDecision.EXECUTE_BROWSE,
             MemberTaskSafetyPolicy.classify(
                 MemberTaskCandidate(
                     configId = "600202500151482",
@@ -62,9 +62,9 @@ class MemberTaskSafetyPolicyTest {
     }
 
     @Test
-    fun `所有广告任务都禁止伪完成`() {
+    fun `所有带业务编号的广告任务都恢复完成流程`() {
         assertEquals(
-            MemberTaskDecision.SKIP_AD,
+            MemberTaskDecision.FINISH_AD,
             MemberTaskSafetyPolicy.classify(
                 MemberTaskCandidate(
                     configId = "32002001",
@@ -75,13 +75,27 @@ class MemberTaskSafetyPolicyTest {
             )
         )
         assertEquals(
-            MemberTaskDecision.SKIP_AD,
+            MemberTaskDecision.FINISH_AD,
             MemberTaskSafetyPolicy.classify(
                 MemberTaskCandidate(
                     configId = "unknown-ad",
                     title = "浏览未知广告",
                     targetBusiness = "BROWSE#15S#ad-param",
                     adBizId = "ad-biz"
+                )
+            )
+        )
+    }
+
+    @Test
+    fun `结构不完整的任务仍然不执行`() {
+        assertEquals(
+            MemberTaskDecision.SKIP_UNSUPPORTED,
+            MemberTaskSafetyPolicy.classify(
+                MemberTaskCandidate(
+                    configId = "unknown",
+                    title = "未知任务",
+                    targetBusiness = "BROWSE#15S"
                 )
             )
         )

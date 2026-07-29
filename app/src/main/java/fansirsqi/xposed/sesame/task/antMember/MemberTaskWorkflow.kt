@@ -26,6 +26,7 @@ class MemberTaskWorkflow(
     private val queryTaskSources: suspend () -> List<String>,
     private val applyTask: suspend (MemberTaskState) -> String,
     private val executeTask: suspend (MemberTaskState) -> String,
+    private val finishAdTask: suspend (MemberTaskState) -> String = { "" },
     private val queryTaskDetail: suspend (MemberTaskState) -> String,
     private val pauseBeforeCompletion: suspend (Long) -> Unit,
     private val isTaskBlocked: (MemberTaskState) -> Boolean = { false }
@@ -55,7 +56,8 @@ class MemberTaskWorkflow(
                 continue
             }
             val decision = MemberTaskSafetyPolicy.classify(task.toSafetyCandidate())
-            val requiresAction = decision == MemberTaskDecision.EXECUTE_BROWSE
+            val requiresAction = decision == MemberTaskDecision.EXECUTE_BROWSE ||
+                decision == MemberTaskDecision.FINISH_AD
             if (requiresAction && actionTaskCount >= actionLimit) {
                 continue
             }
@@ -88,7 +90,10 @@ class MemberTaskWorkflow(
         if (decision == MemberTaskDecision.VERIFY_ONLY) {
             return verifyDetail(task, decision)
         }
-        if (decision != MemberTaskDecision.EXECUTE_BROWSE) {
+        if (
+            decision != MemberTaskDecision.EXECUTE_BROWSE &&
+            decision != MemberTaskDecision.FINISH_AD
+        ) {
             return skipped(task, decision)
         }
 
@@ -114,7 +119,13 @@ class MemberTaskWorkflow(
         }
 
         pauseBeforeCompletion(taskWaitMillis(activeTask))
-        val actionResponse = runCatching { executeTask(activeTask) }.getOrNull()
+        val actionResponse = runCatching {
+            if (decision == MemberTaskDecision.EXECUTE_BROWSE) {
+                executeTask(activeTask)
+            } else {
+                finishAdTask(activeTask)
+            }
+        }.getOrNull()
         if (!isActionSuccess(actionResponse)) {
             return retryable(activeTask, decision, "任务执行请求失败")
         }

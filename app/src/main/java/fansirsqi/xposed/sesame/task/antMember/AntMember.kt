@@ -1110,8 +1110,8 @@ class AntMember : ModelTask() {
     /**
      * 会员任务
      *
-     * 广告任务保护性跳过；普通浏览任务按状态领取，等待服务端下发的
-     * 浏览时长后执行，最后复查会员累计任务进度。
+     * 广告任务与普通浏览任务按状态领取，等待服务端下发的浏览时长后
+     * 分别完成，并复查单任务状态及会员累计任务进度。
      */
     private suspend fun doAllMemberAvailableTask(): Unit = CoroutineUtils.run {
         try {
@@ -1128,15 +1128,33 @@ class AntMember : ModelTask() {
                         progressResponse
                     )
                 },
-                applyTask = { task -> AntMemberRpcCall.applyMemberTask(task) },
+                applyTask = { task ->
+                    if (task.adBizId.isNotBlank()) {
+                        AntMemberRpcCall.applyMemberAdTask(task)
+                    } else {
+                        AntMemberRpcCall.applyMemberTask(task)
+                    }
+                },
                 executeTask = { task ->
                     AntMemberRpcCall.executeMemberTask(task)
                 },
-                queryTaskDetail = { task ->
-                    if (task.processId.isNotBlank()) {
-                        AntMemberRpcCall.querySingleTaskProcessDetail(task.processId)
-                    } else {
+                finishAdTask = { task ->
+                    if (task.adBizId.isBlank()) {
                         ""
+                    } else {
+                        AntMemberRpcCall.taskFinish(task.adBizId)
+                    }
+                },
+                queryTaskDetail = { task ->
+                    when {
+                        task.adBizId.isNotBlank() && task.configId.isNotBlank() ->
+                            AntMemberRpcCall.querySingleAdTaskProcessDetail(
+                                task.configId,
+                                task.adBizId
+                            )
+                        task.processId.isNotBlank() ->
+                            AntMemberRpcCall.querySingleTaskProcessDetail(task.processId)
+                        else -> ""
                     }
                 },
                 pauseBeforeCompletion = { waitMillis -> delay(waitMillis) },

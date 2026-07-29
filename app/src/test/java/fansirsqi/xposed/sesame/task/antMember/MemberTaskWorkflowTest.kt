@@ -41,7 +41,8 @@ class MemberTaskWorkflowTest {
     }
 
     @Test
-    fun `广告任务不得调用伪完成或详情回查`() = runBlocking {
+    fun `玩一玩广告任务调用专用完成接口并以详情终态确认`() = runBlocking {
+        var finishCalls = 0
         var detailCalls = 0
         val workflow = MemberTaskWorkflow(
             queryTaskSources = {
@@ -49,25 +50,62 @@ class MemberTaskWorkflowTest {
             },
             applyTask = { """{"success":true}""" },
             executeTask = { """{"success":true}""" },
+            finishAdTask = {
+                finishCalls++
+                """{"success":true}"""
+            },
             queryTaskDetail = {
                 detailCalls++
-                adTaskDetailResponse(status = "PROCESSING")
+                adTaskDetailResponse(status = "COMPLETE")
             },
             pauseBeforeCompletion = {}
         )
 
         val result = workflow.run()
 
-        assertEquals(0, detailCalls)
-        assertEquals(0, result.confirmed)
+        assertEquals(1, finishCalls)
+        assertEquals(1, detailCalls)
+        assertEquals(1, result.confirmed)
         assertEquals(0, result.failed)
-        assertEquals(1, result.skipped)
+        assertEquals(0, result.skipped)
         assertEquals(false, result.retryable)
         assertEquals(
-            MemberTaskDecision.SKIP_AD,
+            MemberTaskDecision.FINISH_AD,
             result.outcomes.single().decision
         )
-        assertEquals(null, result.outcomes.single().verification)
+        assertEquals(
+            MemberTaskVerification.CONFIRMED,
+            result.outcomes.single().verification
+        )
+    }
+
+    @Test
+    fun `未知配置编号的浏览任务仍然执行`() = runBlocking {
+        var executeCalls = 0
+        val workflow = MemberTaskWorkflow(
+            queryTaskSources = {
+                listOf(
+                    taskListResponse(
+                        status = "PROCESSING",
+                        configId = "new-browser-config",
+                        title = "玩一玩会员小游戏"
+                    )
+                )
+            },
+            applyTask = { """{"success":true}""" },
+            executeTask = {
+                executeCalls++
+                """{"success":true}"""
+            },
+            queryTaskDetail = { taskDetailResponse(status = "COMPLETE") },
+            pauseBeforeCompletion = {}
+        )
+
+        val result = workflow.run()
+
+        assertEquals(1, executeCalls)
+        assertEquals(1, result.confirmed)
+        assertEquals(MemberTaskDecision.EXECUTE_BROWSE, result.outcomes.single().decision)
     }
 
     @Test
@@ -242,7 +280,11 @@ class MemberTaskWorkflowTest {
         assertEquals(1, result.skipped)
     }
 
-    private fun taskListResponse(status: String): String {
+    private fun taskListResponse(
+        status: String,
+        configId: String = "600202500151482",
+        title: String = "浏览会员频道"
+    ): String {
         return """
             {
               "success": true,
@@ -251,8 +293,8 @@ class MemberTaskWorkflowTest {
                   "processId": "process-1",
                   "status": "$status",
                   "simpleTaskConfig": {
-                    "configId": "600202500151482",
-                    "title": "浏览会员频道",
+                    "configId": "$configId",
+                    "title": "$title",
                     "browseSeconds": 15
                   },
                   "targetBusiness": ["BROWSE#15S#alipays://platformapi/startapp"]
@@ -296,7 +338,7 @@ class MemberTaskWorkflowTest {
                   },
                   "simpleTaskConfig": {
                     "configId": "32002001",
-                    "title": "浏览会员广告",
+                    "title": "玩一玩会员小游戏",
                     "browseSeconds": 15
                   },
                   "targetBusiness": ["BROWSE#15S#alipays://platformapi/startapp"]
