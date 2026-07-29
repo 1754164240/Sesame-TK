@@ -35,6 +35,34 @@ class AntFarmNpcPolicyTest {
     }
 
     @Test
+    fun `缺少身份的NPC不能解释为明确无NPC`() {
+        val snapshot = AntFarmNpcPolicy.parseSnapshot(
+            farmResponse(
+                """
+                    {
+                      "subAnimalType":"NPC",
+                      "currentFarmId":"farm",
+                      "masterFarmId":"master"
+                    }
+                """.trimIndent()
+            )
+        )
+
+        assertFalse(snapshot.recognized)
+        assertNull(snapshot.npc)
+    }
+
+    @Test
+    fun `非对象动物条目不能形成可执行快照`() {
+        val snapshot = AntFarmNpcPolicy.parseSnapshot(
+            """{"success":true,"subFarmVO":{"farmId":"farm","animals":[1]}}"""
+        )
+
+        assertFalse(snapshot.recognized)
+        assertNull(snapshot.npc)
+    }
+
+    @Test
     fun `奖励阈值只允许尝试领取`() {
         val below = AntFarmNpcPolicy.parseSnapshot(
             farmResponse(npc("target", reward = 87.0))

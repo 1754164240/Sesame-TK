@@ -71,8 +71,7 @@ object ForestTaskPolicy {
         "提现",
         "现金"
     )
-    private val safeSignals = listOf(
-        "ANTFOREST",
+    private val safeAsciiSignals = listOf(
         "BROWSE",
         "VISIT",
         "DAKA",
@@ -80,15 +79,20 @@ object ForestTaskPolicy {
         "READ",
         "ADD_HOME",
         "PUSH_SUBSCRIBE",
-        "GREEN",
-        "WATER",
+        "WATER"
+    )
+    private val safeTextSignals = listOf(
         "浏览",
         "签到",
         "阅读",
         "打卡",
-        "浇水",
-        "绿色"
+        "浇水"
     )
+    private val safeAsciiPatterns = safeAsciiSignals.map { signal ->
+        Regex(
+            "(^|[^A-Z0-9])${Regex.escape(signal)}([^A-Z0-9]|$)"
+        )
+    }
 
     fun parseSnapshot(response: String): ForestTaskSnapshot {
         val root = runCatching { JSONObject(response) }.getOrNull()
@@ -383,9 +387,8 @@ object ForestTaskPolicy {
 
     private fun containsSafeSignal(task: ForestTaskState): Boolean {
         val safeText = "${task.taskType} ${task.title}"
-        return safeSignals.any {
-            safeText.contains(it, ignoreCase = true)
-        }
+        return safeTextSignals.any(safeText::contains) ||
+            safeAsciiPatterns.any { it.containsMatchIn(safeText.uppercase()) }
     }
 
     private fun mergeSign(

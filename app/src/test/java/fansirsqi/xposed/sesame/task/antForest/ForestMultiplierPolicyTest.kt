@@ -41,6 +41,24 @@ class ForestMultiplierPolicyTest {
     }
 
     @Test
+    fun `金球非对象气泡不能解释为明确零收益`() {
+        val result = ForestMultiplierPolicy.parseCollectedEnergy(
+            """{"success":true,"bubbles":[1]}"""
+        )
+
+        assertEquals(CollectedEnergyResult(false, 0), result)
+    }
+
+    @Test
+    fun `金球气泡缺少收益字段时结果不确定`() {
+        val result = ForestMultiplierPolicy.parseCollectedEnergy(
+            """{"success":true,"bubbles":[{"id":"bubble-1"}]}"""
+        )
+
+        assertEquals(CollectedEnergyResult(false, 0), result)
+    }
+
+    @Test
     fun `主页缺少使用中道具字段时状态不确定`() {
         val snapshot = ForestMultiplierPolicy.parseActiveMultiplier(
             """{"success":true}""",
@@ -58,6 +76,34 @@ class ForestMultiplierPolicyTest {
         )
 
         assertEquals(ActiveMultiplierState.CONFIRMED_NONE, snapshot.state)
+    }
+
+    @Test
+    fun `主页非对象道具条目不能解释为明确无生效卡`() {
+        val snapshot = ForestMultiplierPolicy.parseActiveMultiplier(
+            """{"success":true,"usingUserPropsNew":[1]}""",
+            nowMillis = 1_000L
+        )
+
+        assertEquals(ActiveMultiplierState.INCONCLUSIVE, snapshot.state)
+    }
+
+    @Test
+    fun `生效倍卡缺少结束时间时状态不确定`() {
+        val snapshot = ForestMultiplierPolicy.parseActiveMultiplier(
+            """
+                {
+                  "success":true,
+                  "usingUserPropsNew":[{
+                    "propGroup":"robExpandCard",
+                    "propType":"ROB_EXPAND_CARD_1.5"
+                  }]
+                }
+            """.trimIndent(),
+            nowMillis = 1_000L
+        )
+
+        assertEquals(ActiveMultiplierState.INCONCLUSIVE, snapshot.state)
     }
 
     @Test
@@ -97,6 +143,38 @@ class ForestMultiplierPolicyTest {
 
         assertTrue(bag.recognized)
         assertEquals(null, selected)
+    }
+
+    @Test
+    fun `背包非对象条目不能解释为明确无倍卡`() {
+        val snapshot = ForestMultiplierPolicy.parseBag(
+            """{"success":true,"forestPropVOList":[1]}"""
+        )
+
+        assertFalse(snapshot.recognized)
+        assertTrue(snapshot.cards.isEmpty())
+    }
+
+    @Test
+    fun `背包倍卡缺少道具身份时状态不确定`() {
+        val snapshot = ForestMultiplierPolicy.parseBag(
+            """
+                {
+                  "success":true,
+                  "forestPropVOList":[{
+                    "holdsNum":1,
+                    "propConfigVO":{
+                      "propGroup":"robExpandCard",
+                      "propType":"ROB_EXPAND_CARD_1.5",
+                      "propName":"1.5倍收好友能量卡"
+                    }
+                  }]
+                }
+            """.trimIndent()
+        )
+
+        assertFalse(snapshot.recognized)
+        assertTrue(snapshot.cards.isEmpty())
     }
 
     @Test

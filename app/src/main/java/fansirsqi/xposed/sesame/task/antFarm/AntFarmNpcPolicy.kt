@@ -33,13 +33,14 @@ object AntFarmNpcPolicy {
             ?: return FarmNpcSnapshot(false)
         var npc: FarmNpcAnimalSnapshot? = null
         for (index in 0 until animals.length()) {
-            val animal = animals.optJSONObject(index) ?: continue
+            val animal = animals.optJSONObject(index)
+                ?: return FarmNpcSnapshot(false)
             if (!animal.optString("subAnimalType").equals("NPC", true)) {
                 continue
             }
             val animalId = animal.optString("animalId")
             if (animalId.isBlank()) {
-                continue
+                return FarmNpcSnapshot(false)
             }
             npc = FarmNpcAnimalSnapshot(
                 animalId = animalId,

@@ -112,6 +112,9 @@ class ForestTaskPolicyTest {
             state("FOREST_LIGHT_AD_TASK", "TODO", "看广告得能量"),
             state("FOREST_ORDER_TASK", "TODO", "下单得奖励"),
             state("FOREST_RECHARGE_TASK", "TODO", "充值得能量"),
+            state("ANTFOREST_UNKNOWN_TASK", "TODO", "未知绿色任务"),
+            state("SPREAD_TASK", "TODO", "未知任务"),
+            state("WATERMARK_TASK", "TODO", "未知任务"),
             state("UNRECOGNIZED_TASK", "TODO", "神秘任务")
         )
 

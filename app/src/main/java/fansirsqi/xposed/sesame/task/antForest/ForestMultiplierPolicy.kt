@@ -49,8 +49,14 @@ object ForestMultiplierPolicy {
             ?: return CollectedEnergyResult(false, 0)
         var collected = 0
         for (index in 0 until bubbles.length()) {
-            val bubble = bubbles.optJSONObject(index) ?: continue
-            collected += bubble.optInt("collectedEnergy", 0)
+            val bubble = bubbles.optJSONObject(index)
+                ?: return CollectedEnergyResult(false, 0)
+            val bubbleCollected = bubble
+                .takeIf { it.has("collectedEnergy") }
+                ?.optString("collectedEnergy")
+                ?.toIntOrNull()
+                ?: return CollectedEnergyResult(false, 0)
+            collected += bubbleCollected
                 .coerceAtLeast(0)
         }
         return CollectedEnergyResult(true, collected)
@@ -75,13 +81,15 @@ object ForestMultiplierPolicy {
         val props = findUsingProps(payload)
             ?: return inconclusiveActive()
         for (index in 0 until props.length()) {
-            val prop = props.optJSONObject(index) ?: continue
+            val prop = props.optJSONObject(index)
+                ?: return inconclusiveActive()
             val propType = prop.optString("propType")
             val propGroup = prop.optString("propGroup")
             if (!isMultiplierProp(propGroup, propType)) {
                 continue
             }
-            val endTime = prop.optLong("endTime", 0L)
+            val endTime = prop.optString("endTime").toLongOrNull()
+                ?: return inconclusiveActive()
             if (endTime <= nowMillis) {
                 continue
             }
@@ -112,8 +120,10 @@ object ForestMultiplierPolicy {
             ?: return MultiplierBagSnapshot(false, emptyList())
         val cards = mutableListOf<MultiplierCardCandidate>()
         for (index in 0 until props.length()) {
-            val prop = props.optJSONObject(index) ?: continue
-            val config = prop.optJSONObject("propConfigVO") ?: continue
+            val prop = props.optJSONObject(index)
+                ?: return MultiplierBagSnapshot(false, emptyList())
+            val config = prop.optJSONObject("propConfigVO")
+                ?: return MultiplierBagSnapshot(false, emptyList())
             val propType = config.optString("propType")
                 .ifBlank { prop.optString("propType") }
             val propGroup = config.optString("propGroup")
@@ -121,10 +131,17 @@ object ForestMultiplierPolicy {
             if (!isMultiplierProp(propGroup, propType)) {
                 continue
             }
-            val propIds = prop.optJSONArray("propIdList") ?: continue
+            if (!prop.has("holdsNum")) {
+                return MultiplierBagSnapshot(false, emptyList())
+            }
+            val propIds = prop.optJSONArray("propIdList")
+                ?: return MultiplierBagSnapshot(false, emptyList())
             val propId = propIds.optString(0)
-            if (prop.optInt("holdsNum", 0) <= 0 || propId.isBlank()) {
+            if (prop.optInt("holdsNum", 0) <= 0) {
                 continue
+            }
+            if (propId.isBlank()) {
+                return MultiplierBagSnapshot(false, emptyList())
             }
             cards += MultiplierCardCandidate(
                 propId = propId,
