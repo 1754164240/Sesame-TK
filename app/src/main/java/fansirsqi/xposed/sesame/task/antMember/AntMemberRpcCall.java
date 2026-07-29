@@ -102,9 +102,49 @@ public class AntMemberRpcCall {
     }
 
     /**
+     * 查询会员任务的全部状态。
+     */
+    public static String queryAllStatusTaskList() {
+        return RequestManager.requestString(
+                "com.alipay.amic.memtask.h5.MemTaskListQueryFacade.queryAllStatusTaskList",
+                MemberTaskProtocol.buildAllStatusTaskListArgs().toString()
+        );
+    }
+
+    /**
+     * 查询普通会员任务详情。
+     */
+    public static String querySingleTaskProcessDetail(String taskProcessId) {
+        return RequestManager.requestString(
+                "com.alipay.amic.memtask.h5.MemTaskListQueryFacade.querySingleTaskProcessDetail",
+                MemberTaskProtocol.buildSingleTaskDetailArgs(taskProcessId).toString()
+        );
+    }
+
+    /**
+     * 查询会员广告任务详情。
+     */
+    public static String querySingleAdTaskProcessDetail(String configId, String adBizId) {
+        return RequestManager.requestString(
+                "com.alipay.amic.memtask.h5.MemTaskListQueryFacade.querySingleTaskProcessDetail",
+                MemberTaskProtocol.buildSingleAdTaskDetailArgs(configId, adBizId).toString()
+        );
+    }
+
+    /**
      * 领取单个会员广告任务。
      */
     public static String applyMemberAdTask(MemberAdTask task) {
+        return RequestManager.requestString(
+                "com.alipay.amic.memtask.h5.MemTaskAdFacade.applyAdTask",
+                MemberTaskProtocol.buildApplyAdTaskArgs(task).toString()
+        );
+    }
+
+    /**
+     * 按合并后的会员任务状态领取广告任务。
+     */
+    public static String applyMemberAdTask(MemberTaskState task) {
         return RequestManager.requestString(
                 "com.alipay.amic.memtask.h5.MemTaskAdFacade.applyAdTask",
                 MemberTaskProtocol.buildApplyAdTaskArgs(task).toString()
@@ -122,9 +162,29 @@ public class AntMemberRpcCall {
     }
 
     /**
+     * 按合并后的会员任务状态领取普通任务。
+     */
+    public static String applyMemberTask(MemberTaskState task) {
+        return RequestManager.requestString(
+                "com.alipay.amic.memtask.h5.MemTaskManagerFacade.applyTask",
+                MemberTaskProtocol.buildApplyTaskArgs(task).toString()
+        );
+    }
+
+    /**
      * 完成普通会员浏览任务。
      */
     public static String executeMemberTask(MemberBrowseTask task) {
+        return RequestManager.requestString(
+                "com.alipay.amic.memtask.h5.MemTaskManagerFacade.executeTask",
+                MemberTaskProtocol.buildExecuteTaskArgs(task, System.currentTimeMillis()).toString()
+        );
+    }
+
+    /**
+     * 按合并后的会员任务状态完成普通浏览任务。
+     */
+    public static String executeMemberTask(MemberTaskState task) {
         return RequestManager.requestString(
                 "com.alipay.amic.memtask.h5.MemTaskManagerFacade.executeTask",
                 MemberTaskProtocol.buildExecuteTaskArgs(task, System.currentTimeMillis()).toString()
@@ -275,6 +335,81 @@ public class AntMemberRpcCall {
     }
 
     /**
+     * 查询 P2E 首页签到、免费抽金币和资产状态。
+     */
+    public static String queryGameCenterP2eHomePage() {
+        return RequestManager.requestString(
+                "com.alipay.gamecenteruprod.biz.rpc.p2e.queryHomePage",
+                GameCenterP2eProtocol.buildHomeArgs().toString());
+    }
+
+    /**
+     * 查询 P2E 平台任务列表。
+     */
+    public static String queryGameCenterP2eTaskList(String sessionId) {
+        return RequestManager.requestString(
+                "com.alipay.gamecenteruprod.biz.rpc.p2e.queryTaskList",
+                GameCenterP2eProtocol.buildTaskListArgs(sessionId).toString());
+    }
+
+    /**
+     * 报名安全的 P2E 平台浏览任务。
+     */
+    public static String gameCenterP2ePlatformTaskSignUp(JSONObject task) {
+        return RequestManager.requestString(
+                "com.alipay.gamecenteruprod.biz.rpc.platformTaskSignUp",
+                GameCenterP2eProtocol.buildPlatformTaskArgs(task).toString());
+    }
+
+    /**
+     * 完成安全的 P2E 平台浏览任务。
+     */
+    public static String gameCenterP2ePlatformTaskComplete(JSONObject task) {
+        return RequestManager.requestString(
+                "com.alipay.gamecenteruprod.biz.rpc.platformTaskComplete",
+                GameCenterP2eProtocol.buildPlatformTaskArgs(task).toString());
+    }
+
+    /**
+     * 领取已经完成的安全 P2E 平台任务奖励。
+     */
+    public static String gameCenterP2eTaskReceive(JSONObject task) {
+        return RequestManager.requestString(
+                "com.alipay.gamecenteruprod.biz.rpc.p2e.gameP2eTaskReceive",
+                GameCenterP2eProtocol.buildReceiveTaskArgs(task).toString());
+    }
+
+    /**
+     * 执行 P2E 每日签到。
+     */
+    public static String gameCenterP2eSignIn(GameCenterP2eSignInSnapshot snapshot) {
+        return RequestManager.requestString(
+                "com.alipay.gamecenteruprod.biz.rpc.p2e.signIn",
+                GameCenterP2eProtocol.buildSignInArgs(
+                        snapshot.getDate(),
+                        snapshot.getIndex(),
+                        snapshot.getSignSequenceId()).toString());
+    }
+
+    /**
+     * 执行 P2E 免费抽金币。
+     */
+    public static String drawGameCenterP2eGold() {
+        return RequestManager.requestString(
+                "com.alipay.gamecenteruprod.biz.rpc.p2e.drawGold",
+                GameCenterP2eProtocol.buildSimpleArgs().toString());
+    }
+
+    /**
+     * 只读查询 P2E 现金档位，不提供兑换或提现方法。
+     */
+    public static String queryGameCenterP2eGoldExchangePrizePage() {
+        return RequestManager.requestString(
+                "com.alipay.gamecenteruprod.biz.rpc.p2e.queryGoldExgPrizePage",
+                GameCenterP2eProtocol.buildSimpleArgs().toString());
+    }
+
+    /**
      * 芝麻信用首页
      */
     public static String queryHome() {
@@ -363,6 +498,32 @@ public class AntMemberRpcCall {
         return RequestManager.requestString(
                 "com.antgroup.zmxy.zmcustprod.biz.rpc.home.creditaccumulate.api.CreditAccumulateRpcManager.collectCreditFeedback",
                 "[{\"collectAll\":false,\"creditFeedbackId\":\"" + creditFeedbackId + "\",\"status\":\"UNCLAIMED\"}]");
+    }
+
+    static String buildAlchemyQueryEntryListArgs() {
+        try {
+            JSONObject args = new JSONObject();
+            args.put("version", Zmxy.Version);
+            return new JSONArray().put(args).toString();
+        } catch (JSONException e) {
+            throw new IllegalStateException("构造芝麻炼金入口查询参数失败", e);
+        }
+    }
+
+    static String buildAlchemyClaimAwardArgs(String awardId) {
+        try {
+            JSONObject args = new JSONObject();
+            if (awardId != null && !awardId.isBlank()) {
+                args.put("awardId", awardId);
+            }
+            return new JSONArray().put(args).toString();
+        } catch (JSONException e) {
+            throw new IllegalStateException("构造芝麻炼金次日奖励参数失败", e);
+        }
+    }
+
+    static String buildAlchemyWithdrawPreConsultArgs() {
+        return new JSONArray().put(JSONObject.NULL).toString();
     }
 
     /**
@@ -946,6 +1107,15 @@ public class AntMemberRpcCall {
         return RequestManager.requestString("alipay.memberasset.sticker.receiveSticker", data);
     }
 
+    /**
+     * 只读查询账单拼贴世界首页。
+     */
+    public static String queryBillBlockWorldHome() {
+        return RequestManager.requestString(
+                "alipay.memberasset.block.queryBlockHome",
+                "[{}]");
+    }
+
 
     //芝麻信誉 部分
     public static class Zmxy {
@@ -1160,6 +1330,16 @@ public class AntMemberRpcCall {
 
         public static class Alchemy {
             /**
+             * 查询芝麻炼金入口及次日奖励状态。
+             */
+            public static String alchemyQueryEntryList() {
+                return RequestManager.requestString(
+                        "com.antgroup.zmxy.zmmemberop.biz.rpc.AlchemyRpcManager.queryEntryList",
+                        AntMemberRpcCall.buildAlchemyQueryEntryListArgs()
+                );
+            }
+
+            /**
              * 芝麻炼金/积分首页
              */
             public static String alchemyQueryHome() {
@@ -1248,9 +1428,23 @@ public class AntMemberRpcCall {
              * Method: com.antgroup.zmxy.zmmemberop.biz.rpc.AlchemyRpcManager.claimAward
              */
             public static String claimAward() {
+                return claimAward("");
+            }
+
+            public static String claimAward(String awardId) {
                 return RequestManager.requestString(
                         "com.antgroup.zmxy.zmmemberop.biz.rpc.AlchemyRpcManager.claimAward",
-                        "[{}]"
+                        AntMemberRpcCall.buildAlchemyClaimAwardArgs(awardId)
+                );
+            }
+
+            /**
+             * 只查询满级红包资格，不执行提现或领取。
+             */
+            public static String alchemyWithdrawPreConsult() {
+                return RequestManager.requestString(
+                        "com.antgroup.zmxy.zmmemberop.biz.rpc.AlchemyRpcManager.withdrawPreConsult",
+                        AntMemberRpcCall.buildAlchemyWithdrawPreConsultArgs()
                 );
             }
         }

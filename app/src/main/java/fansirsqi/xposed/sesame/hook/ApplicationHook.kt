@@ -29,6 +29,8 @@ import fansirsqi.xposed.sesame.hook.internal.SecurityBodyHelper
 import fansirsqi.xposed.sesame.hook.keepalive.SmartSchedulerManager
 import fansirsqi.xposed.sesame.hook.keepalive.SmartSchedulerManager.cleanup
 import fansirsqi.xposed.sesame.hook.keepalive.SmartSchedulerManager.schedule
+import fansirsqi.xposed.sesame.hook.keepalive.PersistentSchedulerContract
+import fansirsqi.xposed.sesame.hook.keepalive.PersistentSchedulerRuntime
 import fansirsqi.xposed.sesame.hook.modern.ModernXposedRuntime
 import fansirsqi.xposed.sesame.hook.modern.ReflectionHelper
 import fansirsqi.xposed.sesame.hook.rpc.bridge.NewRpcBridge
@@ -44,6 +46,8 @@ import fansirsqi.xposed.sesame.model.BaseModel.Companion.debugMode
 import fansirsqi.xposed.sesame.model.BaseModel.Companion.destroyData
 import fansirsqi.xposed.sesame.model.BaseModel.Companion.execAtTimeList
 import fansirsqi.xposed.sesame.model.BaseModel.Companion.newRpc
+import fansirsqi.xposed.sesame.model.BaseModel.Companion.allowPersistentForegroundLaunch
+import fansirsqi.xposed.sesame.model.BaseModel.Companion.persistentSchedulerEnabled
 import fansirsqi.xposed.sesame.model.BaseModel.Companion.sendHookData
 import fansirsqi.xposed.sesame.model.BaseModel.Companion.sendHookDataUrl
 import fansirsqi.xposed.sesame.model.BaseModel.Companion.wakenAtTimeList
@@ -95,6 +99,7 @@ class ApplicationHook {
         const val STATUS: String = "com.eg.android.AlipayGphone.sesame.status"
         const val RPC_TEST: String = "com.eg.android.AlipayGphone.sesame.rpctest"
         const val MANUAL_TASK: String = "com.eg.android.AlipayGphone.sesame.manual_task"
+        const val EXECUTE: String = PersistentSchedulerContract.ACTION_EXECUTE
     }
 
     private object AlipayClasses {
@@ -406,12 +411,29 @@ class ApplicationHook {
         }
     }
 
+    internal class PersistentExecuteReceiver : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent) {
+            if (intent.action != BroadcastActions.EXECUTE) return
+            execute {
+                val accepted = PersistentSchedulerRuntime.handleExecutionRequest(
+                    intent.getStringExtra(PersistentSchedulerContract.EXTRA_DEDUPE_KEY),
+                    intent.getLongExtra(PersistentSchedulerContract.EXTRA_GENERATION, 0L),
+                    intent.getStringExtra(PersistentSchedulerContract.EXTRA_OWNER_USER_ID)
+                )
+                if (!accepted) {
+                    record(TAG, "忽略无效或过期的持久调度执行请求")
+                }
+            }
+        }
+    }
+
     companion object {
         const val TAG: String = "ApplicationHook" // 简化TAG
         var finalProcessName: String? = ""
 
         // 广播接收器实例，用于注销
         private var mBroadcastReceiver: AlipayBroadcastReceiver? = null
+        private var persistentExecuteReceiver: PersistentExecuteReceiver? = null
 
         @JvmField
         var classLoader: ClassLoader? = null
@@ -531,6 +553,12 @@ class ApplicationHook {
                 val execAtTimeList = execAtTimeList.value
                 if (execAtTimeList != null && execAtTimeList.contains("-1")) {
                     record(TAG, "定时执行未开启")
+                    PersistentSchedulerRuntime.targetController()?.let { controller ->
+                        execute {
+                            runCatching { controller.cancelPoll() }
+                                .onFailure { Log.printStackTrace(TAG, "取消持久轮询失败", it) }
+                        }
+                    }
                     return
                 }
                 var delayMillis = checkInterval.toLong()
@@ -549,9 +577,26 @@ class ApplicationHook {
                     }
                 }
                 nextExecutionTime = if (targetTime > 0) targetTime else (lastTime + delayMillis)
-                ensureScheduler()
-                schedule(delayMillis, "轮询任务") {
-                    execHandler()
+                val legacySchedule = {
+                    ensureScheduler()
+                    schedule(delayMillis, "轮询任务") {
+                        execHandler()
+                    }
+                    Unit
+                }
+                val controller = PersistentSchedulerRuntime.targetController()
+                if (controller == null) {
+                    legacySchedule()
+                } else {
+                    val ownerUserId = HookUtil.getUserId(classLoader!!)
+                    execute {
+                        runCatching {
+                            controller.schedulePoll(nextExecutionTime, ownerUserId, legacySchedule)
+                        }.onFailure {
+                            Log.printStackTrace(TAG, "注册持久轮询失败，回退进程内调度", it)
+                            legacySchedule()
+                        }
+                    }
                 }
             } catch (e: Exception) {
                 Log.printStackTrace(TAG, "scheduleNextExecution failed", e)
@@ -568,10 +613,10 @@ class ApplicationHook {
                 if (BuildConfig.DEBUG) {
                     try {
                         startIfNeeded(8080, "ET3vB^#td87sQqKaY*eMUJXP", processName, General.PACKAGE_NAME)
-                        registerBroadcastReceiver(appContext!!)
                     } catch (_: Throwable) { /* ignore */
                     }
                 }
+                registerBroadcastReceiver(appContext!!)
 
                 ensureScheduler()
                 Model.initAllModel()
@@ -588,6 +633,20 @@ class ApplicationHook {
 
                 Config.load(userId)
                 if (!Config.isLoaded()) return false
+
+                PersistentSchedulerRuntime.initializeTarget(
+                    context = appContext!!,
+                    currentOwnerProvider = {
+                        classLoader?.let { HookUtil.getUserId(it) }
+                    },
+                    requestExecution = {
+                        val task = mainTask ?: return@initializeTarget false
+                        task.startTask(false)
+                        true
+                    },
+                    enabled = { persistentSchedulerEnabled.value == true },
+                    allowForegroundLaunch = { allowPersistentForegroundLaunch.value == true }
+                )
 
                 Notify.start(service!!)
                 setWakenAtTimeAlarm()
@@ -617,6 +676,13 @@ class ApplicationHook {
                 offline = false
                 RequestManager.onRpcBridgeReady()
                 init = true
+                execute {
+                    runCatching {
+                        PersistentSchedulerRuntime.targetController()?.reconcile()
+                    }.onFailure {
+                        Log.printStackTrace(TAG, "恢复持久调度失败", it)
+                    }
+                }
                 execHandler()
                 return true
             } catch (th: Throwable) {
@@ -752,10 +818,37 @@ class ApplicationHook {
         // --- 定时唤醒 ---
         private fun setWakenAtTimeAlarm() {
             if (appContext == null) return
-            ensureScheduler()
+            val configuredTimes = wakenAtTimeList.value?.toList()
+            val nowMillis = System.currentTimeMillis()
+            val legacySchedule = {
+                scheduleLegacyWakenAtTimeAlarm(configuredTimes)
+                Unit
+            }
+            val controller = PersistentSchedulerRuntime.targetController()
+            if (controller == null) {
+                legacySchedule()
+                return
+            }
 
-            val wakenAtTimeList = wakenAtTimeList.value
-            if (wakenAtTimeList != null && wakenAtTimeList.contains("-1")) return
+            val ownerUserId = classLoader?.let { HookUtil.getUserId(it) }
+            execute {
+                runCatching {
+                    controller.replaceWakeSchedules(
+                        nowMillis,
+                        configuredTimes,
+                        ownerUserId,
+                        legacySchedule
+                    )
+                }.onFailure {
+                    Log.printStackTrace(TAG, "注册持久唤醒失败，回退进程内调度", it)
+                    legacySchedule()
+                }
+            }
+        }
+
+        private fun scheduleLegacyWakenAtTimeAlarm(wakenAtTimeList: Collection<String>?) {
+            ensureScheduler()
+            if (wakenAtTimeList?.contains("-1") == true) return
 
             // 1. 每日0点
             val calendar = Calendar.getInstance()
@@ -804,7 +897,7 @@ class ApplicationHook {
                 filter.addAction(BroadcastActions.MANUAL_TASK)
 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    context.registerReceiver(mBroadcastReceiver, filter, Context.RECEIVER_EXPORTED)
+                    context.registerReceiver(mBroadcastReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
                 } else {
                     ContextCompat.registerReceiver(
                         context,
@@ -813,22 +906,39 @@ class ApplicationHook {
                         ContextCompat.RECEIVER_NOT_EXPORTED
                     )
                 }
+
+                persistentExecuteReceiver = PersistentExecuteReceiver()
+                ContextCompat.registerReceiver(
+                    context,
+                    persistentExecuteReceiver,
+                    IntentFilter(BroadcastActions.EXECUTE),
+                    ContextCompat.RECEIVER_EXPORTED
+                )
                 record(TAG, "BroadcastReceiver registered")
             } catch (th: Throwable) {
+                runCatching {
+                    mBroadcastReceiver?.let(context::unregisterReceiver)
+                }
+                runCatching {
+                    persistentExecuteReceiver?.let(context::unregisterReceiver)
+                }
                 mBroadcastReceiver = null
+                persistentExecuteReceiver = null
                 printStackTrace(TAG, "Register Receiver failed", th)
             }
         }
 
         fun unregisterBroadcastReceiver(context: Context?) {
-            if (mBroadcastReceiver == null || context == null) return
+            if (context == null) return
             try {
-                context.unregisterReceiver(mBroadcastReceiver)
+                mBroadcastReceiver?.let(context::unregisterReceiver)
+                persistentExecuteReceiver?.let(context::unregisterReceiver)
                 record(TAG, "BroadcastReceiver unregistered")
             } catch (_: Throwable) {
                 // ignore: receiver not registered
             } finally {
                 mBroadcastReceiver = null
+                persistentExecuteReceiver = null
             }
         }
     }

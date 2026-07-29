@@ -1,9 +1,13 @@
 package fansirsqi.xposed.sesame.task.antOrchard
 
 import fansirsqi.xposed.sesame.hook.RequestManager
+import org.json.JSONArray
+import org.json.JSONObject
 
 object AntOrchardRpcCall {
-    private const val VERSION = "20251209.01"
+    private const val VERSION = "20260721.01"
+    private const val CHARITY_GAME_CENTER_VERSION = "10.8.20"
+    private const val ENTRY_SOURCE = "ch_appcenter__chsub_9patch"
 
     fun orchardIndex(): String {
         return RequestManager.requestString("com.alipay.antfarm.orchardIndex",
@@ -91,10 +95,28 @@ object AntOrchardRpcCall {
         )
     }
 
-    fun orchardListTask(): String {
+    internal fun buildOrchardListTaskArgs(
+        source: String = ENTRY_SOURCE
+    ): String {
+        val args = JSONObject().apply {
+            put("addWidget", false)
+            put("appMode", "normal")
+            put("enableSwitchSceneList", JSONArray().put("main").put("yeb"))
+            put("enableTeamType", JSONArray().put("help").put("team"))
+            put("hasYebActivityEntrance", true)
+            put("plantHiddenMMC", "false")
+            put("requestType", "NORMAL")
+            put("sceneCode", "ORCHARD")
+            put("source", source)
+            put("version", VERSION)
+        }
+        return JSONArray().put(args).toString()
+    }
+
+    fun orchardListTask(source: String = ENTRY_SOURCE): String {
         return RequestManager.requestString(
             "com.alipay.antfarm.orchardListTask",
-            "[{\"plantHiddenMMC\":\"false\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"zhifujianglizhitiao1000\",\"version\":\"$VERSION\"}]"
+            buildOrchardListTaskArgs(source)
         )
     }
 
@@ -105,17 +127,85 @@ object AntOrchardRpcCall {
         )
     }
 
-    fun finishTask(userId: String, sceneCode: String, taskType: String): String {
+    fun finishTask(
+        userId: String,
+        sceneCode: String,
+        taskType: String,
+        source: String = ENTRY_SOURCE
+    ): String {
         return RequestManager.requestString(
             "com.alipay.antiep.finishTask",
-            "[{\"outBizNo\":\"${userId}${System.currentTimeMillis()}\",\"requestType\":\"NORMAL\",\"sceneCode\":\"$sceneCode\",\"source\":\"ch_appcenter__chsub_9patch\",\"taskType\":\"$taskType\",\"userId\":\"$userId\",\"version\":\"$VERSION\"}]"
+            "[{\"outBizNo\":\"${userId}${System.currentTimeMillis()}\",\"requestType\":\"NORMAL\",\"sceneCode\":\"$sceneCode\",\"source\":\"$source\",\"taskType\":\"$taskType\",\"userId\":\"$userId\",\"version\":\"$VERSION\"}]"
         )
     }
 
-    fun triggerTbTask(taskId: String, taskPlantType: String): String {
+    fun triggerTbTask(
+        taskId: String,
+        taskPlantType: String,
+        source: String = ENTRY_SOURCE
+    ): String {
         return RequestManager.requestString(
             "com.alipay.antfarm.triggerTbTask",
-            "[{\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"ch_appcenter__chsub_9patch\",\"taskId\":\"$taskId\",\"taskPlantType\":\"$taskPlantType\",\"version\":\"$VERSION\"}]"
+            "[{\"requestType\":\"NORMAL\",\"sceneCode\":\"ORCHARD\",\"source\":\"$source\",\"taskId\":\"$taskId\",\"taskPlantType\":\"$taskPlantType\",\"version\":\"$VERSION\"}]"
+        )
+    }
+
+    internal fun buildQueryOptionalPlayArgs(): String {
+        val args = JSONObject().apply {
+            put("bizType", "ANTORCHARD")
+            put(
+                "commonDegradeFilterRequest",
+                JSONObject().apply {
+                    put("appMode", "normal")
+                    put("deviceLevel", "high")
+                    put("h5Version", VERSION)
+                    put("unityDeviceLevel", "high")
+                }
+            )
+            put(
+                "playTypeList",
+                JSONArray().put("TOP_UP_COUPON").put("TASK_TRIGGER")
+            )
+            put("requestType", "RPC")
+            put("sceneCode", "ORCHARD")
+            put("source", "H5")
+            put("version", CHARITY_GAME_CENTER_VERSION)
+        }
+        return JSONArray().put(args).toString()
+    }
+
+    fun queryOptionalPlay(): String {
+        return RequestManager.requestString(
+            "com.alipay.charitygamecenter.queryOptionalPlay",
+            buildQueryOptionalPlayArgs()
+        )
+    }
+
+    internal fun buildLeyuanClaimArgs(
+        sceneCode: String,
+        taskType: String,
+        awardCount: Int
+    ): String {
+        val args = JSONObject().apply {
+            put("awardCountForReceive", awardCount)
+            put("ignoreLimit", true)
+            put("requestType", "RPC")
+            put("sceneCode", sceneCode)
+            put("source", "antorchard")
+            put("taskType", taskType)
+            put("version", VERSION)
+        }
+        return JSONArray().put(args).toString()
+    }
+
+    fun receiveLeyuanTaskAward(
+        sceneCode: String,
+        taskType: String,
+        awardCount: Int
+    ): String {
+        return RequestManager.requestString(
+            "com.alipay.antieptask.receiveTaskAwardantorchard",
+            buildLeyuanClaimArgs(sceneCode, taskType, awardCount)
         )
     }
 

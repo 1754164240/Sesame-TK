@@ -35,9 +35,6 @@ class CoroutineTaskRunner(allModels: List<Model>) {
 
     companion object {
         private const val TAG = "CoroutineTaskRunner"
-        // 最大并发数，防止请求过于频繁触发风控
-        // 可以做成配置项，目前硬编码为 3
-        private const val MAX_CONCURRENCY = 3
     }
 
     private val taskList: List<ModelTask> = allModels.filterIsInstance<ModelTask>()
@@ -68,7 +65,8 @@ class CoroutineTaskRunner(allModels: List<Model>) {
         }
 
         try {
-            Log.record(TAG, "🚀 开始执行任务流程 (并发数: $MAX_CONCURRENCY)")
+            val taskConcurrency = ConcurrencyPolicy.task(BaseModel.taskConcurrency.value)
+            Log.record(TAG, "🚀 开始执行任务流程 (并发数: $taskConcurrency)")
 
             CustomSettings.loadForTaskRunner()
             val status = CustomSettings.getOnceDailyStatus(enableLog = true)
@@ -76,7 +74,7 @@ class CoroutineTaskRunner(allModels: List<Model>) {
             // 执行多轮任务
             repeat(rounds) { roundIndex ->
                 val round = roundIndex + 1
-                executeRound(round, rounds, status)
+                executeRound(round, rounds, status, taskConcurrency)
             }
 
             if (CustomSettings.onlyOnceDaily.value) {
@@ -108,7 +106,12 @@ class CoroutineTaskRunner(allModels: List<Model>) {
     /**
      * 执行一轮任务 (并发模式)
      */
-    private suspend fun executeRound(round: Int, totalRounds: Int, status: CustomSettings.OnceDailyStatus) = coroutineScope {
+    private suspend fun executeRound(
+        round: Int,
+        totalRounds: Int,
+        status: CustomSettings.OnceDailyStatus,
+        taskConcurrency: Int
+    ) = coroutineScope {
         val roundStartTime = System.currentTimeMillis()
 
         // 1. 筛选任务
@@ -125,7 +128,7 @@ class CoroutineTaskRunner(allModels: List<Model>) {
 
         // 2. 并发执行
         // 使用 Semaphore 限制并发数量
-        val semaphore = Semaphore(MAX_CONCURRENCY)
+        val semaphore = Semaphore(taskConcurrency)
 
         // 创建所有任务的 Deferred 对象
         val deferreds = tasksToRun.map { task ->

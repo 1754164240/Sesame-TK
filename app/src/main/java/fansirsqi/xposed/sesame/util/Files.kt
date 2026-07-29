@@ -3,6 +3,7 @@
 package fansirsqi.xposed.sesame.util
 
 import android.annotation.SuppressLint
+import android.content.Context
 import android.os.Environment
 import fansirsqi.xposed.sesame.data.General
 import java.io.Closeable
@@ -83,6 +84,11 @@ object Files {
     @JvmStatic
     fun getDefaultConfigV2File(): File {
         return File(CONFIG_DIR, "config_v2.json")
+    }
+
+    @JvmStatic
+    fun getPersistentScheduleFile(context: Context): File {
+        return File(context.filesDir, "persistent-schedules.json")
     }
 
     @JvmStatic

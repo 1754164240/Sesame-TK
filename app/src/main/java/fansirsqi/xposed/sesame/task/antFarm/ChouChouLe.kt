@@ -210,9 +210,9 @@ class ChouChouLe {
         try {
             val taskName = if (drawType == "ipDraw") "IP抽抽乐" else "抽抽乐"
 
-            // 特殊任务：浏览广告
-            if (task.taskId == "SHANGYEHUA_DAILY_DRAW_TIMES" || task.taskId == "IP_SHANGYEHUA_TASK") {
-                return handleAdTask(drawType, task)
+            if (!AntFarmRewardPolicy.shouldExecuteChouTask(task.taskId)) {
+                Log.record(TAG, "$taskName 广告任务已按安全策略跳过: ${task.title}")
+                return false
             }
 
             // 普通任务

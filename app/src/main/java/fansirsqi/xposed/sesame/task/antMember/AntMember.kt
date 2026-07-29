@@ -61,6 +61,7 @@ class AntMember : ModelTask() {
 
     private var memberSign: BooleanModelField? = null
     private var memberTask: BooleanModelField? = null
+    private var yebExpGold: BooleanModelField? = null
     private var memberPointExchangeBenefit: BooleanModelField? = null
     private var memberPointExchangeBenefitList: SelectModelField? = null
     private var collectSesame: BooleanModelField? = null
@@ -68,6 +69,7 @@ class AntMember : ModelTask() {
     private var sesameTask: BooleanModelField? = null
     private var collectInsuredGold: BooleanModelField? = null
     private var enableGameCenter: BooleanModelField? = null
+    private var enableGameCenterP2e: BooleanModelField? = null
     private var merchantSign: BooleanModelField? = null
     private var merchantKmdk: BooleanModelField? = null
     private var merchantMoreTask: BooleanModelField? = null
@@ -91,6 +93,7 @@ class AntMember : ModelTask() {
 
     /** 账单 贴纸 功能开关 */
     private var collectStickers: BooleanModelField? = null
+    private var queryBillBlockWorld: BooleanModelField? = null
 
     // 【新增】芝麻粒兑换
     private var sesameGrainExchange: BooleanModelField? = null
@@ -104,6 +107,15 @@ class AntMember : ModelTask() {
         modelFields.addField(BooleanModelField("memberTask", "会员任务", false).also {
             memberTask = it
         })
+        modelFields.addField(
+            BooleanModelField(
+                "yebExpGold",
+                "余额宝体验金",
+                false
+            ).also {
+                yebExpGold = it
+            }
+        )
 
 
 
@@ -177,6 +189,13 @@ class AntMember : ModelTask() {
         })
         modelFields.addField(
             BooleanModelField(
+                "enableGameCenterP2e",
+                "游戏中心|P2E免费任务",
+                false
+            ).also { enableGameCenterP2e = it }
+        )
+        modelFields.addField(
+            BooleanModelField(
                 "merchantSign", "商家服务|签到", false
             ).also { merchantSign = it })
         modelFields.addField(
@@ -205,6 +224,13 @@ class AntMember : ModelTask() {
 
         collectStickers = BooleanModelField("CollectStickers", "领取贴纸", false)
         modelFields.addField(collectStickers)
+        modelFields.addField(
+            BooleanModelField(
+                "queryBillBlockWorld",
+                "账单拼贴世界|状态查询",
+                false
+            ).also { queryBillBlockWorld = it }
+        )
 
 
 
@@ -230,6 +256,12 @@ class AntMember : ModelTask() {
 
                 if (memberTask!!.value) {
                     deferredTasks.add(async(Dispatchers.IO) { doAllMemberAvailableTask() })
+                }
+
+                if (yebExpGold!!.value) {
+                    deferredTasks.add(async(Dispatchers.IO) {
+                        runYebExpGoldWorkflow()
+                    })
                 }
 
                 if (memberPointExchangeBenefit!!.value) {
@@ -299,6 +331,9 @@ class AntMember : ModelTask() {
                 if (enableGameCenter!!.value) {
                     deferredTasks.add(async(Dispatchers.IO) { enableGameCenter() })
                 }
+                if (enableGameCenterP2e!!.value) {
+                    deferredTasks.add(async(Dispatchers.IO) { enableGameCenterP2e() })
+                }
 
                 if (beanSignIn!!.value) {
                     deferredTasks.add(async(Dispatchers.IO) { beanSignIn() })
@@ -347,6 +382,9 @@ class AntMember : ModelTask() {
                 if (collectStickers!!.value) {
                     queryAndCollectStickers()
                 }
+                if (queryBillBlockWorld!!.value) {
+                    queryBillBlockWorld()
+                }
 
 
                 // 等待所有异步任务完成
@@ -357,6 +395,26 @@ class AntMember : ModelTask() {
             } finally {
                 record(TAG, "执行结束-$name")
             }
+        }
+    }
+
+    private suspend fun runYebExpGoldWorkflow() {
+        val result = YebExpGoldWorkflow(
+            queryMain = YebExpGoldRpcCall::queryMain,
+            signIn = YebExpGoldRpcCall::signIn,
+            queryVouchers = YebExpGoldRpcCall::queryVouchers,
+            convertVouchers = YebExpGoldRpcCall::convertVouchers
+        ).run()
+        when {
+            result.retryable ->
+                record(TAG, "余额宝体验金状态未确认，保留后续重试")
+
+            result.signIn == YebExpGoldStepResult.CONFIRMED ||
+                result.voucher == YebExpGoldStepResult.CONFIRMED ->
+                record(TAG, "余额宝体验金动作已由服务端回查确认")
+
+            else ->
+                record(TAG, "余额宝体验金暂无待处理项目")
         }
     }
 
@@ -1058,66 +1116,92 @@ class AntMember : ModelTask() {
             processMemberTreasureBox()
             processLimitedGameVisit()
 
-            val beforeProgress = queryMemberTaskProgress()
-            if (beforeProgress?.completed == true) {
-                record(
-                    TAG,
-                    "会员任务🎖️[今日已完成]#${beforeProgress.currentCount}/${beforeProgress.targetCount}个"
-                )
-                return@run
-            }
-
-            val queryResponse = JSONObject(AntMemberRpcCall.querySignPageTaskList())
-            if (!ResChecker.checkRes("$TAG.querySignPageTaskList", queryResponse)) {
+            val progressResponse = AntMemberRpcCall.queryMemberTaskProgress()
+            val beforeProgress = parseMemberTaskProgress(progressResponse)
+            val workflow = MemberTaskWorkflow(
+                queryTaskSources = {
+                    listOf(
+                        AntMemberRpcCall.querySignPageTaskList(),
+                        AntMemberRpcCall.queryAllStatusTaskList(),
+                        progressResponse
+                    )
+                },
+                applyTask = { task ->
+                    if (task.adBizId.isNotBlank()) {
+                        AntMemberRpcCall.applyMemberAdTask(task)
+                    } else {
+                        AntMemberRpcCall.applyMemberTask(task)
+                    }
+                },
+                executeTask = { task ->
+                    AntMemberRpcCall.executeMemberTask(task)
+                },
+                finishAdTask = { task ->
+                    if (task.adBizId.isBlank()) "" else AntMemberRpcCall.taskFinish(task.adBizId)
+                },
+                queryTaskDetail = { task ->
+                    when {
+                        task.adBizId.isNotBlank() && task.configId.isNotBlank() ->
+                            AntMemberRpcCall.querySingleAdTaskProcessDetail(
+                                task.configId,
+                                task.adBizId
+                            )
+                        task.processId.isNotBlank() ->
+                            AntMemberRpcCall.querySingleTaskProcessDetail(task.processId)
+                        else -> ""
+                    }
+                },
+                pauseBeforeCompletion = { waitMillis -> delay(waitMillis) },
+                isTaskBlocked = { task -> isTaskInBlacklist(task.title) }
+            )
+            val result = workflow.run(
+                maxActionTasks = beforeProgress?.remainingCount ?: Int.MAX_VALUE
+            )
+            if (!result.recognized) {
                 Log.error(
                     "$TAG.doAllMemberAvailableTask",
-                    "会员任务墙查询失败: ${queryResponse.optString("resultDesc")}"
+                    "会员任务查询结构未确认，保留后续重试"
                 )
                 return@run
             }
 
-            val adTasks = MemberTaskProtocol.parseAdTasks(queryResponse)
-            val browseTasks = MemberTaskProtocol.parseBrowseTasks(queryResponse)
-            if (adTasks.isEmpty() && browseTasks.isEmpty()) {
-                record(TAG, "会员任务🎖️[暂无可执行任务]")
-                return@run
-            }
-
-            val remainingCount = beforeProgress?.remainingCount ?: Int.MAX_VALUE
-            var completedCount = 0
-
-            for (task in adTasks) {
-                if (completedCount >= remainingCount) break
-                try {
-                    if (processMemberAdTask(task)) {
-                        completedCount++
-                    }
-                } catch (t: Throwable) {
-                    Log.printStackTrace(
+            if (result.outcomes.isEmpty()) {
+                if (beforeProgress?.completed == true) {
+                    record(
                         TAG,
-                        "会员任务执行异常: ${task.title}(${task.adId})",
-                        t
+                        "会员任务🎖️[今日已完成]#" +
+                            "${beforeProgress.currentCount}/${beforeProgress.targetCount}个"
                     )
+                } else {
+                    record(TAG, "会员任务🎖️[暂无可执行任务]")
                 }
             }
-
-            for (task in browseTasks) {
-                if (completedCount >= remainingCount) break
-                try {
-                    if (processMemberBrowseTask(task)) {
-                        completedCount++
-                    }
-                } catch (t: Throwable) {
-                    Log.printStackTrace(
-                        TAG,
-                        "会员浏览任务执行异常: ${task.title}(${task.configId})",
-                        t
-                    )
+            for (outcome in result.outcomes) {
+                when (outcome.verification) {
+                    MemberTaskVerification.CONFIRMED ->
+                        Log.other("会员任务🎖️[${outcome.title}]#服务端终态已确认")
+                    MemberTaskVerification.PARTIAL ->
+                        record(
+                            TAG,
+                            "会员任务🎖️[${outcome.title}]#周期进度已推进，保留后续调度"
+                        )
+                    MemberTaskVerification.UNCONFIRMED ->
+                        Log.error(
+                            TAG,
+                            "会员任务🎖️[${outcome.title}]#${outcome.message}，保留重试"
+                        )
+                    null ->
+                        record(
+                            TAG,
+                            "会员任务🎖️[跳过]#${outcome.title}:${outcome.message}"
+                        )
                 }
             }
 
             delay(500)
-            val afterProgress = queryMemberTaskProgress()
+            val afterProgress = parseMemberTaskProgress(
+                AntMemberRpcCall.queryMemberTaskProgress()
+            )
             if (afterProgress != null) {
                 val increased = max(
                     0,
@@ -1135,9 +1219,9 @@ class AntMember : ModelTask() {
         }
     }
 
-    private fun queryMemberTaskProgress(): MemberTaskProgress? {
+    private fun parseMemberTaskProgress(responseText: String): MemberTaskProgress? {
         return try {
-            val response = JSONObject(AntMemberRpcCall.queryMemberTaskProgress())
+            val response = JSONObject(responseText)
             if (!ResChecker.checkRes("$TAG.queryMemberTaskProgress", response)) {
                 return null
             }
@@ -1184,19 +1268,17 @@ class AntMember : ModelTask() {
 
     private fun triggerMemberTreasureBox(task: MemberTreasureBoxTask) {
         try {
-            val response = JSONObject(AntMemberRpcCall.triggerSignFloatingBall(task))
-            if (!ResChecker.checkRes("$TAG.triggerSignFloatingBall", response)) {
+            val result = MemberTreasureBoxWorkflow(
+                triggerTask = { AntMemberRpcCall.triggerSignFloatingBall(it) },
+                queryTask = { AntMemberRpcCall.querySignFloatingBall() }
+            ).triggerAndVerify(task)
+            if (!result.confirmed) {
+                Log.error(TAG, "会员任务开宝箱状态未确认，保留后续重试")
                 return
             }
-            val currentTask = response.optJSONObject("currentTaskInfo")
-            if (currentTask?.optString("taskStatus") != "SUCCESS") {
-                Log.error(TAG, "会员任务开宝箱未成功: ${response.optString("resultDesc")}")
-                return
-            }
-            val awardNum = currentTask.optInt("awardNum", task.awardNum)
-            Log.other("会员任务🎖️[开宝箱奖励]#获得积分$awardNum")
+            Log.other("会员任务🎖️[开宝箱奖励]#获得积分${result.awardNum}")
 
-            val nextTask = MemberTaskProtocol.parseTreasureBoxTask(response, "nextTaskInfo")
+            val nextTask = result.nextTask
             if (nextTask != null && isToday(nextTask.endTime)) {
                 scheduleMemberTreasureBox(nextTask)
             }
@@ -1268,90 +1350,6 @@ class AntMember : ModelTask() {
     private fun isToday(timeMillis: Long): Boolean {
         val format = SimpleDateFormat("yyyy-MM-dd", Locale.CHINA)
         return format.format(Date(timeMillis)) == format.format(Date())
-    }
-
-    private suspend fun processMemberAdTask(task: MemberAdTask): Boolean {
-        if (isTaskInBlacklist(task.title)) {
-            record(TAG, "会员任务🎖️[跳过黑名单任务]#${task.title}")
-            return false
-        }
-
-        val applyResponse = JSONObject(AntMemberRpcCall.applyMemberAdTask(task))
-        if (MemberTaskProtocol.isExpectedTaskRejection(applyResponse)) {
-            record(TAG, "会员任务🎖️[不可自动完成，已跳过]#${task.title}")
-            return false
-        }
-        if (!ResChecker.checkRes("$TAG.applyMemberAdTask", applyResponse)) {
-            Log.error(
-                TAG,
-                "会员任务领取失败: ${task.title}#" + applyResponse.optString("resultDesc")
-            )
-            return false
-        }
-
-        val adBizId = applyResponse.optJSONObject("resultData")
-            ?.optString("adBizId")
-            .orEmpty()
-            .ifEmpty { task.adBizId }
-        record(TAG, "会员任务🎖️[开始浏览]#${task.title}")
-        delay(task.waitMillis)
-
-        val finishResponse = JSONObject(AntMemberRpcCall.taskFinish(adBizId))
-        if (!MemberTaskProtocol.isFinishSuccess(finishResponse)) {
-            if (MemberTaskProtocol.isExpectedTaskRejection(finishResponse)) {
-                record(TAG, "会员任务🎖️[不可自动完成，已跳过]#${task.title}")
-                return false
-            }
-            Log.error(
-                TAG,
-                "会员任务结算失败: ${task.title}#" +
-                    finishResponse.optString("errMsg", finishResponse.optString("resultDesc"))
-            )
-            return false
-        }
-
-        val rewardAmount = finishResponse.optJSONObject("extendInfo")
-            ?.optJSONObject("rewardInfo")
-            ?.optString("rewardAmount")
-            .orEmpty()
-            .ifEmpty { task.awardNum.takeIf { it > 0 }?.toString().orEmpty() }
-        Log.other(
-            "会员任务🎖️[${task.title}]#" +
-                if (rewardAmount.isEmpty()) "任务已结算" else "获得积分$rewardAmount"
-        )
-        return true
-    }
-
-    private suspend fun processMemberBrowseTask(task: MemberBrowseTask): Boolean {
-        if (isTaskInBlacklist(task.title)) {
-            record(TAG, "会员任务🎖️[跳过黑名单任务]#${task.title}")
-            return false
-        }
-
-        if (task.needsApply) {
-            val applyResponse = JSONObject(AntMemberRpcCall.applyMemberTask(task))
-            if (!ResChecker.checkRes("$TAG.applyMemberTask", applyResponse)) {
-                Log.error(
-                    TAG,
-                    "会员任务领取失败: ${task.title}#${applyResponse.optString("resultDesc")}"
-                )
-                return false
-            }
-        }
-
-        record(TAG, "会员任务🎖️[开始浏览]#${task.title}")
-        delay(task.waitMillis)
-        val executeResponse = JSONObject(AntMemberRpcCall.executeMemberTask(task))
-        if (!MemberTaskProtocol.isFinishSuccess(executeResponse)) {
-            Log.error(
-                TAG,
-                "会员任务执行失败: ${task.title}#${executeResponse.optString("resultDesc")}"
-            )
-            return false
-        }
-
-        Log.other("会员任务🎖️[${task.title}]#任务已完成")
-        return true
     }
 
     /**
@@ -1477,47 +1475,42 @@ class AntMember : ModelTask() {
         }
     }
 
-    private fun doSesameAlchemyNextDayAward() = CoroutineUtils.run {
+    private suspend fun doSesameAlchemyNextDayAward() {
         try {
-            // ===== 调用领取奖励 RPC =====
-
-            val awardRes = AntMemberRpcCall.Zmxy.Alchemy.claimAward()
-
-            val jo = JSONObject(awardRes)
-
-            if (!ResChecker.checkRes(TAG, jo)) {
-                Log.error("芝麻炼金⚗️[次日奖励失败]：$awardRes")
-                // 即使失败也要设 flag，避免卡死重复调用
+            val entryResponse = AntMemberRpcCall.Zmxy.Alchemy
+                .alchemyQueryEntryList()
+            val snapshot = SesameCreditRewardPolicy.parseNextDayAward(
+                entryResponse
+            )
+            if (!snapshot.recognized) {
+                record(TAG, "芝麻炼金⚗️[次日奖励结构未知，等待重试]")
+                return
+            }
+            val award = snapshot.award
+            if (award == null || !award.available) {
+                record(TAG, "芝麻炼金⚗️[次日奖励暂无可领]")
                 setFlagToday(StatusFlags.FLAG_ZMXY_ALCHEMY_NEXT_DAY_AWARD)
-                return@run
+                return
             }
-
-            val data = jo.optJSONObject("data")
-            var gotNum = 0
-
-            if (data != null) {
-                // 解析奖励数组
-                val arr = data.optJSONArray("alchemyAwardSendResultVOS")
-                if (arr != null && arr.length() > 0) {
-                    val item = arr.optJSONObject(0)
-                    if (item != null) {
-                        gotNum = item.optInt("pointNum", 0)
-                    }
+            when (
+                createSesameCreditRewardWorkflow()
+                    .claimNextDayAward(award)
+            ) {
+                SesameCreditRewardOutcome.CONFIRMED -> {
+                    Log.other(
+                        "芝麻炼金⚗️[次日奖励已确认]#预计${award.pointValue}粒"
+                    )
+                    setFlagToday(
+                        StatusFlags.FLAG_ZMXY_ALCHEMY_NEXT_DAY_AWARD
+                    )
                 }
+                else -> record(
+                    TAG,
+                    "芝麻炼金⚗️[次日奖励状态未刷新，等待重试]"
+                )
             }
-
-            if (gotNum > 0) {
-                Log.other("芝麻炼金⚗️[次日奖励领取成功]#获得" + gotNum + "粒")
-            } else {
-                record("芝麻炼金⚗️[次日奖励无奖励] 已领取或无可领奖励")
-            }
-
-            // ★★★★★ 不论有无奖励都标记今日完成 ★★★★★
-            setFlagToday(StatusFlags.FLAG_ZMXY_ALCHEMY_NEXT_DAY_AWARD)
         } catch (t: Throwable) {
             Log.printStackTrace("doSesameAlchemyNextDayAward", t)
-            // 异常也要标记，否则会无限尝试
-            setFlagToday(StatusFlags.FLAG_ZMXY_ALCHEMY_NEXT_DAY_AWARD)
         }
     }
 
@@ -1527,45 +1520,47 @@ class AntMember : ModelTask() {
      */
     private suspend fun collectSesame(withOneClick: Boolean): Unit = CoroutineUtils.run {
         try {
-            var jo = JSONObject(AntMemberRpcCall.queryCreditFeedback())
+            val response = AntMemberRpcCall.queryCreditFeedback()
             delay(500)
-            if (!ResChecker.checkRes(TAG, jo)) {
-                Log.error(
-                    "$TAG.collectSesame.queryCreditFeedback", "芝麻信用💳[查询未领取芝麻粒响应失败]#$jo"
-                )
+            val snapshot = SesameCreditRewardPolicy.parseFeedback(response)
+            if (!snapshot.recognized) {
+                record(TAG, "芝麻信用💳[待收芝麻粒结构未知，等待重试]")
                 return
             }
-            val availableCollectList = jo.getJSONArray("creditFeedbackVOS")
-            if (withOneClick) {
-                delay(2000)
-                jo = JSONObject(AntMemberRpcCall.collectAllCreditFeedback())
-                delay(2000)
-                if (!ResChecker.checkRes(TAG, jo)) {
-                    Log.error(
-                        "$TAG.collectSesame.collectAllCreditFeedback", "芝麻信用💳[一键收取芝麻粒响应失败]#$jo"
-                    )
-                    return
-                }
+            val availableItems = snapshot.items.filter {
+                it.status.equals("UNCLAIMED", true) && it.id.isNotBlank()
             }
-            for (i in 0..<availableCollectList.length()) {
-                jo = availableCollectList.getJSONObject(i)
-                if ("UNCLAIMED" != jo.getString("status")) {
-                    continue
+            if (availableItems.isEmpty()) {
+                record(TAG, "芝麻信用💳[当前无待收芝麻粒]")
+                return
+            }
+            if (withOneClick) {
+                when (
+                    createSesameCreditRewardWorkflow(
+                        collectAllFeedback = true
+                    ).collectFeedback(availableItems)
+                ) {
+                    SesameCreditRewardOutcome.CONFIRMED -> Log.other(
+                        "芝麻信用💳[一键收取已确认]#${snapshot.potentialTotal}粒"
+                    )
+                    else -> record(
+                        TAG,
+                        "芝麻信用💳[一键收取状态未刷新，等待重试]"
+                    )
                 }
-                val title = jo.getString("title")
-                val creditFeedbackId = jo.getString("creditFeedbackId")
-                val potentialSize = jo.getString("potentialSize")
-                if (!withOneClick) {
-                    jo = JSONObject(AntMemberRpcCall.collectCreditFeedback(creditFeedbackId))
-                    delay(2000)
-                    if (!ResChecker.checkRes(TAG, jo)) {
-                        Log.error(
-                            "$TAG.collectSesame.collectCreditFeedback", "芝麻信用💳[收取芝麻粒响应失败]#$jo"
-                        )
-                        continue
-                    }
+                return
+            }
+            val workflow = createSesameCreditRewardWorkflow()
+            for (item in availableItems) {
+                when (workflow.collectFeedback(listOf(item))) {
+                    SesameCreditRewardOutcome.CONFIRMED -> Log.other(
+                        "芝麻信用💳[${item.title}]#${item.potentialSize}粒"
+                    )
+                    else -> record(
+                        TAG,
+                        "芝麻信用💳[${item.title}]状态未刷新，等待重试"
+                    )
                 }
-                Log.other("芝麻信用💳[" + title + "]#" + potentialSize + "粒" + (if (withOneClick) "(一键收取)" else ""))
             }
         } catch (t: Throwable) {
             Log.printStackTrace("$TAG.collectSesame", t)
@@ -1755,73 +1750,23 @@ class AntMember : ModelTask() {
 
     private suspend fun enableGameCenter() {
         try {
+            val rewardWorkflow = createGameCenterRewardWorkflow()
+
             // 1. 查询签到状态并尝试签到
             try {
-                val resp = AntMemberRpcCall.querySignInBall()
-                val root = JSONObject(resp)
-                if (!ResChecker.checkRes(TAG, root)) {
-                    val msg = root.optString("errorMsg", root.optString("resultView", resp))
-                    Log.error("$TAG.enableGameCenter.signIn", "游戏中心🎮[签到查询失败]#$msg")
-                } else {
-                    val data = root.optJSONObject("data")
+                val outcome = rewardWorkflow.signIn()
+                when (outcome.state) {
+                    GameCenterRewardState.CONFIRMED ->
+                        Log.other("游戏中心🎮[每日签到成功]#服务端状态已确认")
 
-                    // 情况1：data 为 null 或 空对象 → 默认已经签到过
-                    if (data == null || data.length() == 0) {
-                        Log.error("$TAG.enableGameCenter.signIn", "游戏中心🎮[今日已签到](data为空)")
-                        return
-                    }
-                    val signModule = data.optJSONObject("signInBallModule")
-                    val signed = signModule != null && signModule.optBoolean("signInStatus", false)
-                    if (signed) {
-                        record("$TAG.enableGameCenter.signIn", "游戏中心🎮[今日已签到]")
-                    } else {
-                        val signResp = AntMemberRpcCall.continueSignIn()
-                        delay(300)
-                        val signJo = JSONObject(signResp)
-                        if (!ResChecker.checkRes(TAG, signJo)) {
-                            val msg = signJo.optString(
-                                "errorMsg", signJo.optString("resultView", signResp)
-                            )
-                            Log.error("$TAG.enableGameCenter.signIn", "游戏中心🎮[签到失败]#$msg")
-                        } else {
-                            val signData = signJo.optJSONObject("data")
-                            var title = ""
-                            var desc = ""
-                            var type = ""
-                            if (signData != null) {
-                                val toast = signData.optJSONObject("autoSignInToastModule")
-                                if (toast != null) {
-                                    title = toast.optString("title", "")
-                                    desc = toast.optString("desc", "")
-                                    type = toast.optString("type", "")
-                                }
-                            }
-                            val toastSuccess = "SUCCESS".equals(type, ignoreCase = true) && !title.contains("失败") && !desc.contains("失败")
-                            if (toastSuccess) {
-                                val sb = StringBuilder()
-                                sb.append("游戏中心🎮[每日签到成功]")
-                                if (!title.isEmpty()) {
-                                    sb.append("#").append(title)
-                                }
-                                if (!desc.isEmpty()) {
-                                    sb.append("#").append(desc)
-                                }
-                                Log.other(sb.toString())
-                            } else {
-                                val sb = StringBuilder()
-                                if (!title.isEmpty()) {
-                                    sb.append(title)
-                                }
-                                if (!desc.isEmpty()) {
-                                    if (sb.isNotEmpty()) sb.append(" ")
-                                    sb.append(desc)
-                                }
-                                Log.error(
-                                    "$TAG.enableGameCenter.signIn", "游戏中心🎮[签到失败]#" + (if (sb.isNotEmpty()) sb.toString() else signResp)
-                                )
-                            }
-                        }
-                    }
+                    GameCenterRewardState.NO_ACTION ->
+                        record("$TAG.enableGameCenter.signIn", "游戏中心🎮[${outcome.message}]")
+
+                    GameCenterRewardState.RETRY ->
+                        Log.error(
+                            "$TAG.enableGameCenter.signIn",
+                            "游戏中心🎮[签到未确认]#${outcome.message}"
+                        )
                 }
             } catch (th: Throwable) {
                 Log.printStackTrace(TAG, "enableGameCenter.signIn err:", th)
@@ -1829,169 +1774,71 @@ class AntMember : ModelTask() {
 
             // 2. 查询任务列表,完成平台任务
             try {
-                val resp = AntMemberRpcCall.queryGameCenterTaskList()
-                val root = JSONObject(resp)
-                if (!ResChecker.checkRes(TAG, root)) {
-                    val msg = root.optString("errorMsg", root.optString("resultView", resp))
-                    Log.error("$TAG.enableGameCenter.tasks", "游戏中心🎮[任务列表查询失败]#$msg")
-                } else {
-                    val data = root.optJSONObject("data")
-                    if (data != null) {
-                        val platformTaskModule = data.optJSONObject("platformTaskModule")
-                        if (platformTaskModule != null) {
-                            val platformTaskList = platformTaskModule.optJSONArray("platformTaskList")
-                            if (platformTaskList != null && platformTaskList.length() > 0) {
-                                var total = 0
-                                var finished = 0
-                                var failed = 0
-                                var lastFailedTaskId = ""
-                                var lastFailedCount = 0
+                val workflow = GameCenterPlatformWorkflow(
+                    queryTasks = { AntMemberRpcCall.queryGameCenterTaskList() },
+                    signupTask = { taskId ->
+                        AntMemberRpcCall.doTaskSignup(taskId)
+                    },
+                    sendTask = { taskId ->
+                        AntMemberRpcCall.doTaskSend(taskId)
+                    },
+                    isActionSuccess = { response ->
+                        runCatching {
+                            ResChecker.checkRes(TAG, JSONObject(response))
+                        }.getOrDefault(false)
+                    },
+                    pauseAfterAction = {
+                        GlobalThreadPools.sleepCompat(300L)
+                    }
+                )
+                val result = workflow.run()
+                if (!result.recognized) {
+                    Log.error(
+                        "$TAG.enableGameCenter.tasks",
+                        "游戏中心🎮[平台任务查询失败或结构未知]"
+                    )
+                }
+                for (outcome in result.outcomes) {
+                    when {
+                        outcome.confirmed -> Log.other(
+                            "游戏中心🎮任务[${outcome.title}]#服务端已确认完成"
+                        )
 
-                                for (i in 0..<platformTaskList.length()) {
-                                    val task = platformTaskList.optJSONObject(i) ?: continue
+                        outcome.retryable -> Log.error(
+                            "$TAG.enableGameCenter.tasks",
+                            "游戏中心🎮任务[${outcome.title}]#${outcome.message}"
+                        )
 
-                                    val taskId = task.optString("taskId")
-                                    val status = task.optString("taskStatus")
-
-                                    if (taskId.isEmpty()) continue
-                                    if ("NOT_DONE" != status && "SIGNUP_COMPLETE" != status) {
-                                        continue
-                                    }
-
-                                    // 如果是上次失败的任务,计数加1
-                                    if (taskId == lastFailedTaskId) {
-                                        lastFailedCount++
-                                        if (lastFailedCount >= 2) {
-                                            record(
-                                                "$TAG.enableGameCenter.tasks", "游戏中心🎮任务[" + task.optString("title") + "]连续失败2次,跳过"
-                                            )
-                                            continue
-                                        }
-                                    } else {
-                                        // 新任务,重置计数
-                                        lastFailedTaskId = taskId
-                                        lastFailedCount = 0
-                                    }
-
-                                    total++
-                                    val title = task.optString("title")
-                                    val subTitle = task.optString("subTitle")
-                                    val needSignUp = task.optBoolean("needSignUp", false)
-                                    val pointAmount = task.optInt("pointAmount", 0)
-
-                                    try {
-                                        // needSignUp 为 true 且是首次状态 NOT_DONE:先报名
-                                        if (needSignUp && "NOT_DONE" == status) {
-                                            val signUpResp = AntMemberRpcCall.doTaskSignup(taskId)
-                                            delay(300)
-                                            val signUpJo = JSONObject(signUpResp)
-                                            if (!ResChecker.checkRes(TAG, signUpJo)) {
-                                                val msg = signUpJo.optString(
-                                                    "errorMsg", signUpJo.optString("resultView", signUpResp)
-                                                )
-                                                Log.error(
-                                                    "$TAG.enableGameCenter.tasks", "游戏中心🎮任务[$title]报名失败#$msg"
-                                                )
-                                                failed++
-                                                continue
-                                            }
-                                        }
-
-                                        // 完成任务
-                                        val doResp = AntMemberRpcCall.doTaskSend(taskId)
-                                        delay(300)
-                                        val doJo = JSONObject(doResp)
-
-                                        if (ResChecker.checkRes(TAG, doJo)) {
-                                            // 检查返回的任务状态
-                                            val doData = doJo.optJSONObject("data")
-                                            val resultStatus = if (doData != null) doData.optString(
-                                                "taskStatus", ""
-                                            ) else ""
-
-                                            if ("SIGNUP_COMPLETE" == resultStatus || "NOT_DONE" == resultStatus) {
-                                                // 状态未变更,记为失败
-                                                Log.error(
-                                                    "$TAG.enableGameCenter.tasks", "游戏中心🎮任务[$title]状态未变更,可能无法完成"
-                                                )
-                                                failed++
-                                            } else {
-                                                // 真正完成,重置失败计数
-                                                Log.other(
-                                                    "游戏中心🎮任务[" + (subTitle.ifEmpty { title }) + "]#完成,奖励" + pointAmount + "玩乐豆" + (if (needSignUp) "(签到任务)" else "")
-                                                )
-                                                finished++
-                                                lastFailedTaskId = ""
-                                                lastFailedCount = 0
-                                            }
-                                        } else {
-                                            val msg = doJo.optString(
-                                                "errorMsg", doJo.optString("resultView", doResp)
-                                            )
-                                            Log.error(
-                                                "$TAG.enableGameCenter.tasks", "游戏中心🎮任务[$title]完成失败#$msg"
-                                            )
-                                            failed++
-                                        }
-                                    } catch (e: Throwable) {
-                                        Log.printStackTrace("$TAG.enableGameCenter.tasks.doTask", e)
-                                        failed++
-                                    }
-                                }
-
-                                if (total > 0) {
-                                    record(
-                                        "$TAG.enableGameCenter.tasks", "游戏中心🎮[平台任务处理完成]#待做:$total 完成:$finished 失败:$failed"
-                                    )
-                                } else {
-                                    record(
-                                        "$TAG.enableGameCenter.tasks", "游戏中心🎮[无待处理的平台任务]"
-                                    )
-                                }
-                            } else {
-                                record("$TAG.enableGameCenter.tasks", "游戏中心🎮[平台任务列表为空]")
-                            }
-                        }
+                        else -> record(
+                            "$TAG.enableGameCenter.tasks",
+                            "游戏中心🎮任务[${outcome.title}]#${outcome.message}，已跳过"
+                        )
                     }
                 }
+                record(
+                    "$TAG.enableGameCenter.tasks",
+                    "游戏中心🎮[平台任务处理结果]#" +
+                        "完成:${result.completed} 失败:${result.failed} 跳过:${result.skipped}"
+                )
             } catch (th: Throwable) {
                 Log.printStackTrace(TAG, "enableGameCenter.tasks err:", th)
             }
 
             // 3. 查询待收乐豆并使用一键收取接口
             try {
-                val resp = AntMemberRpcCall.queryPointBallList()
-                val root = JSONObject(resp)
-                if (!ResChecker.checkRes(TAG, root)) {
-                    val msg = root.optString("errorMsg", root.optString("resultView", resp))
-                    Log.error("$TAG.enableGameCenter.point", "游戏中心🎮[查询待收乐豆失败]#$msg")
-                } else {
-                    val data = root.optJSONObject("data")
-                    val pointBallList = data?.optJSONArray("pointBallList")
-                    if (pointBallList == null || pointBallList.length() == 0) {
-                        record("$TAG.enableGameCenter.point", "游戏中心🎮[暂无可领取乐豆]")
-                    } else {
-                        val batchResp = AntMemberRpcCall.batchReceivePointBall()
-                        delay(300)
-                        val batchJo = JSONObject(batchResp)
-                        if (ResChecker.checkRes(TAG, batchJo)) {
-                            val batchData = batchJo.optJSONObject("data")
-                            val receiveAmount = batchData?.optInt("receiveAmount", 0) ?: 0
-                            val totalAmount = batchData?.optInt("totalAmount", receiveAmount) ?: receiveAmount
-                            if (receiveAmount > 0) {
-                                Log.other("游戏中心🎮[一键领取乐豆成功]#本次领取" + receiveAmount + " | 当前累计" + totalAmount + "玩乐豆")
-                            } else {
-                                record("$TAG.enableGameCenter.point", "游戏中心🎮[暂无可领取乐豆]")
-                            }
-                        } else {
-                            val msg = batchJo.optString(
-                                "errorMsg", batchJo.optString("resultView", batchResp)
-                            )
-                            Log.error(
-                                "$TAG.enableGameCenter.point", "游戏中心🎮[一键领取乐豆失败]#$msg"
-                            )
-                        }
-                    }
+                val outcome = rewardWorkflow.collectPointBalls()
+                when (outcome.state) {
+                    GameCenterRewardState.CONFIRMED ->
+                        Log.other("游戏中心🎮[一键领取乐豆成功]#服务端状态已确认")
+
+                    GameCenterRewardState.NO_ACTION ->
+                        record("$TAG.enableGameCenter.point", "游戏中心🎮[${outcome.message}]")
+
+                    GameCenterRewardState.RETRY ->
+                        Log.error(
+                            "$TAG.enableGameCenter.point",
+                            "游戏中心🎮[乐豆领取未确认]#${outcome.message}"
+                        )
                 }
             } catch (th: Throwable) {
                 Log.printStackTrace(TAG, "enableGameCenter.point err:", th)
@@ -2083,6 +1930,229 @@ class AntMember : ModelTask() {
     /**
      * 芝麻炼金
      */
+    private fun createSesameCreditRewardWorkflow(
+        collectAllFeedback: Boolean = false,
+        queryTasks: suspend () -> String = {
+            AntMemberRpcCall.Zmxy.Alchemy.alchemyQueryListV3()
+        }
+    ): SesameCreditRewardWorkflow {
+        return SesameCreditRewardWorkflow(
+            queryNextDayAward = {
+                AntMemberRpcCall.Zmxy.Alchemy.alchemyQueryEntryList()
+            },
+            claimNextDayAward = {
+                AntMemberRpcCall.Zmxy.Alchemy.claimAward(it)
+            },
+            queryTimeLimitedTask = {
+                AntMemberRpcCall.Zmxy.Alchemy.alchemyQueryTimeLimitedTask()
+            },
+            claimTimeLimitedReward = {
+                AntMemberRpcCall.Zmxy.Alchemy
+                    .alchemyCompleteTimeLimitedTask(it)
+            },
+            queryFeedback = { AntMemberRpcCall.queryCreditFeedback() },
+            collectFeedback = { targetIds ->
+                if (collectAllFeedback || targetIds.size > 1) {
+                    AntMemberRpcCall.collectAllCreditFeedback()
+                } else {
+                    AntMemberRpcCall.collectCreditFeedback(
+                        targetIds.firstOrNull().orEmpty()
+                    )
+                }
+            },
+            queryTasks = queryTasks,
+            completeTask = { submitSesameCreditTask(it) }
+        )
+    }
+
+    private suspend fun submitSesameCreditTask(
+        task: SesameCreditTaskState
+    ): String {
+        var recordId = task.recordId
+        if (recordId.isBlank()) {
+            val joinResponse = AntMemberRpcCall.joinSesameTask(
+                task.templateId
+            )
+            if (!SesameCreditRewardPolicy.isActionAccepted(joinResponse)) {
+                return joinResponse
+            }
+            recordId = runCatching { JSONObject(joinResponse) }
+                .getOrNull()
+                ?.optJSONObject("data")
+                ?.optString("recordId")
+                .orEmpty()
+            if (recordId.isBlank()) return ""
+        }
+
+        val feedbackResponse = AntMemberRpcCall.feedBackSesameTask(
+            task.templateId
+        )
+        if (!SesameCreditRewardPolicy.isActionAccepted(feedbackResponse)) {
+            return feedbackResponse
+        }
+        val waitMillis = if (
+            task.title.contains("浏览") || task.title.contains("逛")
+        ) {
+            15_000L
+        } else {
+            3_000L
+        }
+        delay(waitMillis)
+        return AntMemberRpcCall.finishSesameTask(recordId)
+    }
+
+    private fun querySesameAlchemyRedPacketState() {
+        val response = AntMemberRpcCall.Zmxy.Alchemy
+            .alchemyWithdrawPreConsult()
+        when (SesameCreditRewardPolicy.parseRedPacketState(response)) {
+            SesameAlchemyRedPacketState.AVAILABLE -> record(
+                TAG,
+                "芝麻炼金⚗️[满级红包可领取，仅查询不提现]"
+            )
+            SesameAlchemyRedPacketState.UNAVAILABLE -> record(
+                TAG,
+                "芝麻炼金⚗️[满级红包当前不可领取]"
+            )
+            SesameAlchemyRedPacketState.RETRY -> record(
+                TAG,
+                "芝麻炼金⚗️[满级红包资格未知，等待重试]"
+            )
+        }
+    }
+
+    private fun createGameCenterRewardWorkflow(
+        stickerYear: String = "",
+        stickerMonth: String = ""
+    ): GameCenterRewardWorkflow {
+        return GameCenterRewardWorkflow(
+            querySignIn = { AntMemberRpcCall.querySignInBall() },
+            signInAction = { AntMemberRpcCall.continueSignIn() },
+            queryPointBalls = { AntMemberRpcCall.queryPointBallList() },
+            collectPointBallsAction = { AntMemberRpcCall.batchReceivePointBall() },
+            queryStickers = {
+                AntMemberRpcCall.queryStickerCanReceive(stickerYear, stickerMonth)
+            },
+            receiveStickersAction = { stickerIds ->
+                AntMemberRpcCall.receiveSticker(
+                    stickerYear,
+                    stickerMonth,
+                    stickerIds.toList()
+                ).orEmpty()
+            },
+            isActionSuccess = { response ->
+                runCatching {
+                    ResChecker.checkRes(TAG, JSONObject(response))
+                }.getOrDefault(false)
+            },
+            pauseAfterAction = {
+                GlobalThreadPools.sleepCompat(300L)
+            }
+        )
+    }
+
+    private fun enableGameCenterP2e() {
+        val isActionSuccess: (String) -> Boolean = { response ->
+            runCatching {
+                ResChecker.checkRes(TAG, JSONObject(response))
+            }.getOrDefault(false)
+        }
+        val pauseAfterAction = {
+            GlobalThreadPools.sleepCompat(300L)
+        }
+        val sessionId = System.currentTimeMillis().toString()
+        val taskWorkflow = GameCenterP2eTaskWorkflow(
+            queryTaskSources = {
+                listOf(AntMemberRpcCall.queryGameCenterP2eTaskList(sessionId))
+            },
+            signupTask = { task ->
+                AntMemberRpcCall.gameCenterP2ePlatformTaskSignUp(task)
+            },
+            completeTask = { task ->
+                AntMemberRpcCall.gameCenterP2ePlatformTaskComplete(task)
+            },
+            receiveTask = { task ->
+                AntMemberRpcCall.gameCenterP2eTaskReceive(task)
+            },
+            isActionSuccess = isActionSuccess,
+            pauseAfterAction = pauseAfterAction
+        )
+        val taskResult = taskWorkflow.run()
+        if (!taskResult.recognized) {
+            Log.error(
+                "$TAG.enableGameCenter.p2eTasks",
+                "游戏中心🎮[P2E任务查询失败或结构未知]"
+            )
+        }
+        for (outcome in taskResult.outcomes) {
+            when {
+                outcome.confirmed -> Log.other(
+                    "游戏中心🎮P2E任务[${outcome.title}]#${outcome.message}"
+                )
+
+                outcome.retryable -> Log.error(
+                    "$TAG.enableGameCenter.p2eTasks",
+                    "游戏中心🎮P2E任务[${outcome.title}]#${outcome.message}"
+                )
+
+                else -> record(
+                    "$TAG.enableGameCenter.p2eTasks",
+                    "游戏中心🎮P2E任务[${outcome.title}]#${outcome.message}，已跳过"
+                )
+            }
+        }
+
+        val rewardWorkflow = GameCenterP2eRewardWorkflow(
+            queryHome = { AntMemberRpcCall.queryGameCenterP2eHomePage() },
+            signInAction = { snapshot ->
+                AntMemberRpcCall.gameCenterP2eSignIn(snapshot)
+            },
+            drawGoldAction = { AntMemberRpcCall.drawGameCenterP2eGold() },
+            queryCashTierPage = {
+                AntMemberRpcCall.queryGameCenterP2eGoldExchangePrizePage()
+            },
+            isActionSuccess = isActionSuccess,
+            pauseAfterAction = pauseAfterAction
+        )
+        logGameCenterP2eReward("签到", rewardWorkflow.signIn())
+        logGameCenterP2eReward("免费抽金币", rewardWorkflow.drawGold())
+
+        val cashSnapshot = rewardWorkflow.queryCashTiers()
+        if (!cashSnapshot.recognized) {
+            Log.error(
+                "$TAG.enableGameCenter.p2eCash",
+                "游戏中心🎮[P2E现金档位查询失败或结构未知]"
+            )
+        } else {
+            val tierSummary = cashSnapshot.tiers.joinToString { tier ->
+                "${tier.cashAmount}:${tier.status}"
+            }
+            record(
+                "$TAG.enableGameCenter.p2eCash",
+                "游戏中心🎮[P2E现金档位只读]#金币:${cashSnapshot.goldAmount ?: "未知"} " +
+                    "档位:${tierSummary.ifBlank { "无" }}"
+            )
+        }
+    }
+
+    private fun logGameCenterP2eReward(
+        scene: String,
+        outcome: GameCenterRewardOutcome
+    ) {
+        when (outcome.state) {
+            GameCenterRewardState.CONFIRMED ->
+                Log.other("游戏中心🎮[P2E$scene]#${outcome.message}")
+
+            GameCenterRewardState.NO_ACTION ->
+                record("$TAG.enableGameCenter.p2e", "游戏中心🎮[P2E$scene]#${outcome.message}")
+
+            GameCenterRewardState.RETRY ->
+                Log.error(
+                    "$TAG.enableGameCenter.p2e",
+                    "游戏中心🎮[P2E${scene}未确认]#${outcome.message}"
+                )
+        }
+    }
+
     private suspend fun doSesameAlchemy(): Unit = CoroutineUtils.run {
         try {
             record(TAG, "开始执行芝麻炼金⚗️")
@@ -2131,6 +2201,7 @@ class AntMember : ModelTask() {
             } else {
                 Log.error(TAG, "芝麻炼金首页查询失败")
             }
+            querySesameAlchemyRedPacketState()
 
             // ================= Step 2: 自动签到 & 时段奖励 =================
             val checkInRes = AntMemberRpcCall.Zmxy.Alchemy.alchemyQueryCheckIn("alchemy")
@@ -2169,61 +2240,35 @@ class AntMember : ModelTask() {
             // 1. 查询时段任务
             val queryRespStr = AntMemberRpcCall.Zmxy.Alchemy.alchemyQueryTimeLimitedTask()
             record(TAG, "芝麻炼金⚗️[检查时段奖励]")
-
-            val queryResp = JSONObject(queryRespStr)
-            if (!ResChecker.checkRes(TAG + "查询时段任务失败:", queryResp) || !ResChecker.checkRes(
-                    TAG, queryResp
-                ) || queryResp.optJSONObject("data") == null
-            ) {
-                Log.error(
-                    TAG, "芝麻炼金⚗️[检查时段奖励错误] alchemyQueryTimeLimitedTask raw=$queryResp"
-                )
-                return
-            }
-
-            val timeLimitedTaskVO = queryResp.getJSONObject("data").optJSONObject("timeLimitedTaskVO")
-            if (timeLimitedTaskVO == null) {
-                record(TAG, "芝麻炼金⚗️[当前没有时段奖励任务]")
-                return
-            }
-
-            // 2. 获取任务信息
-            val taskName = timeLimitedTaskVO.optString("longTitle", "未知任务")
-            val templateId = timeLimitedTaskVO.getString("templateId") // 动态获取
-            val state = timeLimitedTaskVO.optInt("state", 0) // 1: 可领取, 2: 未到时间
-            val tomorrow = timeLimitedTaskVO.optBoolean("tomorrow", false)
-            val rewardAmount = timeLimitedTaskVO.optInt("rewardAmount", 0)
-
-            record(
-                TAG, "芝麻炼金⚗️[任务检查] 任务=$taskName 状态=$state 奖励=$rewardAmount 明天=$tomorrow"
-            )
-
-            // 3. 如果是明天任务，跳过
-            if (tomorrow) {
-                record(TAG, "芝麻炼金⚗️[任务跳过] 任务=$taskName 是明天的奖励")
-                return
-            }
-
-            // 4. 如果状态是可领取，则领取奖励
-            if (state == 1) { // 可领取
-                record(TAG, "芝麻炼金⚗️[开始领取任务奖励] 任务=$taskName")
-
-                val collectRespStr = AntMemberRpcCall.Zmxy.Alchemy.alchemyCompleteTimeLimitedTask(templateId)
-                val collectResp = JSONObject(collectRespStr)
-
-                if (!ResChecker.checkRes(
-                        TAG, collectResp
-                    ) || collectResp.optJSONObject("data") == null
-                ) {
-                    Log.error(TAG, "领取任务奖励失败 raw=$collectResp")
-                } else {
-                    val data = collectResp.getJSONObject("data")
-                    val zmlNum = data.optInt("zmlNum", 0)
-                    val toast = data.optString("toast", "")
-                    record(TAG, "芝麻炼金⚗️[领取成功] 获得芝麻粒=$zmlNum 提示=$toast")
+            val timeSnapshot = SesameCreditRewardPolicy
+                .parseTimeLimitedTask(queryRespStr)
+            if (!timeSnapshot.recognized) {
+                record(TAG, "芝麻炼金⚗️[时段奖励结构未知，等待重试]")
+            } else {
+                val timeTask = timeSnapshot.task
+                when {
+                    timeTask == null ->
+                        record(TAG, "芝麻炼金⚗️[当前没有时段奖励任务]")
+                    timeTask.tomorrow ->
+                        record(TAG, "芝麻炼金⚗️[明日时段奖励暂不领取]")
+                    timeTask.claimable -> when (
+                        createSesameCreditRewardWorkflow()
+                            .claimTimeLimitedReward(timeTask)
+                    ) {
+                        SesameCreditRewardOutcome.CONFIRMED -> Log.other(
+                            "芝麻炼金⚗️[时段奖励已确认]" +
+                                "#${timeTask.rewardAmount}粒"
+                        )
+                        else -> record(
+                            TAG,
+                            "芝麻炼金⚗️[时段奖励状态未刷新，等待重试]"
+                        )
+                    }
+                    else -> record(
+                        TAG,
+                        "芝麻炼金⚗️[当前时段奖励不可领取]"
+                    )
                 }
-            } else { // 其他状态
-                record(TAG, "芝麻炼金⚗️[当前不可领取] 任务=$taskName")
             }
 
 
@@ -2258,26 +2303,31 @@ class AntMember : ModelTask() {
             record(TAG, "芝麻炼金⚗️[任务处理完毕，准备收取芝麻粒]")
             delay(2000) // 稍作等待，确保任务奖励到账
 
-            // 4.1 查询是否有可收取的芝麻粒
             val queryFeedbackRes = AntMemberRpcCall.queryCreditFeedback()
-            val feedbackJo = JSONObject(queryFeedbackRes)
-            if (ResChecker.checkRes(TAG, feedbackJo)) {
-                val feedbackList = feedbackJo.optJSONArray("creditFeedbackVOS")
-                if (feedbackList != null && feedbackList.length() > 0) {
-                    record(
-                        TAG, "芝麻炼金⚗️[发现" + feedbackList.length() + "个待收取项，执行一键收取]"
-                    )
-
-                    // 4.2 执行一键收取
-                    val collectRes = AntMemberRpcCall.collectAllCreditFeedback()
-                    val collectJo = JSONObject(collectRes)
-                    if (ResChecker.checkRes(TAG, collectJo)) {
-                        Log.other("芝麻炼金⚗️[一键收取成功]#收割完毕")
-                    } else {
-                        record(TAG, "芝麻炼金⚗️[一键收取失败]#" + collectJo.optString("resultView"))
-                    }
-                } else {
+            val feedbackSnapshot = SesameCreditRewardPolicy.parseFeedback(
+                queryFeedbackRes
+            )
+            if (!feedbackSnapshot.recognized) {
+                record(TAG, "芝麻炼金⚗️[待收芝麻粒结构未知，等待重试]")
+            } else {
+                val feedbackItems = feedbackSnapshot.items.filter {
+                    it.status.equals("UNCLAIMED", true) && it.id.isNotBlank()
+                }
+                if (feedbackItems.isEmpty()) {
                     record(TAG, "芝麻炼金⚗️[当前无待收取芝麻粒]")
+                } else when (
+                    createSesameCreditRewardWorkflow(
+                        collectAllFeedback = true
+                    ).collectFeedback(feedbackItems)
+                ) {
+                    SesameCreditRewardOutcome.CONFIRMED -> Log.other(
+                        "芝麻炼金⚗️[一键收取已确认]" +
+                            "#${feedbackSnapshot.potentialTotal}粒"
+                    )
+                    else -> record(
+                        TAG,
+                        "芝麻炼金⚗️[一键收取状态未刷新，等待重试]"
+                    )
                 }
             }
         } catch (t: Throwable) {
@@ -2295,129 +2345,50 @@ class AntMember : ModelTask() {
         taskList: JSONArray?, processedBlacklistTasks: MutableSet<String>
     ) {
         if (taskList == null || taskList.length() == 0) return
+        val workflow = createSesameCreditRewardWorkflow()
 
         for (i in 0..<taskList.length()) {
             val task = taskList.getJSONObject(i)
-            val title = task.optString("title")
-            val templateId = task.optString("templateId")
-            val finishFlag = task.optBoolean("finishFlag", false)
-            val bizType = task.optString("bizType", "")
+            val state = SesameCreditTaskState(
+                templateId = task.optString("templateId"),
+                recordId = task.optString("recordId"),
+                title = task.optString("title"),
+                finishFlag = task.optBoolean("finishFlag", false),
+                actionText = task.optString("actionText"),
+                bizType = task.optString("bizType"),
+                actionUrl = task.optString("actionUrl"),
+                todayFinish = task.optBoolean("todayFinish", false)
+            )
 
-            if (finishFlag) continue
+            if (
+                SesameCreditRewardPolicy.decideTask(state) ==
+                SesameCreditTaskDecision.TERMINAL
+            ) continue
 
             // 使用TaskBlacklist进行黑名单检查
-            if (isTaskInBlacklist(title)) {
+            if (isTaskInBlacklist(state.title)) {
                 // 只有在所有任务组中未处理过时才记录日志
-                if (!processedBlacklistTasks.contains(title)) {
-                    record(TAG, "跳过黑名单任务: $title")
-                    processedBlacklistTasks.add(title)
+                if (!processedBlacklistTasks.contains(state.title)) {
+                    record(TAG, "跳过黑名单任务: ${state.title}")
+                    processedBlacklistTasks.add(state.title)
                 }
                 continue
             }
 
-            // 特殊处理：广告浏览任务（逛15秒商品橱窗 / 浏览15秒视频广告 等）
-            // 这类任务没有有效 templateId，需要用 logExtMap.bizId 走 com.alipay.adtask.biz.mobilegw.service.task.finish
-            if ("AD_TASK" == bizType) {
-                val logExtMap = task.optJSONObject("logExtMap")
-                if (logExtMap == null) {
-                    record(TAG, "芝麻炼金广告任务缺少logExtMap, 跳过: $title")
-                    continue
-                }
-                val bizId = logExtMap.optString("bizId", "")
-                if (bizId.isEmpty()) {
-                    record(TAG, "芝麻炼金广告任务缺少bizId, 跳过: $title")
-                    continue
-                }
-
-                record(TAG, "芝麻炼金广告任务: $title 准备执行") //(bizId=" + bizId + ")
-
-                var sleepTime = 8000
-                if (title.contains("15秒") || title.contains("15s")) {
-                    // 抓包规则里写明“每次浏览不少于15秒”
-                    sleepTime = 10000
-                }
-                delay(sleepTime.toLong())
-
-                try {
-                    val adFinishRes = AntMemberRpcCall.taskFinish(bizId)
-                    val adFinishJo = JSONObject(adFinishRes)
-                    // 兼容返回中只有 errCode=0 的情况
-                    if (ResChecker.checkRes(
-                            TAG, adFinishJo
-                        ) || "0" == adFinishJo.optString("errCode")
-                    ) {
-                        val reward = task.optInt("rewardAmount", 0)
-                        Log.other("芝麻炼金⚗️[广告任务完成: " + title + "]#获得" + reward + "粒")
-                    } else {
-                        Log.error(TAG, "芝麻炼金广告任务上报失败: $title - $adFinishRes")
-                    }
-                } catch (e: Throwable) {
-                    Log.printStackTrace("$TAG.processAlchemyTasks.adTask", e)
-                }
-                // 广告任务不再走 templateId / recordId 这套逻辑
-                continue
-            }
-
-            // 普通任务：仍然使用模板+recordId 的 Promise 流程
-            if (templateId.contains("invite") || templateId.contains("upload") || templateId.contains("auth") || templateId.contains("banli")) {
-                continue
-            }
-            val actionUrl = task.optString("actionUrl", "")
-            if (actionUrl.startsWith("alipays://") && !actionUrl.contains("chInfo")) {
-                // 需要外部 App，无法仅靠 hook 完成
-                continue
-            }
-
-            record(TAG, "芝麻炼金任务: $title 准备执行")
-
-            var recordId = task.optString("recordId", "")
-
-            if (recordId.isEmpty()) {
-                // templateId 为空或无效时，直接跳过，避免 "参数[templateId]不是有效的入参"
-                if (templateId == null || templateId.trim { it <= ' ' }.isEmpty()) {
-                    record(TAG, "芝麻炼金任务: 模板为空，跳过 $title")
-                    continue
-                }
-                val joinRes = AntMemberRpcCall.joinSesameTask(templateId)
-                val joinJo = JSONObject(joinRes)
-                if (ResChecker.checkRes(TAG, joinJo)) {
-                    val joinData = joinJo.optJSONObject("data")
-                    if (joinData != null) {
-                        recordId = joinData.optString("recordId")
-                    }
-                    record(TAG, "任务领取成功: $title")
-                    delay(1000)
-                } else {
-                    Log.error(
-                        TAG, "任务领取失败: " + title + " - " + joinJo.optString("resultView", joinRes)
-                    )
-                    continue
-                }
-            }
-
-            AntMemberRpcCall.feedBackSesameTask(templateId)
-
-            var sleepTime = 3000
-            if (title.contains("浏览") || title.contains("逛")) {
-                sleepTime = 15000
-            }
-            delay(sleepTime.toLong())
-
-            if (!recordId.isEmpty()) {
-                val finishRes = AntMemberRpcCall.finishSesameTask(recordId)
-                val finishJo = JSONObject(finishRes)
-                if (ResChecker.checkRes(TAG, finishJo)) {
-                    val reward = task.optInt("rewardAmount", 0)
-                    Log.other("芝麻炼金⚗️[任务完成: " + title + "]#获得" + reward + "粒")
-                } else {
-                    val errorCode = finishJo.optString("resultCode", "")
-                    //  val errorMsg = finishJo.optString("resultView", finishRes)
-                    //  Log.error(TAG, "任务提交失败: $title - $errorMsg")
-                    // 自动添加到黑名单
-                    if (!errorCode.isEmpty()) {
-                        autoAddToBlacklist(title, title, errorCode)
-                    }
-                }
+            when (workflow.completeTask(state)) {
+                SesameCreditRewardOutcome.CONFIRMED -> Log.other(
+                    "芝麻炼金⚗️[任务已确认: ${state.title}]" +
+                        "#${task.optInt("rewardAmount", 0)}粒"
+                )
+                SesameCreditRewardOutcome.SKIPPED_UNSAFE -> record(
+                    TAG,
+                    "芝麻炼金⚗️[跳过非免费或未知任务: ${state.title}]"
+                )
+                SesameCreditRewardOutcome.RETRY -> record(
+                    TAG,
+                    "芝麻炼金⚗️[任务状态未刷新: ${state.title}]"
+                )
+                SesameCreditRewardOutcome.TERMINAL -> Unit
             }
             delay(2000)
         }
@@ -2708,81 +2679,42 @@ class AntMember : ModelTask() {
                 record(TAG, "今日已兑换贴纸，跳过")
                 return
             }
-            val date = Date()
-            val year = SimpleDateFormat("yyyy",Locale.ENGLISH).format(Date())
-            val month = SimpleDateFormat("MM",Locale.ENGLISH).format(Date())
-
-            val queryResp = AntMemberRpcCall.queryStickerCanReceive(year, month)
-
-            val queryJson = JSONObject(queryResp)
-            if (!ResChecker.checkRes(TAG, queryJson)) {
-                Log.error(TAG, "查询贴纸失败：$queryJson")
-                return
-            }
-
-            val canReceivePageList = queryJson.optJSONArray("canReceivePageList") ?: return
-
-            // 用于存储 ID -> Name 的映射
-            val stickerNameMap = mutableMapOf<String, String>()
-            val allStickerIds = mutableListOf<String>()
-
-            for (i in 0 until canReceivePageList.length()) {
-                val page = canReceivePageList.optJSONObject(i)
-                val stickerList = page?.optJSONArray("stickerCanReceiveList") ?: continue
-                for (j in 0 until stickerList.length()) {
-                    val stickerObj = stickerList.optJSONObject(j) ?: continue
-                    val id = stickerObj.optString("id")
-                    val name = stickerObj.optString("name")
-                    if (!id.isNullOrEmpty()) {
-                        allStickerIds.add(id)
-                        stickerNameMap[id] = name ?: "未知贴纸"
-                    }
+            val year = SimpleDateFormat("yyyy", Locale.ENGLISH).format(Date())
+            val month = SimpleDateFormat("MM", Locale.ENGLISH).format(Date())
+            val outcome = createGameCenterRewardWorkflow(year, month)
+                .collectStickers()
+            when (outcome.state) {
+                GameCenterRewardState.CONFIRMED -> {
+                    record(TAG, "贴纸领取成功，服务端已确认目标消失")
+                    setFlagToday(StatusFlags.FLAG_ANTMEMBER_STICKER)
                 }
+
+                GameCenterRewardState.NO_ACTION ->
+                    record(TAG, "贴纸扫描：${outcome.message}")
+
+                GameCenterRewardState.RETRY ->
+                    Log.error(TAG, "贴纸领取未确认：${outcome.message}")
             }
-
-            if (allStickerIds.isEmpty()) {
-                record(TAG, "贴纸扫描：暂无可领取的贴纸")
-                //  Status.setFlagToday(StatusFlags.FLAG_AntMember_STICKER)
-                return
-            }
-
-            // 2. 领取阶段
-            val collectResp = AntMemberRpcCall.receiveSticker(year, month, allStickerIds)
-
-            val collectJson = JSONObject(collectResp)
-            if (!ResChecker.checkRes(TAG, collectJson)) {
-                Log.error(TAG, "领取贴纸失败：$collectJson")
-                return
-            }
-
-            // 3. 结果解析与比对输出
-            val specialList = collectJson.optJSONArray("specialStickerList")
-            val obtainedIds = collectJson.optJSONArray("obtainedConfigId")
-
-            record(TAG, "贴纸领取成功，总数：${obtainedIds?.length() ?: 0}")
-
-            if (specialList != null && specialList.length() > 0) {
-                for (i in 0 until specialList.length()) {
-                    val special = specialList.optJSONObject(i) ?: continue
-
-                    // 获取领取结果中的 recordId
-                    val recordId = special.optString("stickerRecordId")
-                    // 从我们之前的 Map 中根据 ID 找到对应的 Name
-                    val stickerName = stickerNameMap[recordId] ?: "特殊贴纸"
-
-                    val ranking = special.optString("rankingText")
-
-                    // 仅对特殊贴纸进行 other 输出，显示真实的贴纸名称
-                    Log.other(TAG, "获得特殊贴纸 → $stickerName ($ranking)")
-                }
-            }
-
-            // 标记今日完成
-            setFlagToday(StatusFlags.FLAG_ANTMEMBER_STICKER)
-
         } catch (e: Exception) {
             Log.printStackTrace("$TAG stickerAutoCollect err", e)
         }
+    }
+
+    private fun queryBillBlockWorld() {
+        val response = runCatching {
+            AntMemberRpcCall.queryBillBlockWorldHome()
+        }.getOrNull().orEmpty()
+        val snapshot = GameCenterRewardPolicy.parseBillBlockWorld(response)
+        if (!snapshot.recognized) {
+            Log.error(TAG, "账单拼贴世界查询失败或结构未知")
+            return
+        }
+        record(
+            TAG,
+            "账单拼贴世界[只读]#章节:${snapshot.currentChapterId} " +
+                "状态:${snapshot.chapterStatus.ifBlank { "未知" }} " +
+                "待领:${snapshot.pendingBlockIds.size} 已放置:${snapshot.placedBlockCount}"
+        )
     }
 
     companion object {
@@ -2918,19 +2850,29 @@ class AntMember : ModelTask() {
 
             for (i in 0..<taskList.length()) {
                 val task = taskList.getJSONObject(i)
-                val taskTitle = if (task.has("title")) task.getString("title") else "未知任务"
-
-                // 打印任务状态信息用于调试
-                val finishFlag = task.optBoolean("finishFlag", false)
-                val actionText = task.optString("actionText", "")
-
-                //   record(TAG, "芝麻信用💳[任务状态调试]#" + taskTitle + " - finishFlag:" + finishFlag + ", actionText:" + actionText);
-
-                // 检查任务是否已完成
-                if (finishFlag || "已完成" == actionText) {
-                    record(TAG, "芝麻信用💳[跳过已完成任务]#$taskTitle")
-                    skippedCount++
-                    continue
+                val state = SesameCreditTaskState(
+                    templateId = task.optString("templateId"),
+                    recordId = task.optString("recordId"),
+                    title = task.optString("title", "未知任务"),
+                    finishFlag = task.optBoolean("finishFlag", false),
+                    actionText = task.optString("actionText"),
+                    bizType = task.optString("bizType"),
+                    actionUrl = task.optString("actionUrl"),
+                    todayFinish = task.optBoolean("todayFinish", false)
+                )
+                val taskTitle = state.title
+                when (SesameCreditRewardPolicy.decideTask(state)) {
+                    SesameCreditTaskDecision.TERMINAL -> {
+                        record(TAG, "芝麻信用💳[跳过已完成任务]#$taskTitle")
+                        skippedCount++
+                        continue
+                    }
+                    SesameCreditTaskDecision.EXECUTE_FREE -> Unit
+                    else -> {
+                        record(TAG, "芝麻信用💳[跳过非免费或未知任务]#$taskTitle")
+                        skippedCount++
+                        continue
+                    }
                 }
 
                 // 检查黑名单
@@ -2940,75 +2882,109 @@ class AntMember : ModelTask() {
                     continue
                 }
 
-                // 添加检查，确保templateId存在
-                if (!task.has("templateId")) {
-                    record(TAG, "芝麻信用💳[跳过缺少templateId任务]#$taskTitle")
-                    skippedCount++
-                    continue
-                }
-
-                val taskTemplateId = task.getString("templateId")
+                val taskTemplateId = state.templateId
                 val needCompleteNum = if (task.has("needCompleteNum")) task.getInt("needCompleteNum") else 1
                 val completedNum = task.optInt("completedNum", 0)
-                var s: String?
-                val recordId: String?
-                var responseObj: JSONObject?
-
-
-                if (task.has("actionUrl") && task.getString("actionUrl").contains("jumpAction")) {
-                    // 跳转APP任务 依赖跳转的APP发送请求鉴别任务完成 仅靠hook目标应用无法完成
-                    record(TAG, "芝麻信用💳[跳过跳转APP任务]#$taskTitle")
-                    skippedCount++
-                    continue
-                }
-
-                var taskCompleted = false
-                if (!task.has("todayFinish")) {
-                    // 领取任务
-                    s = AntMemberRpcCall.joinSesameTask(taskTemplateId)
-                    delaySesameTaskOperation()
-                    responseObj = JSONObject(s)
-                    if (!ResChecker.checkRes(TAG, responseObj)) {
-                        Log.error(TAG, "芝麻信用💳[领取任务" + taskTitle + "失败]#" + s)
-                        // 自动添加到黑名单
-                        val errorCode = extractSesameTaskErrorCode(responseObj)
-                        handleSesameTaskFailure(taskTitle, errorCode)
-                        skippedCount++
-                        continue
-                    }
-                    recordId = responseObj.getJSONObject("data").getString("recordId")
+                val beforeFeedback = if (
+                    taskTemplateId == SesameCreditRewardPolicy
+                        .ZHIMA_PIGEON_TEMPLATE_ID
+                ) {
+                    SesameCreditRewardPolicy.parseFeedback(
+                        AntMemberRpcCall.queryCreditFeedback()
+                    )
                 } else {
-                    if (!task.has("recordId")) {
-                        Log.error(TAG, "芝麻信用💳[任务" + taskTitle + "未获取到recordId]#" + task)
-                        skippedCount++
+                    SesameCreditFeedbackSnapshot(false, emptyList())
+                }
+                var recordId = state.recordId
+                if (recordId.isBlank()) {
+                    // 领取任务
+                    val joinResponse = AntMemberRpcCall.joinSesameTask(
+                        taskTemplateId
+                    )
+                    delaySesameTaskOperation()
+                    val responseObj = runCatching {
+                        JSONObject(joinResponse)
+                    }.getOrNull()
+                    if (
+                        responseObj == null ||
+                        !SesameCreditRewardPolicy.isActionAccepted(joinResponse)
+                    ) {
+                        Log.error(TAG, "芝麻信用💳[领取任务失败]#$taskTitle")
+                        val errorCode = responseObj?.let(
+                            ::extractSesameTaskErrorCode
+                        ).orEmpty()
+                        handleSesameTaskFailure(taskTitle, errorCode)
                         continue
                     }
-                    recordId = task.getString("recordId")
+                    recordId = responseObj.optJSONObject("data")
+                        ?.optString("recordId")
+                        .orEmpty()
+                    if (recordId.isBlank()) {
+                        record(TAG, "芝麻信用💳[任务缺少recordId，等待重试]#$taskTitle")
+                        continue
+                    }
                 }
 
-                // 完成任务
+                var actionAccepted = true
                 for (j in completedNum..<needCompleteNum) {
-                    s = AntMemberRpcCall.finishSesameTask(recordId)
+                    val finishResponse = AntMemberRpcCall.finishSesameTask(
+                        recordId
+                    )
                     delaySesameTaskOperation()
-                    responseObj = JSONObject(s)
-                    if (ResChecker.checkRes(TAG, responseObj)) {
-                        record(
-                            TAG, "芝麻信用💳[完成任务" + taskTitle + "]#(" + (j + 1) + "/" + needCompleteNum + "天)"
+                    val responseObj = runCatching {
+                        JSONObject(finishResponse)
+                    }.getOrNull()
+                    if (
+                        responseObj == null ||
+                        !SesameCreditRewardPolicy.isActionAccepted(
+                            finishResponse
                         )
-                        taskCompleted = true
-                    } else {
-                        Log.error(TAG, "芝麻信用💳[完成任务" + taskTitle + "失败]#" + s)
-                        // 自动添加到黑名单
-                        val errorCode = extractSesameTaskErrorCode(responseObj)
+                    ) {
+                        Log.error(TAG, "芝麻信用💳[提交任务失败]#$taskTitle")
+                        val errorCode = responseObj?.let(
+                            ::extractSesameTaskErrorCode
+                        ).orEmpty()
                         handleSesameTaskFailure(taskTitle, errorCode)
+                        actionAccepted = false
                         break
                     }
                 }
 
-                if (taskCompleted) {
+                if (!actionAccepted) continue
+                val taskResponse = AntMemberRpcCall.queryAvailableSesameTask()
+                val confirmed = if (
+                    taskTemplateId == SesameCreditRewardPolicy
+                        .ZHIMA_PIGEON_TEMPLATE_ID
+                ) {
+                    val afterFeedback = SesameCreditRewardPolicy.parseFeedback(
+                        AntMemberRpcCall.queryCreditFeedback()
+                    )
+                    SesameCreditRewardPolicy
+                        .isZhimaPigeonCompletionConfirmed(
+                            taskResponse,
+                            taskTemplateId,
+                            if (beforeFeedback.recognized) {
+                                beforeFeedback.potentialTotal
+                            } else {
+                                Int.MAX_VALUE
+                            },
+                            if (afterFeedback.recognized) {
+                                afterFeedback.potentialTotal
+                            } else {
+                                Int.MIN_VALUE
+                            }
+                        )
+                } else {
+                    SesameCreditRewardPolicy.isTaskCompletionConfirmed(
+                        taskResponse,
+                        taskTemplateId
+                    )
+                }
+                if (confirmed) {
+                    record(TAG, "芝麻信用💳[任务已确认]#$taskTitle")
                     completedCount++
                 } else {
-                    skippedCount++
+                    record(TAG, "芝麻信用💳[任务状态未刷新，等待重试]#$taskTitle")
                 }
             }
 

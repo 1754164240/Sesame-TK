@@ -208,9 +208,10 @@ class ForestChouChouLe {
         if (!resp.check()) return
 
         val taskList = resp.optJSONArray("taskInfoList") ?: return
+        val completionDecision =
+            ForestDrawTaskStatePolicy.completionDecision(resp)
         var total = 0
         var completed = 0
-        var allDone = true
 
         for (i in 0 until taskList.length()) {
             val task = taskList.optJSONObject(i) ?: continue
@@ -229,18 +230,16 @@ class ForestChouChouLe {
             if (taskStatus == TaskStatus.RECEIVED.name) {
                 completed++
             } else {
-                allDone = false
                 Log.record("${s.name} 未完成: $taskName [$taskStatus]")
             }
         }
 
         Log.record("${s.name} 进度: $completed / $total")
-        if (allDone) {
+        if (completionDecision == ForestDrawCompletionDecision.CONFIRMED) {
             Status.setFlagToday(s.flag)
-            val msg = if (total > 0) "全部完成" else "无有效任务"
-            Log.record("✅ ${s.name} $msg ($completed/$total)")
+            Log.record("✅ ${s.name} 全部完成 ($completed/$total)")
         } else {
-            Log.record("⚠️ ${s.name} 未全部完成")
+            Log.record("⚠️ ${s.name} 尚无服务端终态证明")
         }
     }
 
@@ -324,8 +323,13 @@ class ForestChouChouLe {
 
         val resJson = result.toJson()
         return if (resJson != null && resJson.check()) {
-            Log.forest("${s.name} 🧾 $name")
-            true
+            confirmTaskTransition(
+                s = s,
+                name = name,
+                code = code,
+                type = type,
+                previousStatus = TaskStatus.TODO.name
+            )
         } else {
             val retryable = resJson == null || ForestDrawTaskPolicy.isRetryableFailure(
                 resultCode = resJson.optString("resultCode"),
@@ -355,12 +359,51 @@ class ForestChouChouLe {
         sleepCompat(100L)
         val res = AntForestRpcCall.receiveTaskAwardopengreen(SOURCE, code, type).toJson()
         return if (res != null && res.check()) {
-            taskTryCount.remove(taskKey)
-            Log.forest("${s.name} 🧾 $name 奖励领取成功")
-            true
+            val confirmed = confirmTaskTransition(
+                s = s,
+                name = name,
+                code = code,
+                type = type,
+                previousStatus = TaskStatus.FINISHED.name
+            )
+            if (confirmed) {
+                taskTryCount.remove(taskKey)
+            }
+            confirmed
         } else {
             Log.error(TAG, "${s.name} 奖励领取失败: $name")
             false
         }
+    }
+
+    private fun confirmTaskTransition(
+        s: Scene,
+        name: String,
+        code: String,
+        type: String,
+        previousStatus: String
+    ): Boolean {
+        val response = AntForestRpcCall
+            .listTaskopengreen(s.taskCode, SOURCE)
+            .toJson()
+            ?: return false
+        if (!response.check()) {
+            return false
+        }
+        val currentStatus =
+            ForestDrawTaskStatePolicy.taskStatus(response, code, type)
+        val confirmed = ForestDrawTaskStatePolicy.isTransitionConfirmed(
+            previousStatus,
+            currentStatus
+        )
+        if (confirmed) {
+            Log.forest("${s.name} 🧾 $name [$currentStatus]")
+        } else {
+            Log.record(
+                TAG,
+                "${s.name} $name 动作后状态未确认，当前[$currentStatus]"
+            )
+        }
+        return confirmed
     }
 }

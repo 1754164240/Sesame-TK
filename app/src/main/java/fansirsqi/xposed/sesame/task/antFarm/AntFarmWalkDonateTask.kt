@@ -127,6 +127,16 @@ object AntFarmWalkDonateTask {
             return false
         }
 
+        val confirmedResponse =
+            JSONObject(AntSportsRpcCall.donateWalkHome(stepCount))
+        if (
+            !ResChecker.checkRes(logTag, confirmedResponse) ||
+            !isAlreadyDonated(confirmedResponse)
+        ) {
+            Log.record(logTag, "捐步动作已提交，服务端状态尚未确认")
+            return false
+        }
+
         currentUid?.let { Status.exchangeToday(it) }
         val resultModel = exchangeResponse.optJSONObject("donateExchangeResultModel")
         val donatedSteps = resultModel?.optInt("userCount", stepCount) ?: stepCount
@@ -140,7 +150,7 @@ object AntFarmWalkDonateTask {
         return flag.isBlank() || flag == "1"
     }
 
-    private fun isAlreadyDonated(response: JSONObject): Boolean {
+    fun isAlreadyDonated(response: JSONObject): Boolean {
         val model = response.optJSONObject("walkDonateHomeModel")
             ?.optJSONObject("walkUserInfoModel")
             ?: return false

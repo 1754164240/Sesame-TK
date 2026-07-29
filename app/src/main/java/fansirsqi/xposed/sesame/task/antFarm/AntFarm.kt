@@ -1101,18 +1101,30 @@ class AntFarm : ModelTask() {
             val jo = queryParadiseLimitedActivity() ?: return
             val tasks = AntFarmParadiseLimitedActivity.claimableTasks(jo)
                 .filter { allowTaskTypes.contains(it.taskType) }
+            val workflow = createFarmRewardWorkflow()
             for (task in tasks) {
-                val awardResponse = AntFarmRpcCall.receiveParadiseLimitedActivityAward(task.taskType, task.awardCount)
-                if (awardResponse.isBlank()) {
-                    Log.record(TAG, "小鸡乐园限时活动奖励领取为空[${task.title}]")
-                    continue
-                }
-                val awardJo = JSONObject(awardResponse)
-                if (ResChecker.checkRes(TAG, awardJo)) {
-                    Log.farm("小鸡乐园限时活动🎁[${task.title}]#领取${task.awardCount}乐园币")
-                    delay(1000)
-                } else {
-                    Log.record(TAG, "小鸡乐园限时活动奖励领取失败[${task.title}]: $awardJo")
+                when (
+                    workflow.claimParadiseReward(
+                        task.taskType,
+                        task.awardCount
+                    )
+                ) {
+                    FarmRewardOutcome.CONFIRMED -> {
+                        Log.farm(
+                            "小鸡乐园限时活动🎁[${task.title}]" +
+                                "#领取${task.awardCount}乐园币"
+                        )
+                        delay(1000)
+                    }
+
+                    FarmRewardOutcome.RETRY -> {
+                        Log.record(
+                            TAG,
+                            "小鸡乐园限时活动奖励状态待确认[${task.title}]"
+                        )
+                    }
+
+                    FarmRewardOutcome.SKIPPED_CAPACITY -> Unit
                 }
             }
         } catch (e: CancellationException) {
@@ -1134,6 +1146,32 @@ class AntFarm : ModelTask() {
             return null
         }
         return jo
+    }
+
+    private fun createFarmRewardWorkflow(): AntFarmRewardWorkflow {
+        return AntFarmRewardWorkflow(
+            receiveFarmTaskAward = {
+                AntFarmRpcCall.receiveFarmTaskAward(it)
+            },
+            listFarmTask = {
+                AntFarmRpcCall.listFarmTask()
+            },
+            receiveZhimaNpcFarmTaskAward = {
+                AntFarmRpcCall.receiveZhimaNpcFarmTaskAward(it)
+            },
+            listZhimaNpcFarmTask = {
+                AntFarmRpcCall.listZhimaNpcFarmTask()
+            },
+            receiveParadiseLimitedActivityAward = { taskType, awardCount ->
+                AntFarmRpcCall.receiveParadiseLimitedActivityAward(
+                    taskType,
+                    awardCount
+                )
+            },
+            queryParadiseLimitedActivity = {
+                AntFarmRpcCall.queryParadiseLimitedActivity()
+            }
+        )
     }
 
     private fun animalSleepAndWake() {
@@ -2387,136 +2425,122 @@ class AntFarm : ModelTask() {
 
     private suspend fun receiveFarmAwards() {
         try {
-            var doubleCheck: Boolean
-            var isFeedFull = false // 添加饲料槽已满的标志
-            do {
-                doubleCheck = false
-                val response = AntFarmRpcCall.listFarmTask()
-                // 检查空响应
-                if (response.isNullOrEmpty()) {
-                    Log.record(TAG, "receiveFarmAwards: 收到空响应，跳过本次执行")
-                    return
-                }
-                val jo = JSONObject(response)
-                if (ResChecker.checkRes(TAG + "查询庄园任务失败:", jo)) {
-                    val farmTaskList = jo.getJSONArray("farmTaskList")
-                    val signList = jo.getJSONObject("signList")
-                    val needFarmGame = recordFarmGame!!.value && !Status.hasFlagToday("farm::farmGameFinished")
-
-                    // 庄园签到逻辑
-                    if (!Status.hasFlagToday("farm::signed")) {
-                        syncAnimalStatus(ownerFarmId)
-                        val timeReached = TimeUtil.isNowAfterOrCompareTimeStr("1400")
-                        val foodSpace = foodStockLimit - foodStock
-                        var awardCount = 180
-                        try {
-                            val jaFarmSignList = signList.optJSONArray("signList")
-                            val currentSignKey = signList.optString("currentSignKey")
-                            if (jaFarmSignList != null && !currentSignKey.isNullOrEmpty()) {
-                                for (j in 0 until jaFarmSignList.length()) {
-                                    val joSign = jaFarmSignList.getJSONObject(j)
-                                    if (joSign.optString("signKey") == currentSignKey) {
-                                        awardCount = joSign.optString("awardCount", "180").toIntOrNull() ?: 180
-                                        break
-                                    }
-                                }
-                            }
-                        } catch (_: Exception) { }
-
-                        val haveEnoughSpace = if (needFarmGame) foodSpace > gameRewardMax!!.value else foodSpace >= awardCount
-                        val shouldSign = signRegardless!!.value || timeReached || haveEnoughSpace
-
-                        if (shouldSign) {
-                            if (farmSign(signList) && foodSpace < awardCount) {
-                                Log.farm("签到实际获得饲料: ${foodSpace}g (因饲料空间不足)")
-                            }
-                        }  else {
-                            val msg = if (needFarmGame) "预留游戏改分的饲料空间，庄园暂不执行签到" else "饲料空间不足${awardCount}g，庄园暂不签到"
-                            Log.record(TAG, "${msg}。14点后会强制签到；如已签到请忽略")
+            val response = AntFarmRpcCall.listFarmTask()
+            if (response.isNullOrEmpty()) {
+                Log.record(TAG, "receiveFarmAwards: 收到空响应，保留重试")
+                return
+            }
+            val jo = JSONObject(response)
+            if (!ResChecker.checkRes(TAG + "查询庄园任务失败:", jo)) {
+                return
+            }
+            val data = jo.optJSONObject("data") ?: jo
+            val farmTaskList = data.optJSONArray("farmTaskList")
+            if (farmTaskList == null) {
+                Log.record(TAG, "receiveFarmAwards: 未识别庄园任务容器")
+                return
+            }
+            val signList = data.optJSONObject("signList")
+            if (
+                signList != null &&
+                !Status.hasFlagToday("farm::signed")
+            ) {
+                syncAnimalStatus(ownerFarmId)
+                val timeReached = TimeUtil.isNowAfterOrCompareTimeStr("1400")
+                val foodSpace = foodStockLimit - foodStock
+                var awardCount = 180
+                val farmSignList = signList.optJSONArray("signList")
+                val currentSignKey = signList.optString("currentSignKey")
+                if (farmSignList != null && currentSignKey.isNotEmpty()) {
+                    for (index in 0 until farmSignList.length()) {
+                        val sign = farmSignList.optJSONObject(index) ?: continue
+                        if (sign.optString("signKey") == currentSignKey) {
+                            awardCount = sign
+                                .optString("awardCount", "180")
+                                .toIntOrNull() ?: 180
+                            break
                         }
                     }
-                    for (i in 0..<farmTaskList.length()) {
-                        // 如果饲料槽已满，跳过后续任务的领取
-                        val task = farmTaskList.getJSONObject(i)
-                        val taskStatus = task.getString("taskStatus")
-                        val taskTitle = task.optString("title", "未知任务")
-                        val awardCount = task.optInt("awardCount", 0)
-                        val taskId = task.optString("taskId")
+                }
+                val shouldSign = signRegardless!!.value ||
+                    timeReached ||
+                    foodSpace >= awardCount
+                if (shouldSign) {
+                    if (farmSign(signList) && foodSpace < awardCount) {
+                        Log.farm(
+                            "签到实际获得饲料: ${foodSpace}g " +
+                                "(因饲料空间不足)"
+                        )
+                    }
+                } else {
+                    Log.record(
+                        TAG,
+                        "饲料空间不足${awardCount}g，庄园暂不签到。" +
+                            "14点后会执行签到；如已签到请忽略"
+                    )
+                }
+            }
 
-                        if (TaskStatus.FINISHED.name == taskStatus) {
-                            // 领取前先同步一次食槽状态，避免边界误差
-                            syncAnimalStatus(ownerFarmId)
+            syncAnimalStatus(ownerFarmId)
+            val tasksById = mutableMapOf<String, JSONObject>()
+            val candidates = mutableListOf<FarmRewardCandidate>()
+            for (index in 0 until farmTaskList.length()) {
+                val task = farmTaskList.optJSONObject(index) ?: continue
+                if (
+                    !task.optString("taskStatus")
+                        .equals(TaskStatus.FINISHED.name, true)
+                ) {
+                    continue
+                }
+                val taskId = task.optString("taskId")
+                val awardCount = task.optInt("awardCount", 0)
+                if (taskId.isBlank() || awardCount <= 0) {
+                    Log.record(
+                        TAG,
+                        "庄园任务奖励缺少任务ID或有效数量，保留重试"
+                    )
+                    continue
+                }
+                tasksById[taskId] = task
+                candidates += FarmRewardCandidate(taskId, awardCount)
+            }
 
-                            val foodStockAfter = foodStock + awardCount
-                            val isNight = TimeUtil.isNowAfterOrCompareTimeStr("2000")
-                            val foodStockLeft = foodStockLimit - foodStock
-                            if ("ALLPURPOSE" == task.optString("awardType")) {
-                                /* 领取饲料前，当现有饲料>=上限时（实时只可能等于，不需要用大于等于的判断），或者在晚上20点前领取饲料后使饲料超过上限，则不领取饲料，
-                                    直接break方法。但是如果时间在20点后，这时饲料没满，比如差80g满，这时候领取90g的任务奖励虽然会超过饲料上限，但还是依然领取
-                                    饲料，这样能保证饲料第二天是满的开局。如果需要赠送饲料或厨房等会使饲料不是以90/180g减少的操作，应该不会有人在20点后还没有
-                                    完成吧？同时也避免了原逻辑的饲料差90g以内后总是领不满的问题。
-                                 */
-                                if (foodStock >= foodStockLimit) {
-                                    Log.record(TAG, "饲料[已满],暂不领取")
-                                    unreceiveTaskAward++
-                                    isFeedFull = true
-                                    break
-                                }
-                                // 针对连续使用加速卡时的领取饲料逻辑，留gameRewardMax以内（含）的空间。(同时确认开启游戏改分)
-                                if (!ignoreAcceLimit!!.value && (needFarmGame && foodStock >= (foodStockLimit - gameRewardMax!!.value))) {
-                                    unreceiveTaskAward++
-                                    Log.record("当日游戏改分未完成，预留最多${gameRewardMax!!.value}饲料空间，现有饲料${foodStock}g")
-                                    isFeedFull = true
-                                    break
-                                }
-                                if (awardCount > foodStockLeft) {
-                                    if (!isNight) {
-                                        // 20点前，为了不浪费，跳过当前奖励。
-                                        if (awardCount > 90 && foodStockLeft >= 90) {
-                                            unreceiveTaskAward++
-                                            continue
-                                        }
-                                        Log.record(TAG, "领取任务：${taskTitle} 的饲料奖励 ${awardCount}g后将超过[${foodStockLimit}g]上限!终止领取。现有饲料${foodStock}g")
-                                        unreceiveTaskAward++
-                                        isFeedFull = true
-                                        break
-                                    } else {
-                                        Log.record("20点后领取任务：${taskTitle} 的饲料奖励 ${awardCount}g后饲料将超过上限，现有饲料${foodStock}g，溢出${awardCount - foodStockLeft}g")
-                                    }
-                                }
-                            }
-                            val receiveTaskAwardjo = JSONObject(AntFarmRpcCall.receiveFarmTaskAward(taskId))
-                            if (ResChecker.checkRes(TAG + "领取庄园任务奖励失败:", receiveTaskAwardjo)) {
-                                add2FoodStock(awardCount)
-                                Log.farm("收取庄园任务奖励[$taskTitle] # ${awardCount}g (剩余容量: ${foodStockLimit - foodStock}g)")
-                                if(foodStockAfter >= foodStockLimit){
-                                    Log.farm("领取饲料后饲料[已满]" + foodStock + "g，停止后续领取")
-                                    isFeedFull = true
-                                    break
-                                }
-                                doubleCheck = true
-                                if (unreceiveTaskAward > 0) unreceiveTaskAward--
-                            }
-                            else {
-                                // 捕获饲料槽已满（331），设置满槽标记并停止后续领取
-                                val resultCode = receiveTaskAwardjo.optString("resultCode", "")
-                                val memo = receiveTaskAwardjo.optString("memo", "")
-                                if ("331" == resultCode || memo.contains("饲料槽已满")) {
-                                    Log.record(TAG, "领取失败：饲料槽已满，停止后续领取")
-                                    isFeedFull = true
-                                    break
-                                } else {
-                                    Log.error(TAG, "领取庄园任务奖励失败：$receiveTaskAwardjo")
-                                }
-                            }
+            val result = createFarmRewardWorkflow().claimFarmRewards(
+                candidates,
+                remainingCapacity = foodStockLimit - foodStock
+            )
+            for (claim in result.claims) {
+                val task = tasksById[claim.candidate.id]
+                val title = task?.optString("title", "未知任务")
+                    ?: "未知任务"
+                when (claim.outcome) {
+                    FarmRewardOutcome.CONFIRMED -> {
+                        add2FoodStock(claim.candidate.amount)
+                        if (unreceiveTaskAward > 0) {
+                            unreceiveTaskAward--
                         }
-                        delay(1000)
+                        Log.farm(
+                            "收取庄园任务奖励[$title] # " +
+                                "${claim.candidate.amount}g " +
+                                "(剩余容量: ${foodStockLimit - foodStock}g)"
+                        )
+                    }
+
+                    FarmRewardOutcome.RETRY -> {
+                        Log.record(TAG, "庄园任务奖励状态待确认[$title]")
+                    }
+
+                    FarmRewardOutcome.SKIPPED_CAPACITY -> {
+                        unreceiveTaskAward++
+                        Log.record(
+                            TAG,
+                            "庄园任务奖励超过剩余容量，暂不领取[$title]"
+                        )
                     }
                 }
-            } while (doubleCheck && !isFeedFull) // 如果饲料槽已满，不再进行双重检查
+            }
         } catch (e: CancellationException) {
-            // 协程取消异常必须重新抛出，不能吞掉
-             Log.record(TAG, "receiveFarmAwards 协程被取消")
+            Log.record(TAG, "receiveFarmAwards 协程被取消")
             throw e
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "receiveFarmAwards 错误:", t)
@@ -4010,69 +4034,65 @@ class AntFarm : ModelTask() {
             val selectedIndex = npcAnimalType?.value ?: 0
             val targetConfig = NpcConfig.getByIndex(selectedIndex)
             if (targetConfig == NpcConfig.NONE) return
-
-            // 1. 同步最新状态以获取准确的 NPC 信息
-            val syncRes = AntFarmRpcCall.syncAnimalStatus(ownerFarmId, "SYNC_NPC", "QUERY_FARM_INFO")
-            val joSync = JSONObject(syncRes)
-            if (ResChecker.checkRes(TAG, joSync)) {
-                // 更新全局 animals 列表和 ownerAnimal
-                parseSyncAnimalStatusResponse(joSync)
-            } else {
-                return
+            val rewardThreshold = when (targetConfig) {
+                NpcConfig.ZHIMA_PIGEON -> 88.0
+                NpcConfig.GOLD_CHICKEN -> 2888.0
+                else -> null
             }
-
-            // 2. 从更新后的全局列表中查找 NPC 小鸡
-            var currentNpcAnimal: Animal? = null
-            var currentNpcJson: JSONObject? = null
-
-            // 需要重新获取 json 用于读取 npcBizReward 等字段，因为 Animal 类可能未映射这些字段
-            val subFarmVO = joSync.optJSONObject("subFarmVO")
-            val animalsJa = subFarmVO?.optJSONArray("animals")
-
-            if (animalsJa != null && animals != null) {
-                for (i in 0 until animalsJa.length()) {
-                    val a = animalsJa.getJSONObject(i)
-                    if ("NPC" == a.optString("subAnimalType")) {
-                        currentNpcJson = a
-                        // 在全局 animals 列表中找到对应的对象
-                        val id = a.optString("animalId")
-                        currentNpcAnimal = animals?.find { it.animalId == id }
-                        break
-                    }
-                }
-            }
-
-            // 3. 决策逻辑
-            if (currentNpcAnimal == null) {
-                // 场景A: 当前没有NPC -> 直接雇佣目标NPC
-                Log.record(TAG, "NPC小鸡🤖[当前未雇佣，准备雇佣${targetConfig.nickName}]")
-                hireNpc(targetConfig)
-            } else {
-                // 场景B: 当前有NPC
-                val currentId = currentNpcAnimal.animalId
-                // 注意：这里比较 ID 需要确保 targetConfig.animalId 是准确的静态配置
-                if (currentId == targetConfig.animalId) {
-                    // B1: 正是选中的这只 -> 检查奖励是否已满及任务
-                    checkRewardAndTask(currentNpcAnimal, currentNpcJson, targetConfig)
-                } else {
-                    // B2: 是其他类型的NPC -> 遣返旧的，雇佣新的
-                    val currentName = currentNpcAnimal.masterUserInfoVO?.get("nickName") as? String ?: "未知NPC"
-                    Log.record(TAG, "NPC小鸡🤖[检测到${currentName}，目标是${targetConfig.nickName}，执行切换]")
-
-                    // 遣返当前
-                    val sendBackRes = AntFarmRpcCall.sendBackNpcAnimal(
-                        currentNpcAnimal.animalId,
-                        currentNpcAnimal.currentFarmId,
-                        currentNpcAnimal.masterFarmId
+            val workflow = AntFarmNpcWorkflow(
+                queryFarm = {
+                    AntFarmRpcCall.syncAnimalStatus(
+                        ownerFarmId,
+                        "SYNC_NPC",
+                        "QUERY_FARM_INFO"
                     )
-                    if (ResChecker.checkRes(TAG, JSONObject(sendBackRes))) {
-                        Log.farm("NPC小鸡🤖[已遣返${currentName}]")
-                        delay(1500)
-                        // 雇佣新的
-                        hireNpc(targetConfig)
+                },
+                hireNpc = { animalId, source ->
+                    AntFarmRpcCall.hireNpcAnimal(animalId, source)
+                },
+                sendBackNpc = { npc ->
+                    if (
+                        npc.currentFarmId.isBlank() ||
+                        npc.masterFarmId.isBlank()
+                    ) {
+                        """{"success":false,"resultDesc":"NPC农场标识缺失"}"""
                     } else {
-                        Log.record(TAG, "NPC小鸡🤖[遣返失败，暂停切换]")
+                        AntFarmRpcCall.sendBackNpcAnimal(
+                            npc.animalId,
+                            npc.currentFarmId,
+                            npc.masterFarmId
+                        )
                     }
+                },
+                waitForRefresh = { delay(1500) }
+            )
+            val result = workflow.run(
+                targetAnimalId = targetConfig.animalId,
+                source = targetConfig.source,
+                rewardThreshold = rewardThreshold,
+                onTargetPresent = { runNpcTasks(targetConfig) }
+            )
+            when (result.outcome) {
+                FarmNpcOutcome.CONFIRMED -> {
+                    Log.farm(
+                        "NPC小鸡🤖[${targetConfig.nickName}]" +
+                            "生命周期已确认[${result.action}]"
+                    )
+                }
+
+                FarmNpcOutcome.NO_ACTION -> {
+                    Log.record(
+                        TAG,
+                        "NPC小鸡🤖[${targetConfig.nickName}]${result.message}"
+                    )
+                }
+
+                FarmNpcOutcome.RETRY -> {
+                    Log.error(
+                        TAG,
+                        "NPC小鸡🤖[${targetConfig.nickName}]待重试: " +
+                            result.message
+                    )
                 }
             }
         } catch (t: Throwable) {
@@ -4080,71 +4100,25 @@ class AntFarm : ModelTask() {
         }
     }
 
-    private fun hireNpc(config: NpcConfig): Boolean {
-        try {
-            val s = AntFarmRpcCall.hireNpcAnimal(config.animalId, config.source)
-            val jo = JSONObject(s)
-            if (ResChecker.checkRes(TAG, jo)) {
-                Log.farm("NPC小鸡🤖[成功雇佣${config.nickName}]")
-                syncAnimalStatus(ownerFarmId) // 刷新状态
-                return true
-            } else {
-                Log.record(TAG, "NPC小鸡🤖[雇佣${config.nickName}失败: ${jo.optString("memo")}]")
-            }
-        } catch (e: Exception) {
-            Log.printStackTrace(TAG, "hireNpc err", e)
-        }
-        return false
-    }
-
-    private suspend fun checkRewardAndTask(animal: Animal, animalJson: JSONObject?, config: NpcConfig) {
-        // 1. 优先处理加速任务/领取任务奖励 (防止满产遣返后漏领任务)
+    private suspend fun runNpcTasks(config: NpcConfig) {
         when (config) {
             NpcConfig.ZHIMA_PIGEON -> handleZhimaPigeonTasks()
             NpcConfig.FARM_CHICKEN -> handleFarmChickenTasks()
             NpcConfig.GOLD_CHICKEN -> handleGoldChickenTasks()
             else -> {}
         }
-
-        // 2. 检查产出奖励是否达标
-        val currentReward = animalJson?.optDouble("npcBizReward", 0.0) ?: 0.0
-        val isLimit = animalJson?.optBoolean("reachNpcBizRewardLimit", false) ?: false
-        // 判定满额逻辑：部分NPC有明确标记，芝麻鸽通常是88粒，黄金鸡为2888
-        val isFull = isLimit
-                || (config == NpcConfig.ZHIMA_PIGEON && currentReward >= 88.0)
-                || (config == NpcConfig.GOLD_CHICKEN && currentReward >= 2888.0)
-
-        if (isFull) {
-            Log.farm("NPC小鸡🤖[${config.nickName}产出已满($currentReward)，领取并重雇]")
-            val sendBackRes = AntFarmRpcCall.sendBackNpcAnimal(
-                animal.animalId,
-                animal.currentFarmId,
-                animal.masterFarmId
-            )
-            val joSendBack = JSONObject(sendBackRes)
-            if (ResChecker.checkRes(TAG, joSendBack)) {
-                Log.farm("NPC小鸡🤖[产出奖励领取成功]")
-                delay(2000)
-                if (!hireNpc(config)) {
-                    Log.record(TAG, "NPC小鸡🤖[重雇失败，请检查状态]")
-                }
-            } else {
-                Log.record(TAG, "NPC小鸡🤖[遣返领取奖励失败: ${joSendBack.optString("memo")}]")
-            }
-        } else {
-            Log.record(TAG, "NPC小鸡🤖[${config.nickName}工作中... 当前产出:$currentReward]")
-        }
     }
 
     /**
      * 处理芝麻大表鸽的加速任务
      */
-    private fun handleZhimaPigeonTasks() {
+    private suspend fun handleZhimaPigeonTasks() {
         try {
             val s = AntFarmRpcCall.listZhimaNpcFarmTask()
             val jo = JSONObject(s)
             if (ResChecker.checkRes(TAG, jo)) {
                 val taskList = jo.optJSONArray("farmTaskList") ?: return
+                val workflow = createFarmRewardWorkflow()
                 for (i in 0 until taskList.length()) {
                     val task = taskList.getJSONObject(i)
                     val taskId = task.optString("taskId")
@@ -4153,11 +4127,23 @@ class AntFarm : ModelTask() {
 
                     // 如果任务已完成但未领取
                     if (TaskStatus.FINISHED.name == taskStatus) {
-                        val awardRes = AntFarmRpcCall.receiveZhimaNpcFarmTaskAward(taskId)
-                        val awardJo = JSONObject(awardRes)
-                        if (ResChecker.checkRes(TAG, awardJo)) {
-                            val awardCount = task.optInt("awardCount", 0)
-                            Log.farm("NPC任务🤖[完成: $title, 奖励: $awardCount 芝麻粒]")
+                        when (workflow.claimZhimaNpcReward(taskId)) {
+                            FarmRewardOutcome.CONFIRMED -> {
+                                val awardCount = task.optInt("awardCount", 0)
+                                Log.farm(
+                                    "NPC任务🤖[完成: $title, " +
+                                        "奖励: $awardCount 芝麻粒]"
+                                )
+                            }
+
+                            FarmRewardOutcome.RETRY -> {
+                                Log.record(
+                                    TAG,
+                                    "NPC任务奖励状态待确认[$title]"
+                                )
+                            }
+
+                            FarmRewardOutcome.SKIPPED_CAPACITY -> Unit
                         }
                     }
                 }

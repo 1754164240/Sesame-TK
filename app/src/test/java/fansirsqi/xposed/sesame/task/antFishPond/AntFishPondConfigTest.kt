@@ -2,6 +2,7 @@ package fansirsqi.xposed.sesame.task.antFishPond
 
 import fansirsqi.xposed.sesame.model.ModelGroup
 import fansirsqi.xposed.sesame.model.ModelOrder
+import fansirsqi.xposed.sesame.model.CustomSettings
 import fansirsqi.xposed.sesame.model.modelFieldExt.IntegerModelField
 import fansirsqi.xposed.sesame.task.antOcean.AntOcean
 import org.junit.Assert.assertEquals
@@ -39,5 +40,15 @@ class AntFishPondConfigTest {
         val fishPondIndex = order.indexOf(AntFishPond::class.java)
         assertTrue(oceanIndex >= 0)
         assertEquals(oceanIndex + 1, fishPondIndex)
+    }
+
+    @Test
+    fun `鱼池可加入每日只运行一次筛选`() {
+        assertEquals("antFishPond", CustomSettings.getModuleId("福气鱼池"))
+        assertTrue(
+            CustomSettings.onlyOnceDailyList.expandValue.any {
+                it.id == "antFishPond" && it.name == "福气鱼池"
+            }
+        )
     }
 }

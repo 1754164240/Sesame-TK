@@ -106,4 +106,24 @@ public final class StatusFlags {
     public static final String FLAG_ANTFOREST_ENERGY_PVP_CHALLENGE_DONE =
             "AntForest::energyPvpChallengeDone";
 
+    /** 森林今日签到是否已经服务端确认 */
+    public static final String FLAG_ANTFOREST_SIGN_DONE =
+            "AntForest::signed";
+
+    // ============================================================
+    // 青春特权
+    // ============================================================
+
+    /** 青春特权森林道具是否已经服务端确认领取 */
+    public static final String FLAG_YOUTH_PRIVILEGE_FOREST_PROPS =
+            "youth_privilege_forest_received";
+
+    /** 青春特权签到是否已经服务端确认完成 */
+    public static final String FLAG_YOUTH_PRIVILEGE_CHECK_IN =
+            "youth_privilege_student_task";
+
+    /** 青春特权任务总览是否已成功查询 */
+    public static final String FLAG_YOUTH_PRIVILEGE_TASKS_QUERIED =
+            "YouthPrivilege::tasksQueried";
+
 }

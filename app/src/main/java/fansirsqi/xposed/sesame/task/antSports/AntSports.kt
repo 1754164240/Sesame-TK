@@ -21,6 +21,7 @@ import fansirsqi.xposed.sesame.util.*
 import fansirsqi.xposed.sesame.util.maps.UserMap
 import org.json.JSONArray
 import org.json.JSONObject
+import kotlinx.coroutines.runBlocking
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -341,7 +342,7 @@ class AntSports : ModelTask() {
             if (battleForFriends.value) {
                 queryClubHome()
                 queryTrainItem()
-                buyMember()
+                inspectMemberPurchaseStatus()
             }
 
             // 首页金币
@@ -738,282 +739,129 @@ class AntSports : ModelTask() {
     /**
      * @brief 新版行走路线主流程 主入口
      */
-    private fun walk() {
+    private fun walk() = runBlocking {
         try {
-            val user = JSONObject(AntSportsRpcCall.queryUser())
-            if (!ResChecker.checkRes(TAG, user)) {
-                Log.error(TAG, "查询用户失败: $user")
-                return
+            val date = SimpleDateFormat(
+                "yyyy-MM-dd",
+                Locale.getDefault()
+            ).format(Date())
+            val workflow = createSportsPlayWorkflow(date)
+            val user = AntSportsRoutePolicy.parseUser(
+                AntSportsRpcCall.queryUser()
+            )
+            if (!user.recognized || user.joinedPathId.isBlank()) {
+                Log.record(TAG, "行走路线用户状态未知，等待后续重试")
+                return@runBlocking
             }
 
-            val data = user.optJSONObject("data")
-            val joinedPathId = data?.optString("joinedPathId") ?: ""
-            if(joinedPathId.isEmpty()) {
-
-                Log.error(TAG, "未找到有效线路: $user")
+            val path = AntSportsRoutePolicy.parsePath(
+                AntSportsRpcCall.queryPath(date, user.joinedPathId)
+            )
+            if (!path.recognized || path.pathId != user.joinedPathId) {
+                Log.record(TAG, "行走路线详情未知，等待后续重试")
+                return@runBlocking
             }
-            val path = queryPath(joinedPathId)
 
-            if (path == null) {
-                Log.error(TAG, "无法获取路线详情(PathId: $joinedPathId)")
-                return
-            }
-            val userPathStep = path.getJSONObject("userPathStep")
-
-            //如果是 JOIN 则还没走完
-            if ("COMPLETED" == userPathStep.getString("pathCompleteStatus")) {
-                Log.record(TAG, "行走路线🚶🏻‍♂️路线[${userPathStep.getString("pathName")}]已完成")
-                // 获取新路线 ID
-                val newPathId = queryJoinPath(walkPathThemeId)    //walkPathThemeId 在进入walk()之前已经获取了
-                if (!newPathId.isNullOrEmpty()) {
-                    Log.record(TAG, "发现新路线，准备加入: $newPathId")
-                    joinPath(newPathId)
-                } else {
-                    Log.error(TAG, "未发现可加入的新路线，可能当前地图已全部走完")
+            for (eventId in path.eventIds) {
+                when (workflow.claimEvent(path.pathId, eventId)) {
+                    AntSportsRouteOutcome.CONFIRMED ->
+                        Log.record(TAG, "行走路线宝箱已由服务端确认领取[$eventId]")
+                    else ->
+                        Log.record(TAG, "行走路线宝箱状态未刷新[$eventId]")
                 }
-                return
             }
 
-            val pathObj = path.getJSONObject("path")
-            val minGoStepCount = pathObj.getInt("minGoStepCount")
-            val pathStepCount = pathObj.getInt("pathStepCount")
-            val forwardStepCount = userPathStep.getInt("forwardStepCount")
-            val remainStepCount = userPathStep.getInt("remainStepCount")
-            val needStepCount = pathStepCount - forwardStepCount
+            if (path.completion.equals("COMPLETED", true)) {
+                joinNextSportsPlayRoute(workflow, path.pathName)
+                return@runBlocking
+            }
 
-            if (remainStepCount >= minGoStepCount) {
-                val useStepCount = min(remainStepCount, needStepCount)
-                walkGo(userPathStep.getString("pathId"), useStepCount, userPathStep.getString("pathName"))
+            val minGoStepCount = path.minGoStepCount
+            val pathStepCount = path.pathStepCount
+            val forwardStepCount = path.forwardStepCount
+            val remainStepCount = path.remainStepCount
+            if (
+                minGoStepCount == null ||
+                pathStepCount == null ||
+                forwardStepCount == null ||
+                remainStepCount == null
+            ) {
+                Log.record(TAG, "行走路线步数结构未知，等待后续重试")
+                return@runBlocking
+            }
+            val useStepCount = min(
+                remainStepCount,
+                pathStepCount - forwardStepCount
+            )
+            if (remainStepCount < minGoStepCount || useStepCount <= 0) {
+                return@runBlocking
+            }
+            when (workflow.advancePath(path.pathId, useStepCount)) {
+                AntSportsRouteOutcome.CONFIRMED ->
+                    Log.other(TAG, "行走路线[${path.pathName}]已由服务端确认完成")
+                AntSportsRouteOutcome.PARTIAL ->
+                    Log.other(TAG, "行走路线[${path.pathName}]步数已由服务端确认推进")
+                else ->
+                    Log.record(TAG, "行走路线步数未刷新，等待后续重试")
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "walk err:", t)
         }
     }
 
-    /**
-     * @brief 新版路线行走一步
-     */
-    private fun walkGo(pathId: String, useStepCount: Int, pathName: String) {
-        try {
-            val date = Date()
-            @SuppressLint("SimpleDateFormat") val sdf = SimpleDateFormat("yyyy-MM-dd")
-            val jo = JSONObject(AntSportsRpcCall.walkGo(sdf.format(date), pathId, useStepCount))
-            if (ResChecker.checkRes(TAG, jo)) {
-                Log.other(TAG, "行走路线🚶🏻‍♂️路线[$pathName]#前进了${useStepCount}步")
-                queryPath(pathId)
-            } else {
-                Log.error(TAG, "walkGo失败： [pathId: $pathId]: $jo")
-            }
-        } catch (t: Throwable) {
-            Log.printStackTrace(TAG, "walkGo err:", t)
+    private suspend fun joinNextSportsPlayRoute(
+        workflow: AntSportsRouteWorkflow,
+        completedPathName: String
+    ) {
+        Log.record(TAG, "行走路线[$completedPathName]已完成")
+        val discovery = if (walkCustomPath.value) {
+            val customPathId = walkCustomPathId.value.trim()
+            AntSportsRouteDiscovery(
+                recognized = customPathId.isNotBlank(),
+                pathId = customPathId.ifBlank { null }
+            )
+        } else {
+            workflow.findJoinablePath(walkPathThemeId.orEmpty())
+        }
+        if (!discovery.recognized) {
+            Log.record(TAG, "可加入路线结构未知，等待后续重试")
+            return
+        }
+        val targetPathId = discovery.pathId
+        if (targetPathId == null) {
+            Log.record(TAG, "当前地图所有路线均已完成")
+            return
+        }
+        when (workflow.joinRoute(targetPathId)) {
+            AntSportsRouteOutcome.CONFIRMED ->
+                Log.record(TAG, "行走路线已由服务端确认加入[$targetPathId]")
+            else ->
+                Log.record(TAG, "加入路线后状态未刷新[$targetPathId]")
         }
     }
 
-    /**
-     * @brief 查询世界地图
-     */
-    private fun queryWorldMap(themeId: String?): JSONObject? {
-        var theme: JSONObject? = null
-        if (themeId.isNullOrEmpty()) return null
-        try {
-            val jo = JSONObject(AntSportsRpcCall.queryWorldMap(themeId))
-            if (ResChecker.checkRes(TAG + "queryWorldMap失败： [ThemeID: $themeId]: ", jo)) {
-                theme = jo.getJSONObject("data")
-            } else {
-                Log.error(TAG, "queryWorldMap失败： [ThemeID: $themeId]: $jo")
+    private fun createSportsPlayWorkflow(
+        date: String
+    ): AntSportsRouteWorkflow {
+        return AntSportsRouteWorkflow(
+            queryUser = { AntSportsRpcCall.queryUser() },
+            queryPath = { pathId ->
+                AntSportsRpcCall.queryPath(date, pathId)
+            },
+            queryWorldMap = { themeId ->
+                AntSportsRpcCall.queryWorldMap(themeId)
+            },
+            queryCityPath = { cityId ->
+                AntSportsRpcCall.queryCityPath(cityId)
+            },
+            joinPath = { pathId -> AntSportsRpcCall.joinPath(pathId) },
+            walkGo = { pathId, useStepCount ->
+                AntSportsRpcCall.walkGo(date, pathId, useStepCount)
+            },
+            receiveEvent = { eventId ->
+                AntSportsRpcCall.receiveEvent(eventId)
             }
-        } catch (t: Throwable) {
-            Log.printStackTrace(TAG, "queryWorldMap err:", t)
-        }
-        return theme
-    }
-
-    /**
-     * @brief 查询指定城市的路线详情
-     * @param cityId 城市 ID
-     */
-    private fun queryCityPath(cityId: String): JSONObject? {
-        var city: JSONObject? = null
-        try {
-            val jo = JSONObject(AntSportsRpcCall.queryCityPath(cityId))
-            if (ResChecker.checkRes(TAG, jo)) {
-                city = jo.getJSONObject("data")
-            } else {
-                Log.error(TAG, "queryCityPath失败： [CityID: $cityId]$jo")
-            }
-        } catch (t: Throwable) {
-            Log.printStackTrace(TAG, "queryCityPath err:", t)
-        }
-        return city
-    }
-
-    /**
-     * @brief 查询路线详情（同时触发宝箱领取）
-     */
-    /*
-    private fun queryPath(pathId: String): JSONObject? {
-        var path: JSONObject? = null
-        try {
-            val date = Date()
-            @SuppressLint("SimpleDateFormat") val sdf = SimpleDateFormat("yyyy-MM-dd")
-            val jo = JSONObject(AntSportsRpcCall.queryPath(sdf.format(date), pathId))
-            if (ResChecker.checkRes(TAG, jo)) {
-                path = jo.getJSONObject("data")
-                val ja = jo.getJSONObject("data").getJSONArray("treasureBoxList")
-                for (i in 0 until ja.length()) {
-                    val treasureBox = ja.getJSONObject(i)
-                    receiveEvent(treasureBox.getString("boxNo"))
-                }
-            } else {
-                Log.error(TAG, "queryPath失败： $jo")
-            }
-        } catch (t: Throwable) {
-            Log.printStackTrace(TAG, "queryPath err:", t)
-        }
-        return path
-    }*/
-
-
-    //这里会返回路线详情
-    private fun queryPath(pathId: String): JSONObject? {
-        try {
-            val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
-            val response = AntSportsRpcCall.queryPath(dateStr, pathId)
-            val jo = JSONObject(response)
-
-            if (!ResChecker.checkRes(TAG, jo)) {
-                Log.error(TAG, "queryPath 请求失败: $response")
-                return null
-            }
-
-            // 2. 检查数据节点是否存在
-            val data = jo.optJSONObject("data")
-            if (data == null) {
-                Log.error(TAG, "queryPath 响应成功但 data 节点为空: $response")
-                return null
-            }
-
-            // --- 逻辑处理 ---
-            val userPath = data.optJSONObject("userPathStep")
-            Log.record(TAG, "路线: ${userPath?.optString("pathName")}, 进度: ${userPath?.optInt("pathProgress")}%")
-
-            val boxList = data.optJSONArray("treasureBoxList")
-            if (boxList != null && boxList.length() > 0) {
-                for (i in 0 until boxList.length()) {
-                    val boxNo = boxList.optJSONObject(i)?.optString("boxNo")
-                    if (!boxNo.isNullOrEmpty()) receiveEvent(boxNo)
-                }
-            }
-
-            return data
-        } catch (t: Throwable) {
-            Log.printStackTrace(TAG, "queryPath 过程中发生崩溃", t)
-        }
-        return null
-    }
-
-    /**
-     * @brief 新版路线开启宝箱并打印奖励
-     */
-    private fun receiveEvent(eventBillNo: String) {
-        try {
-            val jo = JSONObject(AntSportsRpcCall.receiveEvent(eventBillNo))
-            if (!ResChecker.checkRes(TAG, jo)) return
-
-            val ja = jo.getJSONObject("data").getJSONArray("rewards")
-            for (i in 0 until ja.length()) {
-                val reward = ja.getJSONObject(i)
-                Log.record(
-                    TAG,
-                    "行走路线🎁开启宝箱[${reward.getString("rewardName")}]*${reward.getInt("count")}"
-                )
-            }
-        } catch (t: Throwable) {
-            Log.printStackTrace(TAG, "receiveEvent err:", t)
-        }
-    }
-
-    /**
-     * @brief 根据主题 ID 挑选可加入的 pathId
-     */
-    private fun queryJoinPath(themeId: String?): String? {
-        // 🎯 自定义路径优先
-        if (walkCustomPath.value) {
-            return walkCustomPathId.value
-        }
-
-        return try {
-            val theme = queryWorldMap(themeId)
-            if (theme == null) {
-                Log.error(TAG, "queryJoinPath -> theme 为空，无法继续 当前walkPathThemeId[$themeId]")
-                return null
-            }
-
-            val cityList = theme.optJSONArray("cityList") ?: return null
-            var lastPathId: String? = null
-
-            for (i in 0 until cityList.length()) {
-                val cityObj = cityList.optJSONObject(i) ?: continue
-                val cityId = cityObj.optString("cityId")
-                val cityStatus = cityObj.optString("status")
-
-                if (cityId.isBlank() || cityId == "000000") {
-                    Log.record(TAG, "⛔ 跳过非法城市 cityId=$cityId")
-                    continue
-                }
-
-                // 🚫 非 ONLINE 城市直接跳过
-                if (cityStatus != "ONLINE") {
-                    // Log.record(TAG, "⛔ 城市[$cityId] 状态=$cityStatus，跳过")
-                    continue
-                }
-
-                val city = queryCityPath(cityId) ?: continue
-                val cityPathList = city.optJSONArray("cityPathList") ?: continue
-
-                for (j in 0 until cityPathList.length()) {
-                    val cityPath = cityPathList.optJSONObject(j) ?: continue
-                    val pathId = cityPath.optString("pathId")
-                    val completeStatus = cityPath.optString("pathCompleteStatus")
-
-                    lastPathId = pathId
-
-                    // 🎯 找到第一个未完成路径，直接返回
-                    if (completeStatus != "COMPLETED") {
-                        Log.record(TAG, "✅ 找到未完成路径 pathId=$pathId (cityId=$cityId)")
-                        return pathId
-                    }
-                }
-            }
-
-            Log.record(TAG, "⚠️ 所有城市路径均已完成，返回最后一个 pathId=$lastPathId")
-            return lastPathId
-        } catch (t: Throwable) {
-            Log.printStackTrace(TAG, "queryJoinPath 异常:", t)
-            null
-        }
-    }
-
-    /**
-     * @brief 加入新版路线
-     */
-    private fun joinPath(pathId: String?) {
-        var realPathId = pathId
-        if (realPathId == null) {
-            // 默认龙年祈福线
-            realPathId = "p0002023122214520001"
-        }
-        try {
-            val jo = JSONObject(AntSportsRpcCall.joinPath(realPathId))
-            if (ResChecker.checkRes(TAG, jo)) {
-                val path = queryPath(realPathId)
-                Log.record(TAG, "行走路线🚶🏻‍♂️路线[${path?.getJSONObject("path")?.getString("name")}]已加入")
-            } else {
-                Log.error(TAG, "行走路线🚶🏻‍♂️路线[$realPathId]有误，无法加入！")
-            }
-        } catch (t: Throwable) {
-            Log.printStackTrace(TAG, "joinPath err:", t)
-        }
+        )
     }
 
     /**
@@ -1780,9 +1628,9 @@ class AntSports : ModelTask() {
     }
 
     /**
-     * @brief 抢好友大战：抢购好友逻辑
+     * @brief 抢好友大战：只读查询动态价格，不执行购买
      */
-    private fun buyMember() {
+    private fun inspectMemberPurchaseStatus() {
         try {
             val clubHomeResponse = AntSportsRpcCall.queryClubHome()
             GlobalThreadPools.sleepCompat(500)
@@ -1796,11 +1644,12 @@ class AntSports : ModelTask() {
             val assetsInfo = clubHomeJson.optJSONObject("assetsInfo") ?: return
             val coinBalance = assetsInfo.optInt("energyBalance", 0)
             if (coinBalance <= 0) {
-                Log.record(TAG, "抢好友大战🧑‍🤝‍🧑当前能量为0，跳过抢好友")
+                Log.record(TAG, "抢好友大战🧑‍🤝‍🧑当前能量为0")
                 return
             }
 
             val roomList = clubHomeJson.optJSONArray("roomList") ?: return
+            var candidateCount = 0
 
             for (i in 0 until roomList.length()) {
                 val room = roomList.optJSONObject(i) ?: continue
@@ -1808,8 +1657,7 @@ class AntSports : ModelTask() {
 
                 if (memberList != null && memberList.length() > 0) continue
 
-                val roomId = room.optString("roomId")
-                if (roomId.isEmpty()) continue
+                if (room.optString("roomId").isEmpty()) continue
 
                 val memberPriceResult = AntSportsRpcCall.queryMemberPriceRanking(coinBalance)
                 GlobalThreadPools.sleepCompat(500)
@@ -1829,8 +1677,7 @@ class AntSports : ModelTask() {
                     val memberModel = detail.optJSONObject("memberModel") ?: continue
 
                     val originBossId = memberModel.optString("originBossId")
-                    val memberIdFromRank = memberModel.optString("memberId")
-                    if (originBossId.isEmpty() || memberIdFromRank.isEmpty()) continue
+                    if (originBossId.isEmpty()) continue
 
                     var isTarget = originBossIdList.value.contains(originBossId)
                     if (battleForFriendType.value == BattleForFriendType.DONT_ROB) {
@@ -1840,51 +1687,17 @@ class AntSports : ModelTask() {
 
                     val priceInfoObj = memberModel.optJSONObject("priceInfo") ?: continue
                     val price = priceInfoObj.optInt("price", Int.MAX_VALUE)
-                    if (price > coinBalance) continue
-
-                    val clubMemberResult = AntSportsRpcCall.queryClubMember(memberIdFromRank, originBossId)
-                    GlobalThreadPools.sleepCompat(500)
-                    val clubMemberDetailJson = JSONObject(clubMemberResult)
-                    if (!clubMemberDetailJson.optBoolean("success", true) ||
-                        !clubMemberDetailJson.has("member")
-                    ) continue
-
-                    val memberObj = clubMemberDetailJson.getJSONObject("member")
-                    val currentBossId = memberObj.optString("currentBossId")
-                    val memberId = memberObj.optString("memberId")
-                    val priceInfoFull = memberObj.optJSONObject("priceInfo") ?: continue
-
-                    if (currentBossId.isEmpty() || memberId.isEmpty()) continue
-
-                    val priceInfoStr = priceInfoFull.toString()
-
-                    val buyMemberResult = AntSportsRpcCall.buyMember(
-                        currentBossId,
-                        memberId,
-                        originBossId,
-                        priceInfoStr,
-                        roomId
-                    )
-                    GlobalThreadPools.sleepCompat(500)
-                    val buyMemberResponse = JSONObject(buyMemberResult)
-
-                    if (ResChecker.checkRes(TAG, buyMemberResponse)) {
-                        val userName = UserMap.getMaskName(originBossId) ?: originBossId
-                        Log.other("抢购好友🥋[成功:将 $userName 抢回来]")
-                        if (trainFriend.value) {
-                            queryTrainItem()
-                        }
-                        return
-                    } else if ("CLUB_AMOUNT_NOT_ENOUGH" == buyMemberResponse.optString("resultCode")) {
-                        Log.record(TAG, "[能量🎈不足，无法完成抢购好友！]")
-                        return
-                    } else if ("CLUB_MEMBER_TRADE_PROTECT" == buyMemberResponse.optString("resultCode")) {
-                        Log.record(TAG, "[暂时无法抢购好友，给Ta一段独处的时间吧！]")
+                    if (price <= coinBalance) {
+                        candidateCount += 1
                     }
                 }
             }
+            Log.record(
+                TAG,
+                "抢好友大战🧑‍🤝‍🧑只读查询完成，可购买候选${candidateCount}个；未执行动态价格购买"
+            )
         } catch (t: Throwable) {
-            Log.printStackTrace(TAG, "buyMember err:", t)
+            Log.printStackTrace(TAG, "inspectMemberPurchaseStatus err:", t)
         }
     }
 
@@ -1956,55 +1769,49 @@ class AntSports : ModelTask() {
                 if (Status.hasFlagToday("AntSports::neverlandDoSign::已签到")) return
 
                 Log.record(TAG, "健康岛 · 检查签到状态")
-                val jo = JSONObject(AntSportsRpcCall.NeverlandRpcCall.querySign(3, "jkdsportcard"))
-
-                if (!ResChecker.checkRes(TAG + "查询签到失败:", jo) ||
-                    !ResChecker.checkRes(TAG, jo) ||
-                    jo.optJSONObject("data") == null
-                ) {
-                    val errorCode = jo.optString("errorCode", "")
-                    if ("ALREADY_SIGN_IN" == errorCode ||
-                        "已签到" == jo.optString("errorMsg", "")
-                    ) {
-                        Status.setFlagToday("AntSports::neverlandDoSign::已签到")
-                    }
-                    return
-                }
-
-                val data = jo.getJSONObject("data")
-                val signInfo = data.optJSONObject("continuousSignInfo")
-                if (signInfo != null && signInfo.optBoolean("signedToday", false)) {
-                    Log.record(
-                        TAG,
-                        "今日已签到 ✔ 连续：${signInfo.optInt("continuitySignedDayCount")} 天"
+                val queryResponse =
+                    AntSportsRpcCall.NeverlandRpcCall.querySign(
+                        3,
+                        "jkdsportcard"
                     )
-                    return
+                when (NeverlandPolicy.signDecision(queryResponse)) {
+                    NeverlandSignDecision.CONFIRMED -> {
+                        Status.setFlagToday(
+                            "AntSports::neverlandDoSign::已签到"
+                        )
+                        Log.record(TAG, "健康岛今日已签到")
+                    }
+
+                    NeverlandSignDecision.EXECUTE -> {
+                        Log.record(TAG, "健康岛 · 正在签到…")
+                        AntSportsRpcCall.NeverlandRpcCall.takeSign(
+                            3,
+                            "jkdsportcard"
+                        )
+                        val confirmedResponse =
+                            AntSportsRpcCall.NeverlandRpcCall.querySign(
+                                3,
+                                "jkdsportcard"
+                            )
+                        if (
+                            NeverlandPolicy.signDecision(confirmedResponse) ==
+                            NeverlandSignDecision.CONFIRMED
+                        ) {
+                            Status.setFlagToday(
+                                "AntSports::neverlandDoSign::已签到"
+                            )
+                            Log.other("健康岛签到已由服务端确认")
+                        } else {
+                            Log.record(
+                                TAG,
+                                "健康岛签到状态未刷新，等待后续重试"
+                            )
+                        }
+                    }
+
+                    NeverlandSignDecision.RETRY ->
+                        Log.record(TAG, "健康岛签到查询未确认，等待后续重试")
                 }
-
-                Log.record(TAG, "健康岛 · 正在签到…")
-                val signRes = JSONObject(AntSportsRpcCall.NeverlandRpcCall.takeSign(3, "jkdsportcard"))
-
-                if (!ResChecker.checkRes(TAG + "签到失败:", signRes) ||
-                    !ResChecker.checkRes(TAG, signRes) ||
-                    signRes.optJSONObject("data") == null
-                ) {
-                    Log.error(TAG, "takeSign raw=$signRes")
-                    Status.setFlagToday("AntSports::neverlandDoSign::已签到")
-                    return
-                }
-
-                val signData = signRes.getJSONObject("data")
-                val reward = signData.optJSONObject("continuousDoSignInVO")
-                val rewardAmount = reward?.optInt("rewardAmount", 0) ?: 0
-                val rewardType = reward?.optString("rewardType", "") ?: ""
-                val signInfoAfter = signData.optJSONObject("continuousSignInfo")
-                val newContinuity = signInfoAfter?.optInt("continuitySignedDayCount", -1) ?: -1
-
-                Log.other(
-                    "健康岛签到成功 🎉 +" + rewardAmount + rewardType +
-                        " 连续：" + newContinuity + " 天"
-                )
-                Status.setFlagToday("AntSports::neverlandDoSign::已签到")
             } catch (t: Throwable) {
                 Log.printStackTrace(TAG, "neverlandDoSign err:$t", t)
             }
@@ -2025,34 +1832,30 @@ class AntSports : ModelTask() {
                 try {
                     if (errorCount >= MAX_ERROR_COUNT) {
                         Log.error(TAG, "任务处理失败次数达到上限，停止循环")
-                        Status.setFlagToday(StatusFlags.FLAG_ANTSPORTS_TASK_CENTER_DONE)
                         break
                     }
 
                     val taskCenterResp = JSONObject(AntSportsRpcCall.NeverlandRpcCall.queryTaskCenter())
-                    if (!ResChecker.checkRes(TAG, taskCenterResp) ||
-                        taskCenterResp.optJSONObject("data") == null
-                    ) {
+                    val taskSnapshot =
+                        NeverlandPolicy.parseTasks(taskCenterResp)
+                    if (!taskSnapshot.recognized) {
                         errorCount++
                         GlobalThreadPools.sleepCompat(TASK_LOOP_DELAY)
                         continue
                     }
 
-                    val taskList = taskCenterResp.getJSONObject("data").optJSONArray("taskCenterTaskVOS")
-                    if (taskList == null || taskList.length() == 0) {
+                    if (taskSnapshot.tasks.isEmpty()) {
                         Log.other("任务中心为空，无任务可处理")
                         break
                     }
 
-                    val pendingTasks = mutableListOf<JSONObject>()
-                    for (i in 0 until taskList.length()) {
-                        val task = taskList.optJSONObject(i) ?: continue
-
-                        val title = task.optString("title", task.optString("taskName", "未知任务"))
-                        val type = task.optString("taskType", "")
-                        val status = task.optString("taskStatus", "")
-                        val taskId = task.optString("id", task.optString("taskId", ""))
-
+                    val pendingTasks =
+                        mutableListOf<NeverlandTaskState>()
+                    for (task in taskSnapshot.tasks) {
+                        val title = task.title.ifBlank { "未知任务" }
+                        val type = task.type
+                        val status = task.status
+                        val taskId = task.id
                         if ("NOT_SIGNUP" == status) {
                             Log.record(TAG, "任务 [$title] 需要手动报名，已自动拉黑并跳过")
                             if (taskId.isNotEmpty()) {
@@ -2064,13 +1867,27 @@ class AntSports : ModelTask() {
                         if (TaskBlacklist.isTaskInBlacklist(taskId)) continue
 
                         if (("PROMOKERNEL_TASK" == type || "LIGHT_TASK" == type) &&
-                            "FINISHED" != status
+                            status !in setOf(
+                                "FINISHED",
+                                "RECEIVED",
+                                "DONE",
+                                "COMPLETED"
+                            )
                         ) {
                             pendingTasks.add(task)
                         }
                     }
 
                     if (pendingTasks.isEmpty()) {
+                        if (
+                            NeverlandPolicy.isTaskCenterConfirmedDone(
+                                taskCenterResp
+                            )
+                        ) {
+                            Status.setFlagToday(
+                                StatusFlags.FLAG_ANTSPORTS_TASK_CENTER_DONE
+                            )
+                        }
                         Log.record(TAG, "没有可处理或领取的任务，退出循环")
                         break
                     }
@@ -2079,7 +1896,7 @@ class AntSports : ModelTask() {
 
                     var currentBatchError = 0
                     for (task in pendingTasks) {
-                        val ok = handleSingleTask(task)
+                        val ok = handleSingleTask(task.source)
                         if (!ok) currentBatchError++
                         GlobalThreadPools.sleepCompat(3000)
                     }
@@ -2115,24 +1932,23 @@ class AntSports : ModelTask() {
 
                         val res = JSONObject(AntSportsRpcCall.NeverlandRpcCall.taskReceive(task))
                         if (res.optBoolean("success", false)) {
-                            val data = res.optJSONObject("data")
-                            var rewardDetail = ""
-                            if (data != null && data.has("userItems")) {
-                                val items = data.getJSONArray("userItems")
-                                val sb = StringBuilder()
-                                for (i in 0 until items.length()) {
-                                    val item = items.getJSONObject(i)
-                                    val name = item.optString("name", "未知奖励")
-                                    val amount = item.optInt("modifyCount", 0)
-                                    val total = item.optInt("count", 0)
-                                    sb.append("[").append(name)
-                                        .append(" +").append(amount)
-                                        .append(" (余:").append(total).append(")] ")
-                                }
-                                rewardDetail = sb.toString()
+                            if (
+                                confirmNeverlandTaskTransition(
+                                    task,
+                                    status
+                                )
+                            ) {
+                                Log.record(
+                                    TAG,
+                                    "健康岛任务奖励已由服务端确认[$title]"
+                                )
+                                return true
                             }
-                            Log.record(TAG, "完成[$title]✔$rewardDetail")
-                            return true
+                            Log.record(
+                                TAG,
+                                "健康岛任务领奖后状态未刷新[$title]"
+                            )
+                            return false
                         } else {
                             val errorMsg = res.optString("errorMsg", "未知错误")
                             val errorCode = res.optString("errorCode", "UNKNOWN")
@@ -2176,6 +1992,7 @@ class AntSports : ModelTask() {
                 Log.record(TAG, "开始检查健康岛浏览任务")
                 var hasTask = true
                 while (hasTask) {
+                    var confirmedAny = false
                     val taskInfoResp = JSONObject(
                         AntSportsRpcCall.NeverlandRpcCall.queryTaskInfo(
                             "health-island",
@@ -2209,7 +2026,7 @@ class AntSports : ModelTask() {
                         }
 
                         Log.record(TAG, "健康岛浏览任务：能量+$energyNum，需等待${viewSec}秒")
-                        GlobalThreadPools.sleepCompat((viewSec / 3).toLong())
+                        GlobalThreadPools.sleepCompat(viewSec * 1000L)
 
                         val receiveResp = JSONObject(
                             AntSportsRpcCall.NeverlandRpcCall.energyReceive(
@@ -2222,12 +2039,35 @@ class AntSports : ModelTask() {
                         if (ResChecker.checkRes(TAG + "领取健康岛任务奖励:", receiveResp) &&
                             ResChecker.checkRes(TAG, receiveResp)
                         ) {
-                            Log.other("✅ 健康岛浏览任务完成，获得能量+$energyNum")
+                            val confirmedResponse =
+                                AntSportsRpcCall.NeverlandRpcCall.queryTaskInfo(
+                                    "health-island",
+                                    "LIGHT_FEEDS_TASK"
+                                )
+                            if (
+                                NeverlandPolicy.isBubbleEncryptConfirmed(
+                                    encryptValue,
+                                    confirmedResponse
+                                )
+                            ) {
+                                confirmedAny = true
+                                Log.other(
+                                    "✅ 健康岛浏览任务已确认，获得能量+$energyNum"
+                                )
+                            } else {
+                                Log.record(
+                                    TAG,
+                                    "健康岛浏览任务奖励未确认，等待后续重试"
+                                )
+                            }
                         } else {
                             Log.error(TAG, "健康岛任务领取失败: $receiveResp")
                         }
 
                         GlobalThreadPools.sleepCompat(1000)
+                    }
+                    if (!confirmedAny) {
+                        hasTask = false
                     }
                 }
             } catch (t: Throwable) {
@@ -2247,8 +2087,20 @@ class AntSports : ModelTask() {
                 task.put("scene", "MED_TASK_HALL")
                 val res = JSONObject(AntSportsRpcCall.NeverlandRpcCall.taskSend(task))
                 if (ResChecker.checkRes(TAG, res)) {
-                    Log.other("✔ 活动任务完成：$title")
-                    true
+                    val confirmed =
+                        confirmNeverlandTaskTransition(
+                            task,
+                            task.optString("taskStatus")
+                        )
+                    if (confirmed) {
+                        Log.other("✔ 活动任务已确认：$title")
+                    } else {
+                        Log.record(
+                            TAG,
+                            "活动任务状态未刷新，等待后续重试：$title"
+                        )
+                    }
+                    confirmed
                 } else {
                     Log.error(TAG, "taskSend 失败: $task 响应：$res")
                     false
@@ -2281,17 +2133,20 @@ class AntSports : ModelTask() {
                 if (res.optBoolean("success", false) ||
                     "0" == res.optString("errCode", "")
                 ) {
-                    var rewardMsg = ""
-                    val extendInfo = res.optJSONObject("extendInfo")
-                    if (extendInfo != null) {
-                        val rewardInfo = extendInfo.optJSONObject("rewardInfo")
-                        if (rewardInfo != null) {
-                            val amount = rewardInfo.optString("rewardAmount", "0")
-                            rewardMsg = " (获得奖励: $amount 能量)"
-                        }
+                    val confirmed =
+                        confirmNeverlandTaskTransition(
+                            task,
+                            task.optString("taskStatus")
+                        )
+                    if (confirmed) {
+                        Log.other("✔ 浏览任务已确认：$title")
+                    } else {
+                        Log.record(
+                            TAG,
+                            "浏览任务状态未刷新，等待后续重试：$title"
+                        )
                     }
-                    Log.other("✔ 浏览任务完成：$title$rewardMsg")
-                    true
+                    confirmed
                 } else {
                     Log.error(TAG, "完成 LIGHT_TASK 失败: $title 返回: $res")
                     false
@@ -2300,6 +2155,29 @@ class AntSports : ModelTask() {
                 Log.printStackTrace(TAG, "handleLightTask 处理 LIGHT_TASK 异常（$title）", e)
                 false
             }
+        }
+
+        private fun confirmNeverlandTaskTransition(
+            task: JSONObject,
+            previousStatus: String
+        ): Boolean {
+            val taskAliases = NeverlandPolicy.taskAliases(task)
+            if (taskAliases.isEmpty()) {
+                return false
+            }
+            val response = runCatching {
+                AntSportsRpcCall.NeverlandRpcCall.queryTaskCenter()
+            }.getOrNull() ?: return false
+            val currentStatus = NeverlandPolicy.parseTasks(response)
+                .tasks
+                .firstOrNull {
+                    it.aliases.any(taskAliases::contains)
+                }
+                ?.status
+            return NeverlandPolicy.isTaskTransitionConfirmed(
+                previousStatus,
+                currentStatus
+            )
         }
 
         // ---------------------------------------------------------------
@@ -2313,17 +2191,19 @@ class AntSports : ModelTask() {
             try {
                 Log.record(TAG, "健康岛 · 检查可领取泡泡")
 
-                val jo = JSONObject(AntSportsRpcCall.NeverlandRpcCall.queryBubbleTask())
+                val bubbleResponse =
+                    AntSportsRpcCall.NeverlandRpcCall.queryBubbleTask()
+                val jo = JSONObject(bubbleResponse)
+                val bubbleSnapshot =
+                    NeverlandPolicy.parseBubbleRecords(bubbleResponse)
 
-                if (!ResChecker.checkRes(TAG + "查询泡泡失败:", jo) ||
-                    jo.optJSONObject("data") == null
-                ) {
+                if (!bubbleSnapshot.recognized) {
                     Log.error(TAG, "queryBubbleTask raw=$jo")
                     return
                 }
 
-                val arr = jo.getJSONObject("data").optJSONArray("bubbleTaskVOS")
-                if (arr == null || arr.length() == 0) {
+                val bubbleRecords = bubbleSnapshot.records
+                if (bubbleRecords.isEmpty()) {
                     Log.other("无泡泡可领取")
                     return
                 }
@@ -2331,8 +2211,8 @@ class AntSports : ModelTask() {
                 val ids = mutableListOf<String>()
                 val encryptValues = mutableListOf<String>()
 
-                for (i in 0 until arr.length()) {
-                    val item = arr.getJSONObject(i)
+                for (record in bubbleRecords) {
+                    val item = record.source
                     val bubbleTaskStatus = item.optString("bubbleTaskStatus")
                     val encryptValue = item.optString("encryptValue")
                     val energyNum = item.optInt("energyNum", 0)
@@ -2344,10 +2224,11 @@ class AntSports : ModelTask() {
                             TAG,
                             "找到可浏览任务： ${item.optString("title")}，能量+$energyNum，需等待${viewSec}秒"
                         )
-                    } else if (!item.optBoolean("initState") &&
-                        item.optString("medEnergyBallInfoRecordId").isNotEmpty()
+                    } else if (
+                        !item.optBoolean("initState") &&
+                        record.id.isNotEmpty()
                     ) {
-                        ids.add(item.getString("medEnergyBallInfoRecordId"))
+                        ids.add(record.id)
                     }
                 }
 
@@ -2360,28 +2241,33 @@ class AntSports : ModelTask() {
                     Log.record(TAG, "健康岛 · 正在领取 ${ids.size} 个泡泡…")
                     val pick = JSONObject(AntSportsRpcCall.NeverlandRpcCall.pickBubbleTaskEnergy(ids))
 
-                    if (!ResChecker.checkRes(TAG + "领取泡泡失败:", pick) ||
-                        pick.optJSONObject("data") == null
-                    ) {
+                    if (!ResChecker.checkRes(TAG + "领取泡泡失败:", pick)) {
                         Log.error(TAG, "pickBubbleTaskEnergy raw=$pick")
                         return
                     }
 
-                    val data = pick.getJSONObject("data")
-                    val changeAmount = data.optString("changeAmount", "0")
-                    val balance = data.optString("balance", "0")
-                    if (changeAmount == "0") {
-                        Log.record(TAG, "健康岛 · 本次未获得任何能量")
+                    val confirmedResponse =
+                        AntSportsRpcCall.NeverlandRpcCall.queryBubbleTask()
+                    if (
+                        NeverlandPolicy.areBubbleClaimsConfirmed(
+                            ids.toSet(),
+                            confirmedResponse
+                        )
+                    ) {
+                        Log.other("健康岛泡泡奖励已由服务端确认")
                     } else {
-                        Log.other("捡泡泡成功 🎈 +$changeAmount 余额：$balance")
+                        Log.record(
+                            TAG,
+                            "健康岛泡泡领取后状态未刷新，等待后续重试"
+                        )
                     }
                 }
 
                 for (encryptValue in encryptValues) {
                     Log.record(TAG, "开始浏览任务，任务 encryptValue: $encryptValue")
 
-                    for (i in 0 until arr.length()) {
-                        val item = arr.getJSONObject(i)
+                    for (record in bubbleRecords) {
+                        val item = record.source
                         if (encryptValue == item.optString("encryptValue")) {
                             val energyNum = item.optInt("energyNum", 0)
                             val viewSec = item.optInt("viewSec", 15)
@@ -2399,7 +2285,24 @@ class AntSports : ModelTask() {
                             )
 
                             if (ResChecker.checkRes(TAG + "领取泡泡任务奖励:", receiveResp)) {
-                                Log.other("✅ 浏览任务[$title]完成，获得能量+$energyNum")
+                                val confirmedResponse =
+                                    AntSportsRpcCall.NeverlandRpcCall
+                                        .queryBubbleTask()
+                                if (
+                                    NeverlandPolicy.isBubbleEncryptConfirmed(
+                                        encryptValue,
+                                        confirmedResponse
+                                    )
+                                ) {
+                                    Log.other(
+                                        "✅ 浏览任务[$title]奖励已确认，获得能量+$energyNum"
+                                    )
+                                } else {
+                                    Log.record(
+                                        TAG,
+                                        "浏览泡泡奖励未确认[$title]，等待后续重试"
+                                    )
+                                }
                             } else {
                                 Log.error(TAG, "浏览任务领取失败: $receiveResp")
                             }

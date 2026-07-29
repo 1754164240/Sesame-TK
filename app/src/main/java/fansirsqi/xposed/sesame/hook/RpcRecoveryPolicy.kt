@@ -76,6 +76,10 @@ class RpcRecoveryPolicy {
         // 无返回值请求无法证明 Bridge 已恢复，保留当前熔断状态。
     }
 
+    fun onFrequencyLimited(): RecoveryDecision = RecoveryDecision.NONE
+
+    fun onUnknownFailure(): RecoveryDecision = RecoveryDecision.NONE
+
     fun onSuccess() {
         consecutiveFailures.set(0)
         reason.set(RpcBlockReason.NONE)

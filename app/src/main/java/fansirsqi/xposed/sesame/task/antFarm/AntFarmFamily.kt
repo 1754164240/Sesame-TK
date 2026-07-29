@@ -158,11 +158,10 @@ data object AntFarmFamily {
             }
             if (AntFarmWalkDonateTask.donateIfEligible(TAG)) {
                 Log.farm("家庭任务🏡捐步")
+                Status.setFlagToday(FAMILY_WALK_DONATE_FLAG)
             }
         } catch (e: Exception) {
             Log.printStackTrace(TAG, e)
-        } finally {
-            Status.setFlagToday(FAMILY_WALK_DONATE_FLAG)
         }
     }
 
@@ -174,7 +173,17 @@ data object AntFarmFamily {
             if (Status.hasFlagToday("farmfamily::dailySign")) return
             val res = JSONObject(AntFarmRpcCall.familyReceiveFarmTaskAward("FAMILY_SIGN_TASK"))
             if (ResChecker.checkRes(TAG, res)) {
-                Log.farm("家庭任务🏡每日签到")
+                val confirmedResponse = AntFarmRpcCall.enterFamily()
+                if (
+                    AntFarmRewardPolicy.isFamilySignConfirmed(
+                        confirmedResponse
+                    )
+                ) {
+                    Status.setFlagToday("farmfamily::dailySign")
+                    Log.farm("家庭任务🏡每日签到已确认")
+                } else {
+                    Log.record(TAG, "家庭签到状态未刷新，等待后续重试")
+                }
             }
         } catch (e: Exception) {
             Log.printStackTrace(TAG,  e)
@@ -203,7 +212,23 @@ data object AntFarmFamily {
                     val count = jo.optInt("count", 1)
                     val receveRes = JSONObject(AntFarmRpcCall.receiveFamilyAward(rightId))
                     if (ResChecker.checkRes(TAG, receveRes)) {
-                        Log.farm("家庭奖励🏆: $awardName x $count")
+                        val confirmedResponse =
+                            AntFarmRpcCall.familyAwardList()
+                        if (
+                            AntFarmRewardPolicy.isFamilyAwardConfirmed(
+                                confirmedResponse,
+                                rightId
+                            )
+                        ) {
+                            Log.farm(
+                                "家庭奖励🏆已确认: $awardName x $count"
+                            )
+                        } else {
+                            Log.record(
+                                TAG,
+                                "家庭奖励领取后状态未刷新[$awardName]"
+                            )
+                        }
                     }
                 }
             }

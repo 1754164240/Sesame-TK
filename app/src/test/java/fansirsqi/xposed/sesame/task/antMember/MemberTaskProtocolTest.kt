@@ -62,6 +62,7 @@ class MemberTaskProtocolTest {
 
         assertEquals("32002001", task.adId)
         assertEquals("dynamic-biz-id", task.adBizId)
+        assertEquals("config-id", task.configId)
         assertEquals("逛精选好物15秒", task.title)
         assertEquals(5, task.awardNum)
         assertEquals(15, task.browseSeconds)
@@ -431,6 +432,299 @@ class MemberTaskProtocolTest {
             MemberTaskProtocol.isExpectedTaskRejection(
                 JSONObject("""{"success":false,"resultDesc":"系统异常"}""")
             )
+        )
+    }
+
+    @Test
+    fun `任务快照合并多查询源并按进程编号采用更新状态`() {
+        val signPage = JSONObject(
+            """
+            {
+              "success": true,
+              "resultData": {
+                "categoryTaskList": [{
+                  "taskProcessVOList": [{
+                    "processId": "process-1",
+                    "status": "PROCESSING",
+                    "targetBusiness": ["BROWSE#15S#biz-param"],
+                    "simpleTaskConfig": {
+                      "configId": "config-1",
+                      "title": "浏览任务"
+                    }
+                  }]
+                }]
+              }
+            }
+            """.trimIndent()
+        )
+        val progress = JSONObject(
+            """
+            {
+              "success": true,
+              "data": {
+                "availableTaskProcessList": [{
+                  "taskProcessId": "process-1",
+                  "status": "COMPLETE",
+                  "targetBusiness": ["BROWSE#15S#biz-param"],
+                  "taskConfig": {
+                    "configId": "config-1",
+                    "title": "浏览任务"
+                  }
+                }]
+              }
+            }
+            """.trimIndent()
+        )
+
+        val snapshot = MemberTaskProtocol.parseTaskSnapshot(
+            signPage,
+            progress
+        )
+
+        assertTrue(snapshot.recognized)
+        assertEquals(1, snapshot.tasks.size)
+        assertEquals("process-1", snapshot.tasks.single().stableKey)
+        assertEquals("COMPLETE", snapshot.tasks.single().status)
+    }
+
+    @Test
+    fun `目标业务扫描全部条目并识别CALL_APP为只回查`() {
+        val response = JSONObject(
+            """
+            {
+              "success": true,
+              "resultData": {
+                "pureTaskList": [{
+                  "processId": "process-call",
+                  "status": "PROCESSING",
+                  "targetBusiness": [
+                    "FOLLOW#NONE#unsupported",
+                    "CALL_APP#member-scene"
+                  ],
+                  "simpleTaskConfig": {
+                    "configId": "600202500151482",
+                    "title": "访问会员会场"
+                  }
+                }]
+              }
+            }
+            """.trimIndent()
+        )
+
+        val task = MemberTaskProtocol.parseTaskSnapshot(response)
+            .tasks
+            .single()
+
+        assertEquals("CALL_APP#member-scene", task.targetBusiness)
+        assertEquals(
+            MemberTaskDecision.VERIFY_ONLY,
+            MemberTaskSafetyPolicy.classify(task.toSafetyCandidate())
+        )
+    }
+
+    @Test
+    fun `未知任务容器不推定任务为空`() {
+        val snapshot = MemberTaskProtocol.parseTaskSnapshot(
+            JSONObject("""{"success":true,"data":{}}""")
+        )
+
+        assertFalse(snapshot.recognized)
+        assertTrue(snapshot.tasks.isEmpty())
+    }
+
+    @Test
+    fun `单任务详情区分终态部分进度和未确认`() {
+        val before = MemberTaskState(
+            stableKey = "process-1",
+            processId = "process-1",
+            configId = "config-1",
+            adBizId = "",
+            title = "周期任务",
+            status = "PROCESSING",
+            current = 0,
+            limit = 3,
+            targetBusiness = "BROWSE#15S#biz-param"
+        )
+
+        assertEquals(
+            MemberTaskVerification.CONFIRMED,
+            MemberTaskProtocol.verifyTaskDetail(
+                before,
+                JSONObject(
+                    """
+                    {
+                      "success": true,
+                      "resultData": {
+                        "taskProcessVO": {
+                          "processId": "process-1",
+                          "status": "COMPLETE"
+                        }
+                      }
+                    }
+                    """.trimIndent()
+                )
+            )
+        )
+        assertEquals(
+            MemberTaskVerification.PARTIAL,
+            MemberTaskProtocol.verifyTaskDetail(
+                before,
+                JSONObject(
+                    """
+                    {
+                      "success": true,
+                      "resultData": {
+                        "taskProcessVO": {
+                          "processId": "process-1",
+                          "status": "PROCESSING",
+                          "extInfo": {
+                            "PERIOD_CURRENT_COUNT": "1",
+                            "PERIOD_TARGET_COUNT": "3"
+                          }
+                        }
+                      }
+                    }
+                    """.trimIndent()
+                )
+            )
+        )
+        assertEquals(
+            MemberTaskVerification.UNCONFIRMED,
+            MemberTaskProtocol.verifyTaskDetail(
+                before,
+                JSONObject(
+                    """
+                    {
+                      "success": true,
+                      "resultData": {
+                        "taskProcessVO": {
+                          "processId": "process-1",
+                          "status": "PROCESSING",
+                          "extInfo": {
+                            "PERIOD_CURRENT_COUNT": "0",
+                            "PERIOD_TARGET_COUNT": "3"
+                          }
+                        }
+                      }
+                    }
+                    """.trimIndent()
+                )
+            )
+        )
+    }
+
+    @Test
+    fun `全状态任务列表查询使用签到广告来源`() {
+        val request = MemberTaskProtocol
+            .buildAllStatusTaskListArgs()
+            .getJSONObject(0)
+
+        assertEquals("signInAd", request.getString("source"))
+    }
+
+    @Test
+    fun `普通单任务详情查询携带进程编号`() {
+        val request = MemberTaskProtocol
+            .buildSingleTaskDetailArgs("process-1")
+            .getJSONObject(0)
+
+        assertEquals("process-1", request.getString("taskProcessId"))
+        assertEquals(
+            "ch_appcenter__chsub_9patch",
+            request.getJSONObject("sourcePassMap").getString("source")
+        )
+    }
+
+    @Test
+    fun `任务状态构造普通浏览报名和执行参数`() {
+        val task = MemberTaskState(
+            stableKey = "process-1",
+            processId = "process-1",
+            configId = "600202500151482",
+            adBizId = "",
+            title = "浏览会员频道",
+            status = "PROCESSING",
+            current = 0,
+            limit = 3,
+            targetBusiness = "BROWSE#15S#alipays://platformapi/startapp"
+        )
+
+        val applyRequest = MemberTaskProtocol
+            .buildApplyTaskArgs(task)
+            .getJSONObject(0)
+        val executeRequest = MemberTaskProtocol
+            .buildExecuteTaskArgs(task, 123L)
+            .getJSONObject(0)
+
+        assertEquals(
+            "600202500151482",
+            applyRequest.getString("taskConfigId")
+        )
+        assertEquals("BROWSE", executeRequest.getString("bizType"))
+        assertEquals("15S", executeRequest.getString("bizSubType"))
+        assertEquals(
+            "alipays://platformapi/startapp",
+            executeRequest.getString("bizParam")
+        )
+        assertEquals("123", executeRequest.getString("outBizNo"))
+    }
+
+    @Test
+    fun `广告单任务详情查询携带配置和业务编号`() {
+        val request = MemberTaskProtocol
+            .buildSingleAdTaskDetailArgs(
+                configId = "32002001",
+                adBizId = "ad-biz"
+            )
+            .getJSONObject(0)
+
+        assertEquals("32002001", request.getString("configId"))
+        assertEquals("ad-biz", request.getString("adBizId"))
+        assertTrue(request.getBoolean("adTaskFlag"))
+        assertFalse(request.getBoolean("alipayGrowthFlag"))
+    }
+
+    @Test
+    fun `任务状态构造广告报名参数并保留动态上下文`() {
+        val response = JSONObject(
+            """
+            {
+              "success": true,
+              "resultData": {
+                "adTaskList": [{
+                  "processId": "ad-process-1",
+                  "status": "INIT",
+                  "adTask": true,
+                  "lightsAdExtMap": {
+                    "adId": "ad-1",
+                    "bizId": "ad-biz-1",
+                    "clickId": "click-1"
+                  },
+                  "simpleTaskConfig": {
+                    "configId": "32002001",
+                    "title": "浏览会员广告",
+                    "taskStage": 0,
+                    "stageVOList": [{
+                      "awardParam": {"awardParamPoint": 5}
+                    }]
+                  }
+                }]
+              }
+            }
+            """.trimIndent()
+        )
+        val task = MemberTaskProtocol.parseTaskSnapshot(response).tasks.single()
+
+        val request = MemberTaskProtocol
+            .buildApplyAdTaskArgs(task)
+            .getJSONObject(0)
+
+        assertEquals("ad-1", request.getString("adId"))
+        assertEquals("ad-biz-1", request.getString("adBizId"))
+        assertEquals(5, request.getInt("awardNum"))
+        assertEquals(
+            "click-1",
+            request.getJSONObject("extMap").getString("clickId")
         )
     }
 }

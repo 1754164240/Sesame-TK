@@ -54,6 +54,16 @@ class TaskRunnerPolicyTest {
     }
 
     @Test
+    fun `并发配置使用安全边界`() {
+        assertEquals(1, ConcurrencyPolicy.task(0))
+        assertEquals(3, ConcurrencyPolicy.task(3))
+        assertEquals(8, ConcurrencyPolicy.task(99))
+        assertEquals(1, ConcurrencyPolicy.forest(0))
+        assertEquals(60, ConcurrencyPolicy.forest(60))
+        assertEquals(100, ConcurrencyPolicy.forest(999))
+    }
+
+    @Test
     fun `调度器不再依赖任务显示名称白名单`() {
         val source = File("src/main/java/fansirsqi/xposed/sesame/task/TaskRunner.kt").readText()
 

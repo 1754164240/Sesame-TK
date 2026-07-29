@@ -23,6 +23,7 @@ import fansirsqi.xposed.sesame.model.ModelFields;
 import fansirsqi.xposed.sesame.model.ModelGroup;
 import fansirsqi.xposed.sesame.model.modelFieldExt.BooleanModelField;
 import fansirsqi.xposed.sesame.model.modelFieldExt.ChoiceModelField;
+import fansirsqi.xposed.sesame.model.modelFieldExt.IntegerModelField;
 import fansirsqi.xposed.sesame.model.modelFieldExt.SelectAndCountModelField;
 import fansirsqi.xposed.sesame.model.modelFieldExt.SelectModelField;
 import fansirsqi.xposed.sesame.util.DataStore;
@@ -94,6 +95,8 @@ public class AntOcean extends ModelTask {
     private BooleanModelField usePropByType;
     private SelectAndCountModelField protectOceanList;
     private BooleanModelField PDL_task;
+    private BooleanModelField collectOceanEnergy;
+    private IntegerModelField oceanSelfCollectEnergyThreshold;
     private static ChoiceModelField userprotectType;
 
     public interface protectType {
@@ -109,6 +112,8 @@ public class AntOcean extends ModelTask {
     public ModelFields getFields() {
         ModelFields modelFields = new ModelFields();
         modelFields.addField(dailyOceanTask = new BooleanModelField("dailyOceanTask", "海洋任务", false));
+        modelFields.addField(collectOceanEnergy = new BooleanModelField("collectOceanEnergy", "海洋能量 | 收取", false));
+        modelFields.addField(oceanSelfCollectEnergyThreshold = new IntegerModelField("oceanSelfCollectEnergyThreshold", "海洋能量 | 最低收取克数", 0));
         modelFields.addField(cleanOcean = new BooleanModelField("cleanOcean", "清理 | 开启", false));
         modelFields.addField(cleanOceanType = new ChoiceModelField("cleanOceanType", "清理 | 动作", CleanOceanType.DONT_CLEAN, CleanOceanType.nickNames));
         modelFields.addField(cleanOceanList = new SelectModelField("cleanOceanList", "清理 | 好友列表", new LinkedHashSet<>(), AlipayUser::getList));
@@ -163,23 +168,23 @@ public class AntOcean extends ModelTask {
             if (ResChecker.checkRes(TAG + "查询种植列表失败:", jsonResponse)) {
                 JSONArray cultivationList = jsonResponse.optJSONArray("cultivationItemVOList");
                 if (cultivationList != null) {
+                    IdMapManager.getInstance(BeachMap.class).clear();
                     for (int i = 0; i < cultivationList.length(); i++) {
-                        JSONObject item = cultivationList.getJSONObject(i);
-                        String templateSubType = item.getString("templateSubType");
-                        String actionStr = item.getString("applyAction");
-                        ApplyAction action = ApplyAction.fromString(actionStr);
-                        assert action != null;
-                        if (action.equals(ApplyAction.AVAILABLE)) {
-                            String templateCode = item.getString("templateCode");
-                            String cultivationName = item.getString("cultivationName");
-                            int energy = item.getInt("energy");
+                        OceanCultivation cultivation = OceanCultivationPolicy.parse(cultivationList.optJSONObject(i));
+                        if (cultivation != null && cultivation.getAvailable()) {
                             switch (userprotectType.getValue()) {
                                 case protectType.PROTECT_ALL:
-                                    IdMapManager.getInstance(BeachMap.class).add(templateCode, cultivationName + "(" + energy + "g)");
+                                    IdMapManager.getInstance(BeachMap.class).add(
+                                            cultivation.getCultivationCode(),
+                                            cultivation.getName() + "(" + cultivation.getEnergy() + "g)"
+                                    );
                                     break;
                                 case protectType.PROTECT_BEACH:
-                                    if (!templateSubType.equals("BEACH")) {
-                                        IdMapManager.getInstance(BeachMap.class).add(templateCode, cultivationName + "(" + energy + "g)");
+                                    if ("BEACH".equals(cultivation.getTemplateSubType())) {
+                                        IdMapManager.getInstance(BeachMap.class).add(
+                                                cultivation.getCultivationCode(),
+                                                cultivation.getName() + "(" + cultivation.getEnergy() + "g)"
+                                        );
                                     }
                                     break;
                                 default:
@@ -223,7 +228,7 @@ public class AntOcean extends ModelTask {
         try {
             JSONObject joHomePage = new JSONObject(AntOceanRpcCall.queryHomePage());
             if (ResChecker.checkRes(TAG + "查询海洋主页失败:", joHomePage)) {
-                if (joHomePage.has("bubbleVOList")) {
+                if (collectOceanEnergy.getValue() && joHomePage.has("bubbleVOList")) {
                     collectEnergy(joHomePage.getJSONArray("bubbleVOList"));
                 }
                 JSONObject userInfoVO = joHomePage.getJSONObject("userInfoVO");
@@ -270,14 +275,11 @@ public class AntOcean extends ModelTask {
         }
     }
 
-    private static void collectEnergy(JSONArray bubbleVOList) {
+    private void collectEnergy(JSONArray bubbleVOList) {
         try {
             for (int i = 0; i < bubbleVOList.length(); i++) {
                 JSONObject bubble = bubbleVOList.getJSONObject(i);
-                if (!"ocean".equals(bubble.getString("channel"))) {
-                    continue;
-                }
-                if ("AVAILABLE".equals(bubble.getString("collectStatus"))) {
+                if (OceanSelfCollectPolicy.shouldCollect(bubble, oceanSelfCollectEnergyThreshold.getValue())) {
                     long bubbleId = bubble.getLong("id");
                     String userId = bubble.getString("userId");
                     String s = AntForestRpcCall.collectEnergy("", userId, bubbleId);
@@ -669,23 +671,31 @@ public class AntOcean extends ModelTask {
                     String sceneCode = task.getString("sceneCode");
                     String taskType = task.getString("taskType");
                     String taskStatus = task.getString("taskStatus");
+                    OceanTaskState beforeState = new OceanTaskState(taskType, taskStatus);
                     if (TaskStatus.FINISHED.name().equals(taskStatus)) {
                         JSONObject joAward = new JSONObject(AntOceanRpcCall.receiveTaskAward(sceneCode, taskType));
                         if (ResChecker.checkRes(TAG + "领取海洋任务奖励失败:", joAward)) {
-                            Log.forest("海洋奖励🌊[" + taskTitle + "]# " + awardCount + "拼图");
-                            done = true;
+                            if (confirmOceanTaskAdvanced(beforeState)) {
+                                Log.forest("海洋奖励🌊[" + taskTitle + "]# " + awardCount + "拼图");
+                                done = true;
+                            } else {
+                                Log.record(TAG, "海洋任务🌊[" + taskTitle + "]领奖已受理但状态未推进，保留后续重试");
+                            }
                         } else {
                             Log.error(TAG, "海洋奖励🌊领取失败：" + joAward);
                         }
                         GlobalThreadPools.sleepCompat(500);
                     } else if (TaskStatus.TODO.name().equals(taskStatus)) {
-                        if (badTaskSet.contains(taskTitle)) {
+                        if (badTaskSet.contains(taskTitle) || badTaskSet.contains(taskType)) {
                             Log.record(TAG, "海洋任务🌊[" + taskTitle + "]已在黑名单中，跳过处理");
                             continue;
                         }
-                        if (taskTitle.contains("答题")) {
+                        String actionType = task.optString("actionType", bizInfo.optString("actionType", ""));
+                        OceanTaskDecision decision = OceanTaskSafetyPolicy.classify(taskType, taskTitle, actionType);
+                        if (decision == OceanTaskDecision.ANSWER) {
                             answerQuestion();
-                        } else {
+                            done = confirmOceanTaskAdvanced(beforeState);
+                        } else if (decision == OceanTaskDecision.FINISH_RPC) {
                             String bizKey = sceneCode + "_" + taskType;
                             int count = oceanTaskTryCount
                                     .computeIfAbsent(bizKey, k -> new AtomicInteger(0))
@@ -705,13 +715,19 @@ public class AntOcean extends ModelTask {
                                 DataStore.INSTANCE.put("badOceanTaskSet", badTaskSet);
                             } else {
                                 if (ResChecker.checkRes(TAG, joFinishTask)) {
-                                    Log.forest("海洋任务🌊完成[" + taskTitle + "]");
-                                    done = true;
+                                    if (confirmOceanTaskAdvanced(beforeState)) {
+                                        Log.forest("海洋任务🌊完成[" + taskTitle + "]");
+                                        done = true;
+                                    } else {
+                                        Log.record(TAG, "海洋任务🌊[" + taskTitle + "]完成已受理但状态未推进，保留后续重试");
+                                    }
                                 } else {
                                     Log.error(TAG, "海洋任务🌊完成失败：" + joFinishTask);
                                 }
                             }
 
+                        } else {
+                            Log.record(TAG, "海洋任务🌊[" + taskTitle + "]安全策略跳过[" + decision + "]");
                         }
                         GlobalThreadPools.sleepCompat(500);
                     }
@@ -723,6 +739,20 @@ public class AntOcean extends ModelTask {
         } catch (
                 Throwable t) {
             Log.printStackTrace(TAG, "receiveTaskAward err:", t);
+        }
+    }
+
+    private boolean confirmOceanTaskAdvanced(OceanTaskState beforeState) {
+        try {
+            JSONObject response = new JSONObject(AntOceanRpcCall.queryTaskList());
+            if (!ResChecker.checkRes(TAG + "回查海洋任务失败:", response)) {
+                return false;
+            }
+            OceanTaskState afterState = OceanTaskProtocol.statusOf(response, beforeState.getTaskType());
+            return OceanTaskProtocol.isAdvanced(beforeState, afterState);
+        } catch (Throwable t) {
+            Log.printStackTrace(TAG, "confirmOceanTaskAdvanced err:", t);
+            return false;
         }
     }
 

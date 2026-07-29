@@ -16,6 +16,7 @@ class Status {
 
     // =========================== forest
     var waterFriendLogList: MutableMap<String, Int> = HashMap()
+    var wateredFriendLogList: MutableMap<String, Int> = HashMap() // 好友给当前用户浇水的次数
     var cooperateWaterList: MutableSet<String> = HashSet() // 合作浇水
     var reserveLogList: MutableMap<String, Int> = HashMap()
     var ancientTreeCityCodeList: MutableSet<String> = HashSet() // 古树
@@ -145,6 +146,29 @@ class Status {
             val key = "${UserMap.currentUid}-$id"
             INSTANCE.waterFriendLogList[key] = count
             save()
+        }
+
+        @JvmStatic
+        fun wateredFriendToday(id: String) {
+            if (incrementWateredFriend(INSTANCE, UserMap.currentUid, id)) {
+                save()
+            }
+        }
+
+        internal fun incrementWateredFriend(
+            status: Status,
+            ownerId: String?,
+            friendId: String
+        ): Boolean {
+            val normalizedOwnerId = ownerId.orEmpty().trim()
+            val normalizedFriendId = friendId.trim()
+            if (normalizedOwnerId.isEmpty() || normalizedFriendId.isEmpty()) {
+                return false
+            }
+            val key = "$normalizedOwnerId-$normalizedFriendId"
+            status.wateredFriendLogList[key] =
+                (status.wateredFriendLogList[key] ?: 0) + 1
+            return true
         }
 
         @JvmStatic

@@ -42,4 +42,20 @@ class ReferTokenParserTest {
         assertNull(ReferTokenParser.parse(empty))
         assertNull(ReferTokenParser.parse(JSONObject()))
     }
+
+    @Test
+    fun `兼容字符串形式requestData`() {
+        val array = JSONObject().put(
+            "requestData",
+            """[{"positionRequest":{"referInfo":{"referToken":"array-token"}}}]"""
+        )
+        val objectValue = JSONObject().put(
+            "requestData",
+            """{"positionRequest":{"referInfo":{"referToken":"object-token"}}}"""
+        )
+
+        assertEquals("array-token", ReferTokenParser.parse(array))
+        assertEquals("object-token", ReferTokenParser.parse(objectValue))
+        assertNull(ReferTokenParser.parse(JSONObject().put("requestData", "not-json")))
+    }
 }

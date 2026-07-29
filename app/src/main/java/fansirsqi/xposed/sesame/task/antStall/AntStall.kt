@@ -790,45 +790,53 @@ class AntStall : ModelTask() {
                     val task = taskModels.getJSONObject(i)
                     val taskStatus = task.getString("taskStatus")
                     val taskType = task.getString("taskType")
+                    val beforeState = StallTaskState(taskType, taskStatus.uppercase())
 
                     // 已完成的任务领取奖励
                     if (taskStatus == "FINISHED") {
                         Log.record(TAG, "任务[$taskType]已完成,尝试领取奖励...")
-                        receiveTaskAward(taskType)
+                        receiveTaskAward(taskType, beforeState)
                         continue
                     }
 
                     if (taskStatus != "TODO") continue
 
                     val bizInfo = JSONObject(task.getString("bizInfo"))
-                    val title = bizInfo.optString("title", taskType)
-                    val actionType = bizInfo.getString("actionType")
-
-                    // 自动完成任务
-                    if (actionType == "VISIT_AUTO_FINISH" || taskType in TASK_TYPE_LIST) {
-                        if (finishTask(taskType)) {
-                            Log.farm("蚂蚁新村💣任务[$title]完成")
-                            GlobalThreadPools.sleepCompat(200L)
+                    val title = bizInfo.optString("title", bizInfo.optString("taskTitle", taskType))
+                    val actionType = bizInfo.optString("actionType", task.optString("actionType"))
+                    when (val decision = StallTaskSafetyPolicy.classify(taskType, title, actionType)) {
+                        StallTaskDecision.FINISH_RPC -> {
+                            if (finishTask(taskType, beforeState)) {
+                                Log.farm("蚂蚁新村💣任务[$title]完成")
+                            }
                         }
-                        continue
-                    }
 
-                    // 特殊任务处理
-                    when (taskType) {
-                        "ANTSTALL_NORMAL_DAILY_QA" -> {
+                        StallTaskDecision.HANDLE_QA -> {
                             if (ReadingDada.answerQuestion(bizInfo)) {
-                                receiveTaskAward(taskType)
+                                val refreshed = refreshTaskState(taskType)
+                                if (StallTaskProtocol.isAdvanced(beforeState, refreshed) && StallTaskProtocol.isRewardReady(refreshed)) {
+                                    receiveTaskAward(taskType, refreshed!!)
+                                } else {
+                                    Log.record(TAG, "新村任务[$title]答题已提交但状态未推进，保留后续重试")
+                                }
                             }
                         }
 
-                        "ANTSTALL_NORMAL_INVITE_REGISTER" -> {
+                        StallTaskDecision.HANDLE_INVITE -> {
                             if (inviteRegister()) {
-                                GlobalThreadPools.sleepCompat(200L)
+                                val refreshed = refreshTaskState(taskType)
+                                if (!StallTaskProtocol.isAdvanced(beforeState, refreshed)) {
+                                    Log.record(TAG, "新村任务[$title]邀请已受理但状态未推进，保留后续重试")
+                                }
                             }
                         }
 
-                        "ANTSTALL_XLIGHT_VARIABLE_AWARD" -> {
-                            handleXlightTask()
+                        StallTaskDecision.HANDLE_XLIGHT -> {
+                            handleXlightTask(beforeState)
+                        }
+
+                        else -> {
+                            Log.record(TAG, "新村任务[$title]安全策略跳过[$decision]")
                         }
                     }
 
@@ -846,10 +854,15 @@ class AntStall : ModelTask() {
     /**
      * @brief 处理X-light任务
      */
-    private fun handleXlightTask() {
+    private fun handleXlightTask(beforeState: StallTaskState) {
         try {
             val response = AntStallRpcCall.xlightPlugin()
             val json = JSONObject(response)
+
+            if (StallTaskProtocol.isXlightTrafficLimited(json)) {
+                Log.error(TAG, "XLight 命中流量风控[217/61002]，停止当前任务链路")
+                return
+            }
 
             if (!json.has("playingResult")) {
                 Log.error(TAG, "taskList.xlightPlugin err: ${json.optString("resultDesc")}")
@@ -875,6 +888,14 @@ class AntStall : ModelTask() {
                     val finishJson = JSONObject(finishResponse)
                     if (!finishJson.optBoolean("success")) {
                         Log.error(TAG, "taskList.finish err: ${finishJson.optString("resultDesc")}")
+                        continue
+                    }
+                    val refreshed = refreshTaskState(beforeState.taskType)
+                    if (StallTaskProtocol.isAdvanced(beforeState, refreshed)) {
+                        Log.farm("蚂蚁新村⛪XLight 任务状态已推进")
+                        return
+                    } else {
+                        Log.record(TAG, "XLight 事件已受理但任务状态未推进，继续保留重试")
                     }
                 } catch (t: Throwable) {
                     Log.printStackTrace(TAG, "taskList for err:", t)
@@ -894,7 +915,12 @@ class AntStall : ModelTask() {
             val json = JSONObject(response)
 
             if (ResChecker.checkRes(TAG, json)) {
-                Log.farm("蚂蚁新村⛪[签到成功]")
+                val confirmation = JSONObject(AntStallRpcCall.taskList())
+                if (ResChecker.checkRes(TAG, confirmation) && StallTaskProtocol.isSignConfirmed(confirmation)) {
+                    Log.farm("蚂蚁新村⛪[签到成功]")
+                } else {
+                    Log.record(TAG, "新村签到已受理但服务端状态未刷新，保留后续重试")
+                }
             } else {
                 Log.error(TAG, "signToday err: $response")
             }
@@ -906,27 +932,33 @@ class AntStall : ModelTask() {
     /**
      * @brief 领取任务奖励
      */
-    private fun receiveTaskAward(taskType: String) {
-        if (!stallReceiveAward.value) return
+    private fun receiveTaskAward(taskType: String, beforeState: StallTaskState): Boolean {
+        if (!stallReceiveAward.value) return false
 
         try {
             val response = AntStallRpcCall.receiveTaskAward(taskType)
             val json = JSONObject(response)
 
             if (json.optBoolean("success")) {
-                Log.farm("蚂蚁新村⛪[领取奖励]")
+                val refreshed = refreshTaskState(taskType)
+                if (StallTaskProtocol.isAdvanced(beforeState, refreshed)) {
+                    Log.farm("蚂蚁新村⛪[领取奖励]")
+                    return true
+                }
+                Log.record(TAG, "新村任务[$taskType]领奖已受理但状态未推进，保留后续重试")
             } else {
                 Log.error(TAG, "receiveTaskAward err: $response")
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "receiveTaskAward err:", t)
         }
+        return false
     }
 
     /**
      * @brief 完成任务
      */
-    private fun finishTask(taskType: String): Boolean {
+    private fun finishTask(taskType: String, beforeState: StallTaskState): Boolean {
         try {
             val response = AntStallRpcCall.finishTask(
                 "${taskType}_${System.currentTimeMillis()}",
@@ -935,7 +967,13 @@ class AntStall : ModelTask() {
             val json = JSONObject(response)
 
             if (json.optBoolean("success")) {
-                return true
+                val refreshed = refreshTaskState(taskType)
+                return if (StallTaskProtocol.isAdvanced(beforeState, refreshed)) {
+                    true
+                } else {
+                    Log.record(TAG, "新村任务[$taskType]完成已受理但状态未推进，保留后续重试")
+                    false
+                }
             } else {
                 Log.error(TAG, "finishTask err: $response")
             }
@@ -943,6 +981,20 @@ class AntStall : ModelTask() {
             Log.printStackTrace(TAG, "finishTask err:", t)
         }
         return false
+    }
+
+    private fun refreshTaskState(taskType: String): StallTaskState? {
+        return try {
+            val response = JSONObject(AntStallRpcCall.taskList())
+            if (!ResChecker.checkRes(TAG, response)) {
+                null
+            } else {
+                StallTaskProtocol.statusOf(response, taskType)
+            }
+        } catch (t: Throwable) {
+            Log.printStackTrace(TAG, "refreshTaskState err:", t)
+            null
+        }
     }
 
     /**
@@ -1458,15 +1510,5 @@ class AntStall : ModelTask() {
     companion object {
         private const val TAG = "AntStall"
 
-        /**
-         * @brief 任务类型列表
-         */
-        private val TASK_TYPE_LIST = listOf(
-            "ANTSTALL_NORMAL_OPEN_NOTICE",  // 开启摊新村收益提醒
-            "tianjiashouye",                 // 添加首页
-            "ANTSTALL_ELEME_VISIT",          // 去饿了么果园逛一逛
-            "ANTSTALL_TASK_diantao202311",   // 去点淘赚元宝提现
-            "ANTSTALL_TASK_nongchangleyuan"  // 农场乐园
-        )
     }
 }

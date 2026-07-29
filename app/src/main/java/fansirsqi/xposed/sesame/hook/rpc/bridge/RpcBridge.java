@@ -36,7 +36,11 @@ public interface RpcBridge {
         return requestString(method, data, relation, 3, 1500);
     }
     default String requestString(String method, String data, String appName, String methodName, String facadeName) {
-        return requestString(new RpcEntity(method, data, appName, methodName, facadeName), 3, -1);
+        return requestString(
+                new RpcEntity(method, data, null, appName, methodName, facadeName),
+                3,
+                -1
+        );
     }
     default String requestString(String method, String data, int tryCount, int retryInterval) {
         return requestString(new RpcEntity(method, data), tryCount, retryInterval);

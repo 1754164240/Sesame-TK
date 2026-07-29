@@ -1,9 +1,9 @@
 package fansirsqi.xposed.sesame.hook
 
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class RequestManagerTest {
 
@@ -22,10 +22,14 @@ class RequestManagerTest {
     }
 
     @Test
-    fun `请求管理器返回结构化空响应避免JSON解析异常`() {
-        val sourceText = File("src/main/java/fansirsqi/xposed/sesame/hook/RequestManager.kt").readText()
-
-        assertTrue(sourceText.contains("EMPTY_RPC_RESPONSE"))
-        assertTrue(sourceText.contains("VERIFICATION_REQUIRED_RESPONSE"))
+    fun `请求管理器公开统一响应分类边界`() {
+        assertEquals(
+            RpcFailureKind.RETRYABLE,
+            RequestManager.classifyResponse(RequestManager.EMPTY_RPC_RESPONSE).kind
+        )
+        assertEquals(
+            RpcFailureKind.VERIFICATION_REQUIRED,
+            RequestManager.classifyResponse(RequestManager.VERIFICATION_REQUIRED_RESPONSE).kind
+        )
     }
 }

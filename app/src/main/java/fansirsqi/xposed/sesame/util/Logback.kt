@@ -14,6 +14,8 @@ import java.io.File
 
 object Logback {
     private var isFileInitialized = false
+    private var fileLogDir: String? = null
+    private var dayTracker = LogDayTracker()
 
     // 定义所有 Logger 的名称
     val LOG_NAMES = listOf(
@@ -74,10 +76,45 @@ object Logback {
                 addFileAppender(lc, logName, logDir)
             }
 
+            fileLogDir = logDir
+            dayTracker = LogDayTracker()
             isFileInitialized = true
             Log.i("SesameLog", "File logging initialized at: $logDir")
         } catch (e: Exception) {
             Log.e("SesameLog", "Logback initFileLogging failed", e)
+        }
+    }
+
+    @JvmStatic
+    fun refreshIfCrossDay() {
+        if (!isFileInitialized) {
+            return
+        }
+        dayTracker.refreshIfCrossDay {
+            rebuildFileAppenders()
+        }
+    }
+
+    @Synchronized
+    private fun rebuildFileAppenders(): Boolean {
+        val logDir = fileLogDir ?: return false
+        return try {
+            val lc = LoggerFactory.getILoggerFactory() as LoggerContext
+            LOG_NAMES.forEach { logName ->
+                val logger = lc.getLogger(logName)
+                logger.getAppender("FILE-$logName")?.let { appender ->
+                    logger.detachAppender(appender)
+                    appender.stop()
+                }
+            }
+            LOG_NAMES.forEach { logName ->
+                addFileAppender(lc, logName, logDir)
+            }
+            Log.i("SesameLog", "File logging switched to a new day")
+            true
+        } catch (e: Exception) {
+            Log.e("SesameLog", "Logback cross-day refresh failed", e)
+            false
         }
     }
 

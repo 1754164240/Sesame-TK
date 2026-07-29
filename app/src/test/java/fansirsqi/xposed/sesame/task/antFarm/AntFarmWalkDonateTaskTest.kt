@@ -103,4 +103,39 @@ class AntFarmWalkDonateTaskTest {
         assertTrue(AntFarmWalkDonateTask.isDonateSuccess(JSONObject("""{"resultDesc":"今日已捐步"}""")))
         assertFalse(AntFarmWalkDonateTask.isDonateSuccess(JSONObject("""{"isSuccess":false,"resultDesc":"失败"}""")))
     }
+
+    @Test
+    fun `捐步动作后以首页已兑换状态确认`() {
+        assertTrue(
+            AntFarmWalkDonateTask.isAlreadyDonated(
+                JSONObject(
+                    """
+                    {
+                      "walkDonateHomeModel": {
+                        "walkUserInfoModel": {
+                          "exchangeFlag": "2",
+                          "userExchangedSteps": 1000
+                        }
+                      }
+                    }
+                    """.trimIndent()
+                )
+            )
+        )
+        assertFalse(
+            AntFarmWalkDonateTask.isAlreadyDonated(
+                JSONObject(
+                    """
+                    {
+                      "walkDonateHomeModel": {
+                        "walkUserInfoModel": {
+                          "exchangeFlag": "1"
+                        }
+                      }
+                    }
+                    """.trimIndent()
+                )
+            )
+        )
+    }
 }

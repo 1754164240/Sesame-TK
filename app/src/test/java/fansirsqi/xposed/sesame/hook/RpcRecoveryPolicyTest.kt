@@ -90,4 +90,23 @@ class RpcRecoveryPolicyTest {
 
         assertEquals(1, policy.failureCount)
     }
+
+    @Test
+    fun `频率限制不增加网络失败计数也不调度重开`() {
+        val policy = RpcRecoveryPolicy()
+
+        assertEquals(RecoveryDecision.NONE, policy.onFrequencyLimited())
+        assertEquals(0, policy.failureCount)
+        assertEquals(RpcBlockReason.NONE, policy.blockReason)
+    }
+
+    @Test
+    fun `未知失败保留现有恢复状态且不调度重开`() {
+        val policy = RpcRecoveryPolicy()
+        policy.onNetworkFailure(3)
+
+        assertEquals(RecoveryDecision.NONE, policy.onUnknownFailure())
+        assertEquals(1, policy.failureCount)
+        assertEquals(RpcBlockReason.NONE, policy.blockReason)
+    }
 }

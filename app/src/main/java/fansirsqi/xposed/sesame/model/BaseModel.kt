@@ -37,8 +37,11 @@ class BaseModel : Model() {
         val modelFields = ModelFields()
         modelFields.addField(stayAwake) //是否保持唤醒状态
         modelFields.addField(manualTriggerAutoSchedule) //手动触发是否自动安排下次执行
+        modelFields.addField(persistentSchedulerEnabled)
+        modelFields.addField(allowPersistentForegroundLaunch)
         modelFields.addField(checkInterval) //执行间隔时间
         modelFields.addField(taskExecutionRounds) //轮数
+        modelFields.addField(taskConcurrency) //任务并发数
         modelFields.addField(modelSleepTime) //模块休眠时间范围
         modelFields.addField(execAtTimeList) //定时执行的时间点列表
         modelFields.addField(wakenAtTimeList) //定时唤醒的时间点列表
@@ -91,6 +94,20 @@ class BaseModel : Model() {
         val manualTriggerAutoSchedule: BooleanModelField = BooleanModelField("manualTriggerAutoSchedule", "手动触发目标应用运行", false) //一般人不开这个
 
         /**
+         * 是否使用可跨进程恢复的系统调度。
+         */
+        @Getter
+        val persistentSchedulerEnabled: BooleanModelField =
+            BooleanModelField("persistentSchedulerEnabled", "启用持久调度", false)
+
+        /**
+         * 是否允许持久调度主动拉起目标应用。
+         */
+        @Getter
+        val allowPersistentForegroundLaunch: BooleanModelField =
+            BooleanModelField("allowPersistentForegroundLaunch", "允许持久调度拉起目标应用", false)
+
+        /**
          * 执行间隔时间（分钟）
          */
         @Getter
@@ -101,6 +118,13 @@ class BaseModel : Model() {
          */
         @Getter
         val taskExecutionRounds: IntegerModelField = IntegerModelField("taskExecutionRounds", "任务执行轮数", 1, 1, 99) //1轮就好，没必要2轮
+
+        /**
+         * 同一轮允许并发执行的模块数量
+         */
+        @Getter
+        val taskConcurrency: IntegerModelField =
+            IntegerModelField("taskConcurrency", "任务并发数", 3, 1, 8)
 
         /**
          * 定时执行的时间点列表

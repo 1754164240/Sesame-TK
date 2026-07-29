@@ -1,5 +1,7 @@
 package fansirsqi.xposed.sesame.task.antForest
 
+import org.json.JSONObject
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -80,6 +82,84 @@ class ForestChouChouLeTest {
             ForestDrawTaskPolicy.isRetryableFailure(
                 resultCode = "SYSTEM_BUSY",
                 resultDescription = "系统繁忙"
+            )
+        )
+    }
+
+    @Test
+    fun `动作成功但任务列表未刷新时不确认状态变更`() {
+        assertFalse(
+            ForestDrawTaskStatePolicy.isTransitionConfirmed(
+                previousStatus = "TODO",
+                currentStatus = "TODO"
+            )
+        )
+        assertTrue(
+            ForestDrawTaskStatePolicy.isTransitionConfirmed(
+                previousStatus = "TODO",
+                currentStatus = "FINISHED"
+            )
+        )
+        assertFalse(
+            ForestDrawTaskStatePolicy.isTransitionConfirmed(
+                previousStatus = "FINISHED",
+                currentStatus = "FINISHED"
+            )
+        )
+        assertTrue(
+            ForestDrawTaskStatePolicy.isTransitionConfirmed(
+                previousStatus = "FINISHED",
+                currentStatus = "RECEIVED"
+            )
+        )
+    }
+
+    @Test
+    fun `服务端任务列表明确全部已领取时才能确认场景完成`() {
+        val response = JSONObject(
+            """
+            {
+              "success": true,
+              "taskInfoList": [{
+                "taskBaseInfo": {
+                  "sceneCode": "ANTFOREST_NORMAL_DRAW_TASK",
+                  "taskType": "FOREST_NORMAL_DRAW_SIGN",
+                  "taskStatus": "RECEIVED",
+                  "bizInfo": "{\"title\":\"签到\"}"
+                }
+              }]
+            }
+            """.trimIndent()
+        )
+
+        assertEquals(
+            ForestDrawCompletionDecision.CONFIRMED,
+            ForestDrawTaskStatePolicy.completionDecision(response)
+        )
+    }
+
+    @Test
+    fun `空列表和未知累计奖励结构均保留重试`() {
+        assertEquals(
+            ForestDrawCompletionDecision.RETRY,
+            ForestDrawTaskStatePolicy.completionDecision(
+                JSONObject("""{"success":true,"taskInfoList":[]}""")
+            )
+        )
+        assertEquals(
+            ForestDrawCompletionDecision.RETRY,
+            ForestDrawTaskStatePolicy.completionDecision(
+                JSONObject(
+                    """
+                    {
+                      "success": true,
+                      "cumulativeReward": {
+                        "current": 3,
+                        "target": 3
+                      }
+                    }
+                    """.trimIndent()
+                )
             )
         )
     }

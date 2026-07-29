@@ -22,4 +22,21 @@ class AntMemberTest {
         assertTrue(sourceText.contains("isNonRetryableSesameTaskError(errorCode)"))
         assertTrue(sourceText.contains("不可重试"))
     }
+
+    @Test
+    fun `游戏中心平台任务必须通过安全工作流执行`() {
+        val sourceText = File(
+            "src/main/java/fansirsqi/xposed/sesame/task/antMember/AntMember.kt"
+        ).readText()
+        val gameCenterBlock = sourceText
+            .substringAfter("private suspend fun enableGameCenter()")
+            .substringBefore("private fun beanSignIn()")
+
+        assertTrue(gameCenterBlock.contains("GameCenterPlatformWorkflow("))
+        assertFalse(
+            gameCenterBlock.contains(
+                "for (i in 0..<platformTaskList.length())"
+            )
+        )
+    }
 }

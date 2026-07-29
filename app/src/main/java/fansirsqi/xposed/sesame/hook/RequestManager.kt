@@ -39,6 +39,9 @@ object RequestManager {
     }
 
     @JvmStatic
+    fun classifyResponse(result: String?): RpcFailure = RpcFailureClassifier.classify(result)
+
+    @JvmStatic
     fun handleVerificationRequired(method: String?) {
         ApplicationHook.setOffline(true)
         if (recoveryPolicy.onVerificationRequired() != RecoveryDecision.WAIT_FOR_MANUAL_VERIFICATION) {
@@ -92,11 +95,39 @@ object RequestManager {
             return blockedResponse()
         }
 
-        val hadFailure = recoveryPolicy.failureCount > 0 ||
-            recoveryPolicy.blockReason != RpcBlockReason.NONE
-        recoveryPolicy.onSuccess()
-        if (hadFailure) {
-            Log.record(TAG, "RPC 恢复正常，错误计数重置")
+        val failure = classifyResponse(result)
+        when (failure.kind) {
+            RpcFailureKind.SUCCESS -> {
+                val hadFailure = recoveryPolicy.failureCount > 0 ||
+                    recoveryPolicy.blockReason != RpcBlockReason.NONE
+                recoveryPolicy.onSuccess()
+                if (hadFailure) {
+                    Log.record(TAG, "RPC 恢复正常，错误计数重置")
+                }
+            }
+
+            RpcFailureKind.VERIFICATION_REQUIRED -> {
+                handleVerificationRequired(methodLog)
+                return blockedResponse()
+            }
+
+            RpcFailureKind.OFFLINE -> {
+                handleFailure(methodLog ?: "Unknown", "离线响应 code=${failure.code} msg=${failure.message}")
+            }
+
+            RpcFailureKind.FREQUENCY_LIMITED -> {
+                recoveryPolicy.onFrequencyLimited()
+                Log.record(TAG, "RPC 触发频率限制，保留业务重试: $methodLog code=${failure.code}")
+            }
+
+            RpcFailureKind.RETRYABLE -> {
+                handleFailure(methodLog ?: "Unknown", "可重试响应 code=${failure.code} msg=${failure.message}")
+            }
+
+            RpcFailureKind.UNKNOWN -> {
+                recoveryPolicy.onUnknownFailure()
+                Log.error(TAG, "RPC 返回未知失败，不重置恢复状态: $methodLog code=${failure.code} msg=${failure.message}")
+            }
         }
         return result.orEmpty()
     }

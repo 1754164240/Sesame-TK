@@ -19,11 +19,15 @@ class AntFarmFamilyTest {
     }
 
     @Test
-    fun `家庭捐步使用本地每日标记防止重复执行`() {
+    fun `家庭捐步仅在服务端确认后写每日标记`() {
         assertTrue(sourceText.contains("antFarm::familyWalkDonate"))
         assertTrue(sourceText.contains("Status.hasFlagToday(FAMILY_WALK_DONATE_FLAG)"))
         assertTrue(sourceText.contains("Status.setFlagToday(FAMILY_WALK_DONATE_FLAG)"))
-        assertTrue(sourceText.contains("finally"))
+        assertFalse(
+            sourceText.contains(
+                "finally {\n            Status.setFlagToday(FAMILY_WALK_DONATE_FLAG)"
+            )
+        )
     }
 
     @Test

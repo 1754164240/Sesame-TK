@@ -18,6 +18,7 @@ import fansirsqi.xposed.sesame.util.RandomUtil;
 
 /** 森林 RPC 调用类 */
 public class AntForestRpcCall {
+    private static final String TASK_SOURCE = "chInfo_ch_appcenter__chsub_9patch";
     private static String VERSION = "20250813";
 
     public static void init() {
@@ -260,12 +261,44 @@ public class AntForestRpcCall {
     }
 
     public static String queryTaskList() throws JSONException {
-        JSONObject jo = new JSONObject();
-        jo.put("extend", new JSONObject());
-        jo.put("fromAct", "home_task_list");
-        jo.put("source", "chInfo_ch_appcenter__chsub_9patch");
-        jo.put("version", VERSION);
-        return RequestManager.requestString("alipay.antforest.forest.h5.queryTaskList", new JSONArray().put(jo).toString());
+        return queryTaskList("home_task_list");
+    }
+
+    public static String queryLeafTaskList() throws JSONException {
+        return queryTaskList("home_leaves_task_list");
+    }
+
+    public static String queryTakeLookEndTaskList() throws JSONException {
+        return queryTaskList("take_look_end_task_list");
+    }
+
+    private static String queryTaskList(String fromAct) throws JSONException {
+        JSONObject extend = new JSONObject();
+        extend.put("osType", "android");
+        extend.put("version", VERSION);
+        String args = ForestTaskProtocol.buildTaskListArgs(
+                fromAct,
+                TASK_SOURCE,
+                VERSION,
+                extend
+        ).toString();
+        return RequestManager.requestString(
+                "alipay.antforest.forest.h5.queryTaskList",
+                args
+        );
+    }
+
+    public static String popupTask() throws JSONException {
+        String nativeVersion = ApplicationHook.getAlipayVersion().getVersionString();
+        String args = ForestTaskProtocol.buildPopupTaskArgs(
+                TASK_SOURCE,
+                nativeVersion,
+                VERSION
+        ).toString();
+        return RequestManager.requestString(
+                "alipay.antforest.forest.h5.popupTask",
+                args
+        );
     }
 
     /*青春特权道具任务状态查询🔍*/
@@ -507,8 +540,14 @@ public class AntForestRpcCall {
     }
 
     public static String queryAnimalAndPiece(int animalId) {
+        return queryAnimalAndPiece(animalId, 0);
+    }
+
+    public static String queryAnimalAndPiece(int animalId, int patrolId) {
         String args;
-        if (animalId != 0) {
+        if (patrolId > 0) {
+            args = "[{\"patrolId\":" + patrolId + ",\"source\":\"ant_forest\",\"timezoneId\":\"Asia/Shanghai\",\"withDetail\":\"N\"}]";
+        } else if (animalId != 0) {
             args = "[{\"animalId\":" + animalId + ",\"source\":\"ant_forest\",\"timezoneId\":\"Asia/Shanghai\"}]";
         } else {
             args = "[{\"source\":\"ant_forest\",\"timezoneId\":\"Asia/Shanghai\",\"withDetail\":\"N\",\"withGift\":true}]";
@@ -738,15 +777,22 @@ public class AntForestRpcCall {
         return RequestManager.requestString("com.alipay.antiepdrawprod.enterDrawActivityopengreen", args);
     }
 
-    /** 森林抽抽乐-请求任务列表（最终修复版） */
+    /** 森林 OpenGreen 任务列表 */
     public static String listTaskopengreen(String sceneCode, String source) throws JSONException {
-        // 根据抓包日志，正确的参数结构是直接传递，不需要requestData包装
-        JSONObject requestData = new JSONObject();
-        requestData.put("requestType", "RPC");
-        requestData.put("sceneCode", sceneCode); // 必须传递 sceneCode
-        requestData.put("source", source); // 必须传递 source
+        return listTaskopengreen(sceneCode, source, null);
+    }
 
-        String args = "[" + requestData + "]";
+    /** 森林 OpenGreen 任务列表，可携带已确认的业务扩展 */
+    public static String listTaskopengreen(
+            String sceneCode,
+            String source,
+            JSONObject extend
+    ) throws JSONException {
+        String args = ForestTaskProtocol.buildOpenGreenTaskArgs(
+                sceneCode,
+                source,
+                extend
+        ).toString();
         Log.record("AntForestRpcCall", "listTaskopengreen - 场景: " + sceneCode + ", source: " + source);
         return RequestManager.requestString("com.alipay.antieptask.listTaskopengreen", args);
     }

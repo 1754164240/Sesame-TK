@@ -15,6 +15,7 @@ import fansirsqi.xposed.sesame.task.antStall.AntStall
 import fansirsqi.xposed.sesame.task.greenFinance.GreenFinance
 import fansirsqi.xposed.sesame.task.other.OtherTask
 import fansirsqi.xposed.sesame.task.reserve.Reserve
+import fansirsqi.xposed.sesame.task.youthPrivilege.YouthPrivilege
 
 object ModelOrder {
     private val array = arrayOf(
@@ -27,6 +28,7 @@ object ModelOrder {
         AntDodo::class.java,       // 神奇物种
         AntCooperate::class.java,    // 合种
         AntMember::class.java,     // 会员
+        YouthPrivilege::class.java, // 青春特权
         AntOrchard::class.java,    // 农场
         AntSports::class.java,       // 运动
         EcoProtection::class.java,     // 古树

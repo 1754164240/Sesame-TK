@@ -10,8 +10,16 @@ object TaskBlacklist {
     private const val TAG = "TaskBlacklist"
     private const val BLACKLIST_KEY = "task_blacklist"
 
-    // 默认黑名单（可按需扩展）
-    private val defaultBlacklist = setOf<String>()
+    internal fun builtInEntries(): Set<String> {
+        return fansirsqi.xposed.sesame.util.defaultBlacklist
+    }
+
+    internal fun isBuiltInTaskBlocked(taskInfo: String?): Boolean {
+        if (taskInfo.isNullOrBlank()) {
+            return false
+        }
+        return builtInEntries().any { matchesTask(taskInfo, it) }
+    }
 
     /**
      * 获取黑名单列表
@@ -21,10 +29,10 @@ object TaskBlacklist {
         return try {
             val storedBlacklist = DataStore.getOrCreate(BLACKLIST_KEY, object : TypeReference<Set<String>>() {})
             // 合并存储的黑名单和默认黑名单
-            (storedBlacklist + defaultBlacklist).toSet()
+            (storedBlacklist + builtInEntries()).toSet()
         } catch (e: Exception) {
             Log.printStackTrace(TAG, "获取黑名单失败，使用默认黑名单", e)
-            defaultBlacklist
+            builtInEntries()
         }
     }
 
@@ -49,25 +57,7 @@ object TaskBlacklist {
         if (taskInfo.isNullOrBlank()) return false
 
         val blacklist = getBlacklist()
-        return blacklist.any { item ->
-            if (item.isBlank()) return@any false
-
-            // 完全匹配（最精确）
-            if (taskInfo == item) return@any true
-
-            // 区分处理中文关键词和纯英文的匹配模式。
-            val itemHasChinese = item.any { it in '\u4e00'..'\u9fa5' }
-
-            if (itemHasChinese) {
-                // 包含中文的项维持双向模糊匹配逻辑
-                taskInfo.contains(item) || item.contains(taskInfo)
-            } else {
-                /* 纯英文/数字/符号项使用单向模糊匹配逻辑；防止黑名单中"TAOBAO"这类比较简短、通用的字段匹配到任务
-                    "TAOBAO_tab2gzy" ，导致不是在黑名单中的任务被跳过
-                 */
-                item.contains(taskInfo)
-            }
-        }
+        return blacklist.any { matchesTask(taskInfo, it) }
     }
 
     /**
@@ -174,6 +164,22 @@ object TaskBlacklist {
             // 优先显示完整信息（ID-标题），如果标题为空则只显示ID
             val taskInfo = if (taskTitle.isNotBlank()) "$taskId - $taskTitle" else taskId
             Log.record(TAG, "任务[$taskInfo]因$reason 自动加入黑名单")
+        }
+    }
+
+    private fun matchesTask(taskInfo: String, item: String): Boolean {
+        if (item.isBlank()) {
+            return false
+        }
+        if (taskInfo == item) {
+            return true
+        }
+
+        val itemHasChinese = item.any { it in '\u4e00'..'\u9fa5' }
+        return if (itemHasChinese) {
+            taskInfo.contains(item) || item.contains(taskInfo)
+        } else {
+            item.contains(taskInfo)
         }
     }
 }

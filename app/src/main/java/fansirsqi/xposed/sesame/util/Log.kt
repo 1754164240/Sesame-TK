@@ -59,6 +59,7 @@ object Log {
     @JvmStatic
     fun record(msg: String) {
         if (BaseModel.recordLog.value == true) {
+            Logback.refreshIfCrossDay()
             RECORD_LOGGER.info("$DEFAULT_TAG{}", msg)
         }
     }
@@ -71,6 +72,7 @@ object Log {
     @JvmStatic
     fun forest(msg: String) {
         record(msg)
+        Logback.refreshIfCrossDay()
         FOREST_LOGGER.debug("{}", msg)
     }
 
@@ -82,11 +84,13 @@ object Log {
     @JvmStatic
     fun farm(msg: String) {
         record(msg)
+        Logback.refreshIfCrossDay()
         FARM_LOGGER.debug("{}", msg)
     }
 
     @JvmStatic
     fun other(msg: String) {
+        Logback.refreshIfCrossDay()
         OTHER_LOGGER.debug("{}", msg)
     }
 
@@ -97,6 +101,7 @@ object Log {
 
     @JvmStatic
     fun debug(msg: String) {
+        Logback.refreshIfCrossDay()
         DEBUG_LOGGER.debug("{}", msg)
     }
 
@@ -107,6 +112,7 @@ object Log {
 
     @JvmStatic
     fun error(msg: String) {
+        Logback.refreshIfCrossDay()
         ERROR_LOGGER.error("$DEFAULT_TAG{}", msg)
     }
 
@@ -117,6 +123,7 @@ object Log {
 
     @JvmStatic
     fun capture(msg: String) {
+        Logback.refreshIfCrossDay()
         CAPTURE_LOGGER.info("$DEFAULT_TAG{}", msg)
     }
 
