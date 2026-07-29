@@ -739,8 +739,25 @@ object AntSportsRpcCall {
     fun userTaskComplete(bizType: String, taskId: String): String {
         return RequestManager.requestString(
             "alipay.tiyubiz.sports.userTask.complete",
-            """[{"bizType":"$bizType","cityCode":"$CITY_CODE","completedTime":${System.currentTimeMillis()},"taskId":"$taskId"}]"""
+            buildUserTaskCompleteArgs(
+                bizType,
+                taskId,
+                System.currentTimeMillis()
+            )
         )
+    }
+
+    fun buildUserTaskCompleteArgs(
+        bizType: String,
+        taskId: String,
+        completedTime: Long
+    ): String {
+        val request = JSONObject()
+            .put("bizType", bizType)
+            .put("cityCode", CITY_CODE)
+            .put("completedTime", completedTime)
+            .put("taskId", taskId)
+        return JSONArray().put(request).toString()
     }
 
     /**
@@ -1177,22 +1194,6 @@ object AntSportsRpcCall {
             return RequestManager.requestString(
                 "com.alipay.neverland.biz.rpc.taskReceive",
                 """[${taskObj}]"""
-            )
-        }
-
-        /**
-         * @brief 完成广告任务
-         * 
-         * @param bizId 业务ID
-         * 
-         * @return RPC调用结果的 JSON 字符串
-         * 
-         * @remark 对应API：com.alipay.adtask.biz.mobilegw.service.task.finish
-         */
-        fun finish(bizId: String): String {
-            return RequestManager.requestString(
-                "com.alipay.adtask.biz.mobilegw.service.task.finish",
-                """[{"bizId":"$bizId"}]"""
             )
         }
 

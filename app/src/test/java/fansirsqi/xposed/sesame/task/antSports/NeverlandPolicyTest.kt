@@ -200,6 +200,7 @@ class NeverlandPolicyTest {
         ).readText()
 
         assertFalse(source.contains("AntSportsRpcCall.buyMember("))
+        assertFalse(source.contains("NeverlandRpcCall.finish("))
         assertTrue(source.contains("queryMemberPriceRanking"))
     }
 

@@ -4,7 +4,6 @@ enum class StallTaskDecision {
     FINISH_RPC,
     HANDLE_QA,
     HANDLE_INVITE,
-    HANDLE_XLIGHT,
     SKIP_GAME,
     SKIP_AD,
     SKIP_FINANCIAL,
@@ -28,9 +27,9 @@ object StallTaskSafetyPolicy {
             containsAny(combined, gameSignals) -> StallTaskDecision.SKIP_GAME
             containsAny(combined, adSignals) -> StallTaskDecision.SKIP_AD
             containsAny(combined, financialSignals) -> StallTaskDecision.SKIP_FINANCIAL
+            type == "ANTSTALL_XLIGHT_VARIABLE_AWARD" -> StallTaskDecision.SKIP_AD
             type == "ANTSTALL_NORMAL_DAILY_QA" -> StallTaskDecision.HANDLE_QA
             type == "ANTSTALL_NORMAL_INVITE_REGISTER" -> StallTaskDecision.HANDLE_INVITE
-            type == "ANTSTALL_XLIGHT_VARIABLE_AWARD" -> StallTaskDecision.HANDLE_XLIGHT
             type in safeFinishTypes && action == "VISIT_AUTO_FINISH" -> StallTaskDecision.FINISH_RPC
             else -> StallTaskDecision.SKIP_UNKNOWN
         }

@@ -331,9 +331,8 @@ class AntSports : ModelTask() {
 
             // 文体中心
             if (tiyubiz.value) {
-                userTaskGroupQuery("SPORTS_DAILY_SIGN_GROUP")
-                userTaskGroupQuery("SPORTS_DAILY_GROUP")
-                userTaskRightsReceive()
+                processSportsTaskGroup("SPORTS_DAILY_SIGN_GROUP")
+                processSportsTaskGroup("SPORTS_DAILY_GROUP")
                 pathFeatureQuery()
                 participate()
             }
@@ -1207,36 +1206,57 @@ class AntSports : ModelTask() {
     // 文体中心
     // ---------------------------------------------------------------------
 
-    /**
-     * @brief 文体中心任务组查询并自动完成 TODO 状态任务
-     */
-    private fun userTaskGroupQuery(groupId: String) {
+    private fun processSportsTaskGroup(groupId: String) {
         try {
-            val s = AntSportsRpcCall.userTaskGroupQuery(groupId)
-            var jo = JSONObject(s)
-            if (ResChecker.checkRes(TAG, jo)) {
-                jo = jo.getJSONObject("group")
-                val userTaskList = jo.getJSONArray("userTaskList")
-                for (i in 0 until userTaskList.length()) {
-                    jo = userTaskList.getJSONObject(i)
-                    if ("TODO" != jo.getString("status")) continue
-                    val taskInfo = jo.getJSONObject("taskInfo")
-                    val bizType = taskInfo.getString("bizType")
-                    val taskId = taskInfo.getString("taskId")
-                    val res = JSONObject(AntSportsRpcCall.userTaskComplete(bizType, taskId))
-                    if (ResChecker.checkRes(TAG, res)) {
-                        val taskName = taskInfo.optString("taskName", taskId)
-                        Log.other("完成任务🧾[$taskName]")
-                    } else {
-                        Log.record(TAG, "文体每日任务 $res")
+            val result = createSportsTaskWorkflow().process(groupId)
+            if (!result.recognized) {
+                Log.record(TAG, "文体任务结构未知[$groupId]，等待后续重试")
+            }
+            for (execution in result.executions) {
+                when (execution.outcome) {
+                    SportsTaskOutcome.CONFIRMED -> {
+                        val actionName = when (execution.action) {
+                            SportsTaskAction.COMPLETE_SIGN_IN -> "签到"
+                            SportsTaskAction.CLAIM_REWARD -> "领奖"
+                            else -> "处理"
+                        }
+                        Log.other(
+                            "文体中心$actionName🧾[${execution.taskName}]#服务端状态已确认"
+                        )
                     }
+                    SportsTaskOutcome.RETRY ->
+                        Log.record(
+                            TAG,
+                            "文体任务状态未推进[${execution.taskName}]"
+                        )
+                    SportsTaskOutcome.SKIPPED_UNSAFE ->
+                        Log.record(
+                            TAG,
+                            "文体任务保护性跳过[${execution.taskName}]"
+                        )
+                    SportsTaskOutcome.NO_ACTION -> Unit
                 }
-            } else {
-                Log.record(TAG, "文体每日任务 $s")
             }
         } catch (t: Throwable) {
-            Log.printStackTrace(TAG, "userTaskGroupQuery err:", t)
+            Log.printStackTrace(TAG, "processSportsTaskGroup err:", t)
         }
+    }
+
+    private fun createSportsTaskWorkflow(): SportsTaskWorkflow {
+        return SportsTaskWorkflow(
+            queryGroup = { groupId ->
+                AntSportsRpcCall.userTaskGroupQuery(groupId)
+            },
+            completeTask = { bizType, taskId ->
+                AntSportsRpcCall.userTaskComplete(bizType, taskId)
+            },
+            receiveReward = { taskId, userTaskId ->
+                AntSportsRpcCall.userTaskRightsReceive(
+                    taskId,
+                    userTaskId
+                )
+            }
+        )
     }
 
     /**
@@ -1293,48 +1313,6 @@ class AntSports : ModelTask() {
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "participate err:", t)
-        }
-    }
-
-    /**
-     * @brief 文体中心奖励领取
-     */
-    private fun userTaskRightsReceive() {
-        try {
-            val s = AntSportsRpcCall.userTaskGroupQuery("SPORTS_DAILY_GROUP")
-            var jo = JSONObject(s)
-            if (ResChecker.checkRes(TAG, jo)) {
-                jo = jo.getJSONObject("group")
-                val userTaskList = jo.getJSONArray("userTaskList")
-                for (i in 0 until userTaskList.length()) {
-                    jo = userTaskList.getJSONObject(i)
-                    if ("COMPLETED" != jo.getString("status")) continue
-                    val userTaskId = jo.getString("userTaskId")
-                    val taskInfo = jo.getJSONObject("taskInfo")
-                    val taskId = taskInfo.getString("taskId")
-                    val res = JSONObject(AntSportsRpcCall.userTaskRightsReceive(taskId, userTaskId))
-                    if (ResChecker.checkRes(TAG, res)) {
-                        val taskName = taskInfo.optString("taskName", taskId)
-                        val rightsRuleList = taskInfo.getJSONArray("rightsRuleList")
-                        val award = StringBuilder()
-                        for (j in 0 until rightsRuleList.length()) {
-                            val r = rightsRuleList.getJSONObject(j)
-                            award.append(r.getString("rightsName"))
-                                .append("*")
-                                .append(r.getInt("baseAwardCount"))
-                        }
-                        Log.other("领取奖励🎖️[$taskName]#$award")
-                    } else {
-                        Log.record(TAG, "文体中心领取奖励")
-                        Log.record(res.toString())
-                    }
-                }
-            } else {
-                Log.record(TAG, "文体中心领取奖励")
-                Log.record(s)
-            }
-        } catch (t: Throwable) {
-            Log.printStackTrace(TAG, "userTaskRightsReceive err:", t)
         }
     }
 
@@ -1714,7 +1692,7 @@ class AntSports : ModelTask() {
      * <p>整体流程：</p>
      * <ol>
      *   <li>签到（querySign + takeSign）</li>
-     *   <li>任务大厅循环处理（queryTaskCenter + taskSend / adtask.finish）</li>
+     *   <li>任务大厅循环处理（queryTaskCenter + 安全任务领取）</li>
      *   <li>健康岛浏览任务（queryTaskInfo + energyReceive）</li>
      *   <li>捡泡泡（queryBubbleTask + pickBubbleTaskEnergy）</li>
      *   <li>走路建造 / 旧版行走（queryBaseinfo + queryMapInfo/Build/WalkGrid 等）</li>
@@ -1825,7 +1803,7 @@ class AntSports : ModelTask() {
         // ---------------------------------------------------------------
 
         /**
-         * @brief 循环处理健康岛任务大厅中的 PROMOKERNEL_TASK & LIGHT_TASK
+         * @brief 循环处理健康岛任务大厅中的安全活动任务
          */
         private fun loopHandleTaskCenter() {
             var errorCount = 0
@@ -1869,7 +1847,7 @@ class AntSports : ModelTask() {
 
                         if (TaskBlacklist.isTaskInBlacklist(taskId)) continue
 
-                        if (("PROMOKERNEL_TASK" == type || "LIGHT_TASK" == type) &&
+                        if ("PROMOKERNEL_TASK" == type &&
                             status !in setOf(
                                 "FINISHED",
                                 "RECEIVED",
@@ -1922,8 +1900,6 @@ class AntSports : ModelTask() {
                 val title = task.optString("title", "未知任务")
                 val type = task.optString("taskType", "")
                 val status = task.optString("taskStatus", "")
-                val jumpLink = task.optString("jumpLink", "")
-
                 Log.record(TAG, "任务：[$title] 状态：$status 类型：$type")
 
                 if ("TO_RECEIVE" == status) {
@@ -1967,7 +1943,10 @@ class AntSports : ModelTask() {
                 if ("SIGNUP_COMPLETE" == status || "INIT" == status) {
                     return when (type) {
                         "PROMOKERNEL_TASK" -> handlePromoKernelTask(task, title)
-                        "LIGHT_TASK" -> handleLightTask(task, title, jumpLink)
+                        "LIGHT_TASK" -> {
+                            Log.record(TAG, "健康岛广告浏览任务[$title]安全策略跳过")
+                            false
+                        }
                         else -> {
                             Log.error(TAG, "未处理的任务类型：$type")
                             false
@@ -2079,7 +2058,7 @@ class AntSports : ModelTask() {
         }
 
         // ---------------------------------------------------------------
-        // 4. PROMOKERNEL_TASK / LIGHT_TASK 处理
+        // 4. PROMOKERNEL_TASK 处理
         // ---------------------------------------------------------------
 
         /**
@@ -2110,52 +2089,6 @@ class AntSports : ModelTask() {
                 }
             } catch (e: Exception) {
                 Log.printStackTrace(TAG, "handlePromoKernelTask 处理 PROMOKERNEL_TASK 异常（$title）", e)
-                false
-            }
-        }
-
-        /**
-         * @brief 处理 LIGHT_TASK（浏览类任务）
-         */
-        private fun handleLightTask(task: JSONObject, title: String, jumpLink: String): Boolean {
-            return try {
-                var bizId = task.optString("bizId", "")
-                if (bizId.isEmpty()) {
-                    val logExtMap = task.optJSONObject("logExtMap")
-                    if (logExtMap != null) {
-                        bizId = logExtMap.optString("bizId", "")
-                    }
-                }
-
-                if (bizId.isEmpty()) {
-                    Log.error(TAG, "LIGHT_TASK 未找到 bizId：$title jumpLink=$jumpLink")
-                    return false
-                }
-
-                val res = JSONObject(AntSportsRpcCall.NeverlandRpcCall.finish(bizId))
-                if (res.optBoolean("success", false) ||
-                    "0" == res.optString("errCode", "")
-                ) {
-                    val confirmed =
-                        confirmNeverlandTaskTransition(
-                            task,
-                            task.optString("taskStatus")
-                        )
-                    if (confirmed) {
-                        Log.other("✔ 浏览任务已确认：$title")
-                    } else {
-                        Log.record(
-                            TAG,
-                            "浏览任务状态未刷新，等待后续重试：$title"
-                        )
-                    }
-                    confirmed
-                } else {
-                    Log.error(TAG, "完成 LIGHT_TASK 失败: $title 返回: $res")
-                    false
-                }
-            } catch (e: Exception) {
-                Log.printStackTrace(TAG, "handleLightTask 处理 LIGHT_TASK 异常（$title）", e)
                 false
             }
         }

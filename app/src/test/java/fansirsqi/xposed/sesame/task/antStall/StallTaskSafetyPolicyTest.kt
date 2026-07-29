@@ -15,10 +15,6 @@ class StallTaskSafetyPolicyTest {
             StallTaskSafetyPolicy.classify("ANTSTALL_NORMAL_INVITE_REGISTER", "邀请开通", "")
         )
         assertEquals(
-            StallTaskDecision.HANDLE_XLIGHT,
-            StallTaskSafetyPolicy.classify("ANTSTALL_XLIGHT_VARIABLE_AWARD", "浏览任务", "")
-        )
-        assertEquals(
             StallTaskDecision.FINISH_RPC,
             StallTaskSafetyPolicy.classify("ANTSTALL_NORMAL_OPEN_NOTICE", "开启收益提醒", "VISIT_AUTO_FINISH")
         )
@@ -33,6 +29,10 @@ class StallTaskSafetyPolicyTest {
         assertEquals(
             StallTaskDecision.SKIP_AD,
             StallTaskSafetyPolicy.classify("LIGHT_AD_TASK", "看广告领币", "VISIT_AUTO_FINISH")
+        )
+        assertEquals(
+            StallTaskDecision.SKIP_AD,
+            StallTaskSafetyPolicy.classify("ANTSTALL_XLIGHT_VARIABLE_AWARD", "浏览任务", "")
         )
         assertEquals(
             StallTaskDecision.SKIP_FINANCIAL,

@@ -22,4 +22,21 @@ class AntSportsRpcProtocolTest {
         assertEquals("android", request.getString("clientOS"))
         assertTrue(request.getJSONArray("features").length() > 0)
     }
+
+    @Test
+    fun `文体任务完成参数使用结构化JSON并保留特殊字符`() {
+        val args = JSONArray(
+            AntSportsRpcCall.buildUserTaskCompleteArgs(
+                bizType = "biz-\"quoted\"",
+                taskId = "task-\"quoted\"",
+                completedTime = 123456789L
+            )
+        )
+        val request = args.getJSONObject(0)
+
+        assertEquals(1, args.length())
+        assertEquals("biz-\"quoted\"", request.getString("bizType"))
+        assertEquals("task-\"quoted\"", request.getString("taskId"))
+        assertEquals(123456789L, request.getLong("completedTime"))
+    }
 }

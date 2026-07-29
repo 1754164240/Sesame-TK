@@ -12,7 +12,6 @@ import fansirsqi.xposed.sesame.model.modelFieldExt.IntegerModelField
 import fansirsqi.xposed.sesame.model.modelFieldExt.SelectModelField
 import fansirsqi.xposed.sesame.task.ModelTask
 import fansirsqi.xposed.sesame.util.GlobalThreadPools
-import fansirsqi.xposed.sesame.util.JsonUtil
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.RandomUtil
 import fansirsqi.xposed.sesame.util.ResChecker
@@ -831,10 +830,6 @@ class AntStall : ModelTask() {
                             }
                         }
 
-                        StallTaskDecision.HANDLE_XLIGHT -> {
-                            handleXlightTask(beforeState)
-                        }
-
                         else -> {
                             Log.record(TAG, "新村任务[$title]安全策略跳过[$decision]")
                         }
@@ -848,61 +843,6 @@ class AntStall : ModelTask() {
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "taskList err:", t)
-        }
-    }
-
-    /**
-     * @brief 处理X-light任务
-     */
-    private fun handleXlightTask(beforeState: StallTaskState) {
-        try {
-            val response = AntStallRpcCall.xlightPlugin()
-            val json = JSONObject(response)
-
-            if (StallTaskProtocol.isXlightTrafficLimited(json)) {
-                Log.error(TAG, "XLight 命中流量风控[217/61002]，停止当前任务链路")
-                return
-            }
-
-            if (!json.has("playingResult")) {
-                Log.error(TAG, "taskList.xlightPlugin err: ${json.optString("resultDesc")}")
-                return
-            }
-
-            val playingResult = json.getJSONObject("playingResult")
-            val pid = playingResult.getString("playingBizId")
-            val eventList = JsonUtil.getValueByPathObject(
-                playingResult,
-                "eventRewardDetail.eventRewardInfoList"
-            ) as? JSONArray ?: return
-
-            if (eventList.length() == 0) return
-
-            for (j in 0 until eventList.length()) {
-                try {
-                    val eventInfo = eventList.getJSONObject(j)
-                    val finishResponse = AntStallRpcCall.finish(pid, eventInfo)
-                    Log.record("延时5S 木兰市集")
-                    GlobalThreadPools.sleepCompat(5000)
-
-                    val finishJson = JSONObject(finishResponse)
-                    if (!finishJson.optBoolean("success")) {
-                        Log.error(TAG, "taskList.finish err: ${finishJson.optString("resultDesc")}")
-                        continue
-                    }
-                    val refreshed = refreshTaskState(beforeState.taskType)
-                    if (StallTaskProtocol.isAdvanced(beforeState, refreshed)) {
-                        Log.farm("蚂蚁新村⛪XLight 任务状态已推进")
-                        return
-                    } else {
-                        Log.record(TAG, "XLight 事件已受理但任务状态未推进，继续保留重试")
-                    }
-                } catch (t: Throwable) {
-                    Log.printStackTrace(TAG, "taskList for err:", t)
-                }
-            }
-        } catch (t: Throwable) {
-            Log.printStackTrace(TAG, "handleXlightTask err:", t)
         }
     }
 

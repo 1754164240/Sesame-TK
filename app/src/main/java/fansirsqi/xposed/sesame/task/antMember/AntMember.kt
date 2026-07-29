@@ -88,8 +88,8 @@ class AntMember : ModelTask() {
     // 黄金票配置 - 签到
     private var enableGoldTicket: BooleanModelField? = null
 
-    // 黄金票配置 - 提取/兑换
-    private var enableGoldTicketConsume: BooleanModelField? = null
+    // 黄金票配置 - 只读余额查询，保留旧配置键兼容历史配置
+    private var enableGoldTicketBalanceQuery: BooleanModelField? = null
 
     /** 账单 贴纸 功能开关 */
     private var collectStickers: BooleanModelField? = null
@@ -182,8 +182,8 @@ class AntMember : ModelTask() {
             ).also { enableGoldTicket = it })
         modelFields.addField(
             BooleanModelField(
-                "enableGoldTicketConsume", "黄金票提取(兑换黄金)", false
-            ).also { enableGoldTicketConsume = it })
+                "enableGoldTicketConsume", "黄金票余额查询（不提取）", false
+            ).also { enableGoldTicketBalanceQuery = it })
         modelFields.addField(BooleanModelField("enableGameCenter", "游戏中心签到", false).also {
             enableGameCenter = it
         })
@@ -318,12 +318,14 @@ class AntMember : ModelTask() {
                     deferredTasks.add(async(Dispatchers.IO) { collectInsuredGold() })
                 }
 
-                // 【更新】执行黄金票任务，替换旧的 goldTicket()
-                if (enableGoldTicket!!.value || enableGoldTicketConsume!!.value) {
-                    // 传入签到和提取的开关值
+                if (
+                    enableGoldTicket!!.value ||
+                    enableGoldTicketBalanceQuery!!.value
+                ) {
                     deferredTasks.add(async(Dispatchers.IO) {
                         doGoldTicketTask(
-                            enableGoldTicket!!.value, enableGoldTicketConsume!!.value
+                            enableGoldTicket!!.value,
+                            enableGoldTicketBalanceQuery!!.value
                         )
                     })
                 }
@@ -1108,8 +1110,8 @@ class AntMember : ModelTask() {
     /**
      * 会员任务
      *
-     * 广告任务通过灯火广告上下文领取并结算；普通浏览任务按状态领取，
-     * 等待服务端下发的浏览时长后执行，最后复查会员累计任务进度。
+     * 广告任务保护性跳过；普通浏览任务按状态领取，等待服务端下发的
+     * 浏览时长后执行，最后复查会员累计任务进度。
      */
     private suspend fun doAllMemberAvailableTask(): Unit = CoroutineUtils.run {
         try {
@@ -1126,29 +1128,15 @@ class AntMember : ModelTask() {
                         progressResponse
                     )
                 },
-                applyTask = { task ->
-                    if (task.adBizId.isNotBlank()) {
-                        AntMemberRpcCall.applyMemberAdTask(task)
-                    } else {
-                        AntMemberRpcCall.applyMemberTask(task)
-                    }
-                },
+                applyTask = { task -> AntMemberRpcCall.applyMemberTask(task) },
                 executeTask = { task ->
                     AntMemberRpcCall.executeMemberTask(task)
                 },
-                finishAdTask = { task ->
-                    if (task.adBizId.isBlank()) "" else AntMemberRpcCall.taskFinish(task.adBizId)
-                },
                 queryTaskDetail = { task ->
-                    when {
-                        task.adBizId.isNotBlank() && task.configId.isNotBlank() ->
-                            AntMemberRpcCall.querySingleAdTaskProcessDetail(
-                                task.configId,
-                                task.adBizId
-                            )
-                        task.processId.isNotBlank() ->
-                            AntMemberRpcCall.querySingleTaskProcessDetail(task.processId)
-                        else -> ""
+                    if (task.processId.isNotBlank()) {
+                        AntMemberRpcCall.querySingleTaskProcessDetail(task.processId)
+                    } else {
+                        ""
                     }
                 },
                 pauseBeforeCompletion = { waitMillis -> delay(waitMillis) },
@@ -1610,137 +1598,42 @@ class AntMember : ModelTask() {
         }
     }
 
-    /**
-     * 黄金票任务入口 (整合签到和提取)
-     * @param doSignIn 是否执行签到
-     * @param doConsume 是否执行提取
-     */
-    private fun doGoldTicketTask(doSignIn: Boolean, doConsume: Boolean) {
+    private fun doGoldTicketTask(
+        doSignIn: Boolean,
+        queryBalance: Boolean
+    ) {
         try {
             record("开始执行黄金票...")
-
-            // 1. 获取首页数据 (签到需要)
-            var homeResult: JSONObject? = null
+            val workflow = GoldTicketWorkflow(
+                queryHome = {
+                    AntMemberRpcCall.queryWelfareHome().orEmpty()
+                },
+                triggerSign = {
+                    AntMemberRpcCall.welfareCenterTrigger("SIGN")
+                        .orEmpty()
+                },
+                queryBalance = {
+                    AntMemberRpcCall.queryConsumeHome().orEmpty()
+                }
+            )
             if (doSignIn) {
-                val homeRes = AntMemberRpcCall.queryWelfareHome()
-                if (homeRes != null) {
-                    val homeJson = JSONObject(homeRes)
-                    if (ResChecker.checkRes(TAG, homeJson)) {
-                        homeResult = homeJson.optJSONObject("result")
-                    }
+                when (workflow.signIn()) {
+                    GoldTicketOutcome.CONFIRMED ->
+                        Log.other("黄金票🎫[签到成功]#服务端状态已确认")
+                    GoldTicketOutcome.NO_ACTION ->
+                        record("黄金票🎫[今日已签到]")
+                    GoldTicketOutcome.RETRY ->
+                        Log.error("黄金票🎫[签到状态未确认，等待重试]")
                 }
             }
-
-            // 2. 执行签到
-            if (doSignIn && homeResult != null) {
-                doGoldTicketSignIn(homeResult)
-            }
-
-            // 3. 执行提取 (提取功能独立，总是需要调用 queryConsumeHome 获取最新余额)
-            if (doConsume) {
-                doGoldTicketConsume()
-            }
-        } catch (e: Exception) {
-            Log.printStackTrace(TAG, e)
-        }
-    }
-
-    /**
-     * 黄金票签到逻辑 (使用新接口 welfareCenterTrigger)
-     */
-    private fun doGoldTicketSignIn(homeResult: JSONObject) {
-        try {
-            val signObj = homeResult.optJSONObject("sign")
-            if (signObj != null) {
-                val todayHasSigned = signObj.optBoolean("todayHasSigned", false)
-                if (todayHasSigned) {
-                    record("黄金票🎫[今日已签到]")
+            if (queryBalance) {
+                val balance = workflow.readBalance()
+                if (balance.recognized) {
+                    record(
+                        "黄金票🎫[可用余额]#${balance.availableAmount}份，不自动提取"
+                    )
                 } else {
-                    record("黄金票🎫[准备签到]")
-                    // 调用新接口进行签到
-                    val signRes = AntMemberRpcCall.welfareCenterTrigger("SIGN")
-                    val signJson = JSONObject(signRes)
-
-                    if (ResChecker.checkRes(TAG, signJson)) {
-                        val signResult = signJson.optJSONObject("result")
-                        var amount = ""
-                        if (signResult != null && signResult.has("prize")) {
-                            amount = signResult.getJSONObject("prize").optString("amount")
-                        }
-                        Log.other("黄金票🎫[签到成功]#获得: $amount")
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            Log.printStackTrace(TAG, e)
-        }
-    }
-
-    /**
-     * 黄金票提取逻辑 (使用新接口 queryConsumeHome 和 submitConsume)
-     */
-    private fun doGoldTicketConsume() {
-        try {
-            record("黄金票🎫[准备检查余额及提取]")
-
-            // 1. 调用新接口 queryConsumeHome 获取最新的资产信息
-            val queryRes = AntMemberRpcCall.queryConsumeHome() ?: return
-            val queryJson = JSONObject(queryRes)
-            if (!ResChecker.checkRes(TAG, queryJson)) return
-
-            val result = queryJson.optJSONObject("result") ?: return
-
-            // 2. 获取余额
-            val assetInfo = result.optJSONObject("assetInfo") ?: return
-
-            val availableAmount = assetInfo.optInt("availableAmount", 0)
-
-            // 3. 计算提取数量 (整百提取逻辑)
-            val extractAmount = (availableAmount / 100) * 100
-
-            if (extractAmount < 100) {
-                record("黄金票🎫[余额不足] 当前: $availableAmount，最低需100")
-                return
-            }
-
-            // 4. 获取必要参数 productId 和 bonusAmount
-            var productId = ""
-            val product = result.optJSONObject("product")
-            if (product != null) {
-                productId = product.optString("productId")
-            } else if (result.has("productList") && result.optJSONArray("productList") != null && (result.optJSONArray(
-                    "productList"
-                )?.length() ?: 0) > 0
-            ) {
-                productId = result.optJSONArray("productList")?.optJSONObject(0)?.optString("productId") ?: ""
-            }
-
-            if (productId.isEmpty()) {
-                Log.error("黄金票🎫[提取异常] 未找到有效的基金ID")
-                return
-            }
-
-            var bonusAmount = 0
-            val bonusInfo = result.optJSONObject("bonusInfo")
-            if (bonusInfo != null) {
-                bonusAmount = bonusInfo.optInt("bonusAmount", 0)
-            }
-
-            // 5. 提交提取
-            record("黄金票🎫[开始提取] 计划: $extractAmount 份 (持有: $availableAmount)")
-            val submitRes = AntMemberRpcCall.submitConsume(extractAmount, productId, bonusAmount)
-
-            if (submitRes != null) {
-                val submitJson = JSONObject(submitRes)
-                if (ResChecker.checkRes(TAG, submitJson)) {
-                    val submitResult = submitJson.optJSONObject("result")
-                    val writeOffNo = if (submitResult != null) submitResult.optString("writeOffNo") else ""
-
-                    if (!writeOffNo.isEmpty()) {
-                        Log.other("黄金票🎫[提取成功]#消耗: $extractAmount 份")
-                    } else {
-                        Log.error("黄金票🎫[提取失败] 未返回核销码")
-                    }
+                    Log.error("黄金票🎫[余额结构未知，未执行任何提取]")
                 }
             }
         } catch (e: Exception) {
@@ -3105,7 +2998,6 @@ class AntMember : ModelTask() {
         private suspend fun doMerchantMoreTask(): Unit = CoroutineUtils.run {
             val s = AntMemberRpcCall.taskListQuery()
             try {
-                var doubleCheck = false
                 var jo = JSONObject(s)
                 if (ResChecker.checkRes(TAG, jo)) {
                     val taskList = jo.getJSONObject("data").getJSONArray("taskList")
@@ -3125,13 +3017,15 @@ class AntMember : ModelTask() {
                                 }
                             }
                         } else if ("PROCESSING" == taskStatus || "UNRECEIVED" == taskStatus) {
-                            if (task.has("extendLog")) {
-                                val bizExtMap = task.getJSONObject("extendLog").getJSONObject("bizExtMap")
-                                jo = JSONObject(AntMemberRpcCall.taskFinish(bizExtMap.getString("bizId")))
-                                if (ResChecker.checkRes(TAG, jo)) {
-                                    Log.other("商家服务🏬[$title]#领取积分$reward")
-                                }
-                                doubleCheck = true
+                            val hasAdBusinessId = task.optJSONObject("extendLog")
+                                ?.optJSONObject("bizExtMap")
+                                ?.optString("bizId")
+                                ?.isNotBlank() == true
+                            if (
+                                MerchantTaskSafetyPolicy.classify(hasAdBusinessId) ==
+                                MerchantTaskDecision.SKIP_AD
+                            ) {
+                                Log.record(TAG, "商家服务任务[$title]包含广告业务标识，安全策略跳过")
                             } else {
                                 when (val taskCode = task.getString("taskCode")) {
                                     "SYH_CPC_DYNAMIC" ->                   // 逛一逛商品橱窗
@@ -3166,9 +3060,6 @@ class AntMember : ModelTask() {
                                 }
                             }
                         }
-                    }
-                    if (doubleCheck) {
-                        doMerchantMoreTask()
                     }
                 } else {
                     record(TAG, "taskListQuery err: $s")

@@ -4,14 +4,9 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.UUID;
-
 import fansirsqi.xposed.sesame.hook.RequestManager;
 import fansirsqi.xposed.sesame.hook.ApplicationHook;
 import fansirsqi.xposed.sesame.util.Log;
-import fansirsqi.xposed.sesame.util.RandomUtil;
 
 public class AntFarmRpcCall {
     private static final String VERSION = "1.8.2302070202.46";
@@ -265,77 +260,6 @@ public class AntFarmRpcCall {
         return RequestManager.requestString("com.alipay.antfarm.initFarmGame",
                 "[{\"gameType\":\"" + gameType
                         + "\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ANTFARM\",\"source\":\"H5\",\"toolTypes\":\"STEALTOOL,ACCELERATETOOL,SHARETOOL\"}]");
-    }
-
-    public static int RandomScore(String str) {
-        if ("starGame".equals(str)) {
-            return RandomUtil.nextInt(300, 400);
-        } else if ("jumpGame".equals(str)) {
-            return RandomUtil.nextInt(250, 270) * 10;
-        } else if ("flyGame".equals(str)) {
-            return RandomUtil.nextInt(4000, 8000);
-        } else if ("hitGame".equals(str)) {
-            return RandomUtil.nextInt(80, 120);
-        } else {
-            return 210;
-        }
-    }
-
-    public static String recordFarmGame(String gameType) {
-        String uuid = getUuid();
-        String md5String = getMD5(uuid);
-        int score = RandomScore(gameType);
-        if ("flyGame".equals(gameType)) {
-            int foodCount = score / 50;
-            return RequestManager.requestString("com.alipay.antfarm.recordFarmGame",
-                    "[{\"foodCount\":" + foodCount + ",\"gameType\":\"flyGame\",\"md5\":\"" + md5String
-                            + "\",\"requestType\":\"RPC\",\"sceneCode\":\"FLAYGAME\",\"score\":" + score
-                            + ",\"source\":\"ANTFARM\",\"toolTypes\":\"ACCELERATETOOL,SHARETOOL,NONE\",\"uuid\":\"" + uuid
-                            + "\",\"version\":\"\"}]");
-        } else if ("hitGame".equals(gameType)) {
-            return RequestManager.requestString("com.alipay.antfarm.recordFarmGame",
-                    "[{\"gameType\":\"hitGame\",\"md5\":\"" + md5String
-                            + "\",\"requestType\":\"RPC\",\"sceneCode\":\"HITGAME\",\"score\":" + score
-                            + ",\"source\":\"ANTFARM\",\"toolTypes\":\"ACCELERATETOOL,SHARETOOL,NONE\",\"uuid\":\"" + uuid
-                            + "\",\"version\":\"\"}]");
-        }
-        return RequestManager.requestString("com.alipay.antfarm.recordFarmGame",
-                "[{\"gameType\":\"" + gameType + "\",\"md5\":\"" + md5String
-                        + "\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ANTFARM\",\"score\":" + score
-                        + ",\"source\":\"H5\",\"toolTypes\":\"STEALTOOL,ACCELERATETOOL,SHARETOOL\",\"uuid\":\"" + uuid
-                        + "\"}]");
-    }
-
-    private static String getUuid() {
-        StringBuilder sb = new StringBuilder();
-        for (String str : UUID.randomUUID().toString().split("-")) {
-            sb.append(str.substring(str.length() / 2));
-        }
-        return sb.toString();
-    }
-
-    public static String getMD5(String password) {
-        try {
-            // 得到一个信息摘要器
-            MessageDigest digest = MessageDigest.getInstance("md5");
-            byte[] result = digest.digest(password.getBytes());
-            StringBuilder buffer = new StringBuilder();
-            // 把没一个byte 做一个与运算 0xff;
-            for (byte b : result) {
-                // 与运算
-                int number = b & 0xff;// 加盐
-                String str = Integer.toHexString(number);
-                if (str.length() == 1) {
-                    buffer.append("0");
-                }
-                buffer.append(str);
-            }
-            // 标准的md5加密后的结果
-            return buffer.toString();
-        } catch (NoSuchAlgorithmException e) {
-            Log.printStackTrace(e);
-            return "";
-        }
     }
 
     /**
@@ -1168,33 +1092,6 @@ public class AntFarmRpcCall {
 
         String params = "[" + args + "]";
         return RequestManager.requestString("com.alipay.adexchange.ad.facade.xlightPlugin", params);
-    }
-
-    /**
-     * 完成广告任务
-     *
-     * @param playBizId 播放业务ID
-     * @param playEventInfo 播放事件信息
-     * @param iepTaskType 任务类型
-     * @param iepTaskSceneCode 任务场景代码
-     * @return 返回结果JSON字符串
-     * @throws JSONException JSON异常
-     */
-    public static String finishAdTask(String playBizId, JSONObject playEventInfo,
-                                      String iepTaskType, String iepTaskSceneCode) throws JSONException {
-        JSONObject extendInfo = new JSONObject();
-        extendInfo.put("iepTaskSceneCode", iepTaskSceneCode);
-        extendInfo.put("iepTaskType", iepTaskType);
-        extendInfo.put("playEndingStatus", "success");
-
-        JSONObject args = new JSONObject();
-        args.put("extendInfo", extendInfo);
-        args.put("playBizId", playBizId);
-        args.put("playEventInfo", playEventInfo);
-        args.put("source", "adx");
-
-        String params = "[" + args + "]";
-        return RequestManager.requestString("com.alipay.adtask.biz.mobilegw.service.interaction.finish", params);
     }
 
     /**

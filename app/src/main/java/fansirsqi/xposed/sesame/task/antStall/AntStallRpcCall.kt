@@ -16,7 +16,6 @@ object AntStallRpcCall {
 
     /** 接口版本号 */
     private const val VERSION = "0.1.2601161444.47"
-    private const val XLIGHT_VERSION = "4.31.4"
 
     /**
      * @brief 获取个人主页数据
@@ -180,30 +179,6 @@ object AntStallRpcCall {
         return RequestManager.requestString(
             "com.alipay.antiep.finishTask",
             "[{\"outBizNo\":\"$outBizNo\",\"requestType\":\"RPC\",\"sceneCode\":\"ANTSTALL_TASK\",\"source\":\"AST\",\"systemType\":\"android\",\"taskType\":\"$taskType\",\"version\":\"$VERSION\"}]"
-        )
-    }
-
-    /**
-     * @brief 调用广告/插件接口
-     * @return 响应字符串
-     */
-    fun xlightPlugin(): String {
-        return RequestManager.requestString(
-            "com.alipay.adexchange.ad.facade.xlightPlugin",
-            "[{\"positionRequest\":{\"extMap\":{\"xlightPlayInstanceId\":\"300004\"},\"referInfo\":{},\"spaceCode\":\"ANT_FARM_NEW_VILLAGE\"},\"sdkPageInfo\":{\"adComponentType\":\"FEEDS\",\"adComponentVersion\":\"$XLIGHT_VERSION\",\"enableFusion\":true,\"networkType\":\"WIFI\",\"pageFrom\":\"ch_url-https://68687809.h5app.alipay.com/www/game.html\",\"pageNo\":1,\"pageUrl\":\"https://render.alipay.com/p/yuyan/180020010001256918/multi-stage-task.html?caprMode=sync&spaceCodeFeeds=ANT_FARM_NEW_VILLAGE&usePlayLink=true&xlightPlayInstanceId=300004\",\"session\":\"u_54b721d9fffd6_1904b8eba8f\",\"unionAppId\":\"2060090000304921\",\"usePlayLink\":\"true\",\"xlightRuntimeSDKversion\":\"$XLIGHT_VERSION\",\"xlightSDKType\":\"h5\",\"xlightSDKVersion\":\"$XLIGHT_VERSION\"}}]"
-        )
-    }
-
-    /**
-     * @brief 结束特定业务
-     * @param playBizId 播放业务ID
-     * @param jsonObject 事件信息
-     * @return 响应字符串
-     */
-    fun finish(playBizId: String, jsonObject: JSONObject): String {
-        return RequestManager.requestString(
-            "com.alipay.adtask.biz.mobilegw.service.interaction.finish",
-            "[{\"extendInfo\":{\"iepTaskSceneCode\":\"ANTSTALL_TASK\",\"iepTaskType\":\"ANTSTALL_XLIGHT_VARIABLE_AWARD\"},\"playBizId\":\"$playBizId\",\"playEventInfo\":$jsonObject,\"source\":\"adx\" }]"
         )
     }
 

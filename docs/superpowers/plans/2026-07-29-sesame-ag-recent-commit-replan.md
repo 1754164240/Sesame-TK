@@ -68,6 +68,7 @@
 
 - 2026-07-29 重新运行 `ForestMultiplier*Test`、`ForestGoldBallWorkflowTest`、`StatusWateredFriendTest` 和 `ForestAutomationPolicyTest`，共 6 个测试类、25 项，0 失败、0 错误、0 跳过，Gradle `BUILD SUCCESSFUL`。
 - 芝麻炼金、庄园领奖、果园领奖、抽抽乐、青春特权、运动路线、新村任务共 15 个测试类、83 项，0 失败、0 错误、0 跳过。
+- 庄园小游戏、庄园抽抽乐、文体中心、黄金票、新村 XLight、健康岛 LIGHT_TASK、会员和商家广告链路完成安全收口：游戏只读、奖励仅领取服务端终态，广告伪完成 RPC 从自动任务生产路径删除。
 - 以上均为定向回归，不替代 Task 8 的全量测试、APK 构建和真机验收。
 
 ## 二、此前漏列提交审计
@@ -447,7 +448,7 @@ RPC 方法固定为 `com.alipay.sportsplay.biz.rpc.walk.queryCityKnowledgeDetail
 
 执行 HTML/JavaScript 语法检查、DTO 合同单元测试和 `assembleDebug`。真机 WebView 验证搜索、批量选择、输入落盘、重开页面回显和旧配置兼容。
 
-自动化证据：2026-07-29 使用项目内 Babel 对 `semi_index.html` 的 JSX 完成静态转译检查；设置页合同、好友中心投影和相关好友域测试均包含在全量 492 项单元测试中且无失败；新增好友预览前端合同测试覆盖预览范围、分组、关系、能力、未知能力和 Semi UI Checkbox 事件对象，共 4 项通过；390x844 浏览器视口下 SideSheet、底部操作栏和页面宽度均为 390px，未发现横向溢出；`assembleDebug` 为 `BUILD SUCCESSFUL`。当前 ADB 无连接设备，真机 WebView 验收仍待完成，因此 Step 6 保持未勾选。
+自动化证据：2026-07-29 使用项目内 Babel 对 `semi_index.html` 的 JSX 完成静态转译检查；设置页合同、好友中心投影和相关好友域测试均包含在全量 527 项单元测试中且无失败；新增好友预览前端合同测试覆盖预览范围、分组、关系、能力、未知能力和 Semi UI Checkbox 事件对象，共 4 项通过；390x844 浏览器视口下 SideSheet、底部操作栏和页面宽度均为 390px，未发现横向溢出；`assembleDebug` 为 `BUILD SUCCESSFUL`。当前 ADB 无连接设备，真机 WebView 验收仍待完成，因此 Step 6 保持未勾选。
 
 ## Task 8: 最终自动化与真机验收
 
@@ -481,7 +482,7 @@ RPC 方法固定为 `com.alipay.sportsplay.biz.rpc.walk.queryCityKnowledgeDetail
 
 验证 API 102 Hook、Binder 跨进程、进程重启、设备重启、应用升级、时间变化、权限变化、森林任务回查、N 倍卡保护性补兑、NPC 状态回查、见闻路线、果园浏览白名单、设置页落盘和持久拉起状态展示。遇到验证码、风控或安全验证立即停止当前业务链路。
 
-自动化证据：2026-07-29 全量 `testDebugUnitTest` 共 105 个测试类、492 项，0 失败、0 错误、0 跳过；`assembleDebug` 成功生成 arm64-v8a、armeabi-v7a、x86、x86_64 和 universal 共 5 个 APK，ABI 与文件名一致。危险 RPC 全仓扫描确认本批未新增调用路径，果园新增的 `WITHDRAW` 仅为阻断关键词；仓库既有命中属于只读预咨询、调试入口、策略阻断或默认关闭的遗留功能。`git diff --check` 返回 0，33 个变更文件均无 UTF-8 BOM。ADB 未连接设备，Step 5 保持未勾选。
+自动化证据：2026-07-29 全量 `testDebugUnitTest` 共 112 个测试类、527 项，0 失败、0 错误、0 跳过；`assembleDebug` 成功生成 arm64-v8a、armeabi-v7a、x86、x86_64 和 universal 共 5 个 APK，ABI 与文件名一致。危险 RPC 扫描确认自动任务生产路径已无 `interaction.finish`、广告 `task.finish`、`finishAdTask`、`consume.submit`、`goldBillTaskTrigger`、`recordFarmGame`、`exchangeYebExpGold` 调用；果园 `WITHDRAW` 和游戏中心 `cashExchangeModule` 仅为阻断关键词，芝麻炼金 `withdrawPreConsult` 仅为只读预咨询，调试目录中的手动 RPC 不属于自动任务可达链路。`git diff --check` 返回 0，33 个变更文件均无 UTF-8 BOM。ADB 未连接设备，Step 5 保持未勾选。
 
 ## 三、执行顺序
 

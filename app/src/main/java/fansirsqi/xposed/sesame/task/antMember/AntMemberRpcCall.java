@@ -64,12 +64,6 @@ public class AntMemberRpcCall {
                 "[{\"scene\":\"activityCenter\"}]");
     }
 
-    /* 商家服务任务 */
-    public static String taskFinish(String bizId) {
-        return RequestManager.requestString("com.alipay.adtask.biz.mobilegw.service.task.finish",
-                "[{\"bizId\":\"" + bizId + "\"}]");
-    }
-
     public static String taskReceive(String taskCode) {
         return RequestManager.requestString("alipay.mrchservbase.sqyj.task.receive",
                 "[{\"compId\":\"ZTS_TASK_RECEIVE\",\"extInfo\":{\"taskCode\":\"" + taskCode + "\"}}]");
@@ -118,36 +112,6 @@ public class AntMemberRpcCall {
         return RequestManager.requestString(
                 "com.alipay.amic.memtask.h5.MemTaskListQueryFacade.querySingleTaskProcessDetail",
                 MemberTaskProtocol.buildSingleTaskDetailArgs(taskProcessId).toString()
-        );
-    }
-
-    /**
-     * 查询会员广告任务详情。
-     */
-    public static String querySingleAdTaskProcessDetail(String configId, String adBizId) {
-        return RequestManager.requestString(
-                "com.alipay.amic.memtask.h5.MemTaskListQueryFacade.querySingleTaskProcessDetail",
-                MemberTaskProtocol.buildSingleAdTaskDetailArgs(configId, adBizId).toString()
-        );
-    }
-
-    /**
-     * 领取单个会员广告任务。
-     */
-    public static String applyMemberAdTask(MemberAdTask task) {
-        return RequestManager.requestString(
-                "com.alipay.amic.memtask.h5.MemTaskAdFacade.applyAdTask",
-                MemberTaskProtocol.buildApplyAdTaskArgs(task).toString()
-        );
-    }
-
-    /**
-     * 按合并后的会员任务状态领取广告任务。
-     */
-    public static String applyMemberAdTask(MemberTaskState task) {
-        return RequestManager.requestString(
-                "com.alipay.amic.memtask.h5.MemTaskAdFacade.applyAdTask",
-                MemberTaskProtocol.buildApplyAdTaskArgs(task).toString()
         );
     }
 
@@ -1019,20 +983,6 @@ public class AntMemberRpcCall {
     }
 
     /**
-     * 任务触发/报名
-     */
-    public static String goldBillTaskTrigger(String taskId) {
-        try {
-            JSONObject args = new JSONObject();
-            args.put("taskId", taskId);
-            return RequestManager.requestString("com.alipay.wealthgoldtwa.goldbill.v4.task.trigger",
-                    new JSONArray().put(args).toString());
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    /**
      * [新增] 查询黄金票提取页信息
      * 用于获取最新的可用数量、基金ID (productId) 和 赠送份数 (bonusAmount)
      */
@@ -1048,30 +998,6 @@ public class AntMemberRpcCall {
             return null;
         }
     }
-
-    /**
-     * [新增] 提交提取黄金
-     * @param amount 提取数量 (如 100, 200, 2900)
-     * @param productId 基金ID
-     * @param bonusAmount 额外赠送数量
-     */
-    public static String submitConsume(int amount, String productId, int bonusAmount) {
-        try {
-            JSONObject args = new JSONObject();
-            args.put("exchangeAmount", amount);
-            // 计算金额：100份 = 0.10元。公式：份数 / 1000.0
-            args.put("exchangeMoney", String.format("%.2f", amount / 1000.0));
-            args.put("prizeType", "GOLD"); // 固定为黄金
-            args.put("productId", productId);
-            args.put("bonusAmount", bonusAmount);
-            // 接口: com.alipay.wealthgoldtwa.needle.consume.submit
-            return RequestManager.requestString("com.alipay.wealthgoldtwa.needle.consume.submit",
-                    new JSONArray().put(args).toString());
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
 
     /**
      * @brief 查询当月是否有可领取的贴纸

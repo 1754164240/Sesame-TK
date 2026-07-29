@@ -9,7 +9,6 @@ data class MemberTaskCandidate(
 
 enum class MemberTaskDecision {
     EXECUTE_BROWSE,
-    FINISH_AD,
     VERIFY_ONLY,
     CLAIM_ONLY,
     SKIP_REAL_GAME,

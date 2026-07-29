@@ -20,7 +20,6 @@ class MemberTaskWorkflowTest {
                 executeCalls++
                 """{"success":true}"""
             },
-            finishAdTask = { """{"success":true}""" },
             queryTaskDetail = {
                 detailCalls++
                 taskDetailResponse(status = "PROCESSING")
@@ -43,7 +42,6 @@ class MemberTaskWorkflowTest {
 
     @Test
     fun `广告任务不得调用伪完成或详情回查`() = runBlocking {
-        var finishCalls = 0
         var detailCalls = 0
         val workflow = MemberTaskWorkflow(
             queryTaskSources = {
@@ -51,10 +49,6 @@ class MemberTaskWorkflowTest {
             },
             applyTask = { """{"success":true}""" },
             executeTask = { """{"success":true}""" },
-            finishAdTask = {
-                finishCalls++
-                """{"success":true}"""
-            },
             queryTaskDetail = {
                 detailCalls++
                 adTaskDetailResponse(status = "PROCESSING")
@@ -64,7 +58,6 @@ class MemberTaskWorkflowTest {
 
         val result = workflow.run()
 
-        assertEquals(0, finishCalls)
         assertEquals(0, detailCalls)
         assertEquals(0, result.confirmed)
         assertEquals(0, result.failed)
@@ -90,10 +83,6 @@ class MemberTaskWorkflowTest {
                 """{"success":true}"""
             },
             executeTask = {
-                actionCalls++
-                """{"success":true}"""
-            },
-            finishAdTask = {
                 actionCalls++
                 """{"success":true}"""
             },
@@ -129,7 +118,6 @@ class MemberTaskWorkflowTest {
                 executeCalls++
                 """{"success":true}"""
             },
-            finishAdTask = { """{"success":true}""" },
             queryTaskDetail = {
                 detailCalls++
                 taskDetailResponse(status = "INIT")
@@ -165,10 +153,6 @@ class MemberTaskWorkflowTest {
                 actionCalls++
                 """{"success":true}"""
             },
-            finishAdTask = {
-                actionCalls++
-                """{"success":true}"""
-            },
             queryTaskDetail = { """{"success":true}""" },
             pauseBeforeCompletion = {}
         )
@@ -193,7 +177,6 @@ class MemberTaskWorkflowTest {
                 executeCalls++
                 """{"success":true}"""
             },
-            finishAdTask = { """{"success":true}""" },
             queryTaskDetail = {
                 taskDetailResponse(status = "COMPLETE")
             },
@@ -221,10 +204,6 @@ class MemberTaskWorkflowTest {
                 actionCalls++
                 """{"success":true}"""
             },
-            finishAdTask = {
-                actionCalls++
-                """{"success":true}"""
-            },
             queryTaskDetail = { taskDetailResponse(status = "COMPLETE") },
             pauseBeforeCompletion = {},
             isTaskBlocked = { true }
@@ -249,10 +228,6 @@ class MemberTaskWorkflowTest {
                 """{"success":true}"""
             },
             executeTask = {
-                actionCalls++
-                """{"success":true}"""
-            },
-            finishAdTask = {
                 actionCalls++
                 """{"success":true}"""
             },
