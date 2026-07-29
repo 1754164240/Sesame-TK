@@ -447,7 +447,7 @@ RPC 方法固定为 `com.alipay.sportsplay.biz.rpc.walk.queryCityKnowledgeDetail
 
 执行 HTML/JavaScript 语法检查、DTO 合同单元测试和 `assembleDebug`。真机 WebView 验证搜索、批量选择、输入落盘、重开页面回显和旧配置兼容。
 
-自动化证据：2026-07-29 使用项目内 Babel 对 `semi_index.html` 的 JSX 完成静态转译检查；设置页合同、好友中心投影和相关好友域测试均包含在全量 492 项单元测试中且无失败；`assembleDebug` 为 `BUILD SUCCESSFUL`。当前 ADB 无连接设备，真机 WebView 验收仍待完成，因此 Step 6 保持未勾选。
+自动化证据：2026-07-29 使用项目内 Babel 对 `semi_index.html` 的 JSX 完成静态转译检查；设置页合同、好友中心投影和相关好友域测试均包含在全量 492 项单元测试中且无失败；新增好友预览前端合同测试覆盖预览范围、分组、关系、能力、未知能力和 Semi UI Checkbox 事件对象，共 4 项通过；390x844 浏览器视口下 SideSheet、底部操作栏和页面宽度均为 390px，未发现横向溢出；`assembleDebug` 为 `BUILD SUCCESSFUL`。当前 ADB 无连接设备，真机 WebView 验收仍待完成，因此 Step 6 保持未勾选。
 
 ## Task 8: 最终自动化与真机验收
 

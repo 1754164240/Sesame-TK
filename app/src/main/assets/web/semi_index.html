@@ -143,6 +143,29 @@
             font-size: 12px;
         }
 
+        .preview-controls {
+            margin-top: 10px;
+            padding: 10px 0;
+            border-top: 1px solid var(--semi-color-border);
+        }
+
+        .preview-control-row {
+            margin-top: 10px;
+        }
+
+        .preview-control-label {
+            margin-bottom: 6px;
+            color: var(--semi-color-text-1);
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .preview-options {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px 12px;
+        }
+
         .list-count-input {
             width: 80px;
             margin-left: 10px;
@@ -163,6 +186,7 @@
     <script src="./js/semi-ui.min.js"></script>
     <!-- Semi Icons -->
     <script src="./js/semi-icons.min.js"></script>
+    <script src="./js/friend-preview-contract.js"></script>
     <!-- Babel -->
     <script src="./js/babel.min.js"></script>
 </head>
@@ -185,6 +209,26 @@
         const { Collapse, Switch, Input, RadioGroup, Radio, Button, Toast, SideSheet, Checkbox, InputNumber, Typography } = SemiUI;
         const { IconSearch } = SemiIcons;
         const { Title, Text } = Typography;
+        const relationLabels = {
+            MUTUAL_ONLY: '互为好友',
+            ALL_KNOWN: '全部已知关系',
+            INCLUDE_SELF: '包含自己'
+        };
+        const capabilityStateLabels = {
+            OPEN: '开放',
+            NOT_OPEN: '未开放',
+            UNAVAILABLE: '不可用'
+        };
+        const createDefaultFriendPreviewOptions = () => ({
+            selectionScope: 'EXPLICIT',
+            includeGroupIds: [],
+            excludeGroupIds: [],
+            relationFilter: 'MUTUAL_ONLY',
+            capabilityKeys: [],
+            capabilityStates: ['OPEN'],
+            includeUnknown: false,
+            excludeSelectedUsers: false
+        });
 
         // --- Mock Data Wrappers ---
         const getTabsData = () => {
@@ -251,6 +295,9 @@
             const [sheetTagFilters, setSheetTagFilters] = useState(new Set());
             const [selectedFriendPreview, setSelectedFriendPreview] = useState(null);
             const [allFriendPreview, setAllFriendPreview] = useState(null);
+            const [friendPreviewOptions, setFriendPreviewOptions] = useState(
+                createDefaultFriendPreviewOptions
+            );
 
             // 时间抽屉相关的 State
             const [timeSheetVisible, setTimeSheetVisible] = useState(false);
@@ -361,6 +408,7 @@
                 setSelectedIds(newSelectedIds);
                 setSelectedCounts(newSelectedCounts);
                 setSheetTagFilters(new Set());
+                setFriendPreviewOptions(createDefaultFriendPreviewOptions());
                 const selectedSpec = {
                     selectionScope: 'EXPLICIT',
                     includeUserIds: Array.from(newSelectedIds),
@@ -468,6 +516,35 @@
                 setSheetTagFilters(next);
             };
 
+            const updateFriendPreviewOption = (field, value) => {
+                setFriendPreviewOptions(previous => ({
+                    ...previous,
+                    [field]: value
+                }));
+            };
+
+            const toggleFriendPreviewListOption = (
+                field,
+                value,
+                requireOne = false
+            ) => {
+                setFriendPreviewOptions(previous => {
+                    const next = new Set(previous[field] || []);
+                    if (next.has(value)) {
+                        if (requireOne && next.size === 1) {
+                            return previous;
+                        }
+                        next.delete(value);
+                    } else {
+                        next.add(value);
+                    }
+                    return {
+                        ...previous,
+                        [field]: Array.from(next)
+                    };
+                });
+            };
+
             // 渲染过滤后的列表
             const renderSheetList = () => {
                 const filtered = filterSheetItems();
@@ -507,16 +584,14 @@
 
             useEffect(() => {
                 if (!sheetVisible) return;
-                setSelectedFriendPreview(previewFriendScope({
-                    selectionScope: 'EXPLICIT',
-                    includeUserIds: Array.from(selectedIds),
-                    includeGroupIds: [],
-                    excludeUserIds: [],
-                    excludeGroupIds: [],
-                    relationFilter: 'ALL_KNOWN',
-                    capabilityFilter: null
-                }));
-            }, [selectedIds, sheetVisible]);
+                const builder =
+                    window.FriendPreviewContract?.buildPreviewSelection;
+                if (!builder) return;
+                setSelectedFriendPreview(previewFriendScope(builder({
+                    ...friendPreviewOptions,
+                    selectedUserIds: Array.from(selectedIds)
+                })));
+            }, [selectedIds, sheetVisible, friendPreviewOptions]);
 
             const openTimeSheet = (modelCode, fieldItem) => {
                 const disabled = fieldItem.configValue === '-1';
@@ -797,31 +872,165 @@
                                 <div>
                                     <div className="preview-strip">
                                         <div className="preview-metric">
-                                            当前有效<br />{selectedFriendPreview?.effectiveCount ?? 0}
+                                            候选<br />{selectedFriendPreview?.totalCount ?? 0}
                                         </div>
                                         <div className="preview-metric">
-                                            当前失效<br />{selectedFriendPreview?.invalidCount ?? 0}
+                                            有效<br />{selectedFriendPreview?.effectiveCount ?? 0}
                                         </div>
                                         <div className="preview-metric">
-                                            动态好友<br />{allFriendPreview?.effectiveCount ?? 0}
+                                            失效<br />{selectedFriendPreview?.invalidCount ?? 0}
                                         </div>
                                     </div>
-                                    {allFriendPreview?.groups?.length > 0 && (
-                                        <div className="list-item-tags">
-                                            {allFriendPreview.groups.map(group => (
-                                                <span className="safe-tag" key={group.id}>
-                                                    {group.name} {group.memberCount}
-                                                </span>
-                                            ))}
+                                    {allFriendPreview && (
+                                        <div className="preview-controls">
+                                            <div className="preview-control-label">预览范围</div>
+                                            <RadioGroup
+                                                type="button"
+                                                value={friendPreviewOptions.selectionScope}
+                                                onChange={(event) => updateFriendPreviewOption(
+                                                    'selectionScope',
+                                                    event.target.value
+                                                )}
+                                            >
+                                                <Radio value="EXPLICIT">当前选择</Radio>
+                                                <Radio value="ALL_FRIENDS">动态全部好友</Radio>
+                                            </RadioGroup>
+
+                                            {friendPreviewOptions.selectionScope === 'ALL_FRIENDS' && (
+                                                <div className="preview-control-row">
+                                                    <Checkbox
+                                                        checked={friendPreviewOptions.excludeSelectedUsers}
+                                                        onChange={(change) => updateFriendPreviewOption(
+                                                            'excludeSelectedUsers',
+                                                            window.FriendPreviewContract.checkedFromChange(
+                                                                change
+                                                            )
+                                                        )}
+                                                    >
+                                                        排除当前已选好友
+                                                    </Checkbox>
+                                                </div>
+                                            )}
+
+                                            {friendPreviewOptions.selectionScope === 'EXPLICIT' &&
+                                                allFriendPreview.groups?.length > 0 && (
+                                                    <div className="preview-control-row">
+                                                        <div className="preview-control-label">包含分组</div>
+                                                        <div className="preview-options">
+                                                            {allFriendPreview.groups.map(group => (
+                                                                <Checkbox
+                                                                    key={`include-${group.id}`}
+                                                                    checked={friendPreviewOptions.includeGroupIds.includes(group.id)}
+                                                                    onChange={() => toggleFriendPreviewListOption(
+                                                                        'includeGroupIds',
+                                                                        group.id
+                                                                    )}
+                                                                >
+                                                                    {group.name} ({group.memberCount})
+                                                                </Checkbox>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                            {allFriendPreview.groups?.length > 0 && (
+                                                <div className="preview-control-row">
+                                                    <div className="preview-control-label">排除分组</div>
+                                                    <div className="preview-options">
+                                                        {allFriendPreview.groups.map(group => (
+                                                            <Checkbox
+                                                                key={`exclude-${group.id}`}
+                                                                checked={friendPreviewOptions.excludeGroupIds.includes(group.id)}
+                                                                onChange={() => toggleFriendPreviewListOption(
+                                                                    'excludeGroupIds',
+                                                                    group.id
+                                                                )}
+                                                            >
+                                                                {group.name} ({group.memberCount})
+                                                            </Checkbox>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            <div className="preview-control-row">
+                                                <div className="preview-control-label">关系</div>
+                                                <RadioGroup
+                                                    type="button"
+                                                    value={friendPreviewOptions.relationFilter}
+                                                    onChange={(event) => updateFriendPreviewOption(
+                                                        'relationFilter',
+                                                        event.target.value
+                                                    )}
+                                                >
+                                                    {(allFriendPreview.relationOptions || []).map(option => (
+                                                        <Radio value={option} key={option}>
+                                                            {relationLabels[option] || option}
+                                                        </Radio>
+                                                    ))}
+                                                </RadioGroup>
+                                            </div>
+
+                                            {allFriendPreview.capabilityOptions?.length > 0 && (
+                                                <div className="preview-control-row">
+                                                    <div className="preview-control-label">能力</div>
+                                                    <div className="preview-options">
+                                                        {allFriendPreview.capabilityOptions.map(option => (
+                                                            <Checkbox
+                                                                key={option}
+                                                                checked={friendPreviewOptions.capabilityKeys.includes(option)}
+                                                                onChange={() => toggleFriendPreviewListOption(
+                                                                    'capabilityKeys',
+                                                                    option
+                                                                )}
+                                                            >
+                                                                {option}
+                                                            </Checkbox>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {friendPreviewOptions.capabilityKeys.length > 0 && (
+                                                <div className="preview-control-row">
+                                                    <div className="preview-control-label">能力状态</div>
+                                                    <div className="preview-options">
+                                                        {Object.entries(capabilityStateLabels).map(([state, label]) => (
+                                                            <Checkbox
+                                                                key={state}
+                                                                checked={friendPreviewOptions.capabilityStates.includes(state)}
+                                                                onChange={() => toggleFriendPreviewListOption(
+                                                                    'capabilityStates',
+                                                                    state,
+                                                                    true
+                                                                )}
+                                                            >
+                                                                {label}
+                                                            </Checkbox>
+                                                        ))}
+                                                        <Checkbox
+                                                            checked={friendPreviewOptions.includeUnknown}
+                                                            onChange={(change) => updateFriendPreviewOption(
+                                                                'includeUnknown',
+                                                                window.FriendPreviewContract.checkedFromChange(
+                                                                    change
+                                                                )
+                                                            )}
+                                                        >
+                                                            包含未知
+                                                        </Checkbox>
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
                                     )}
                                 </div>
                             )}
                         </div>
-                        <div style={{ padding: '0 16px', overflowY: 'auto', height: 'calc(100vh - 180px)' }}>
+                        <div style={{ padding: '0 16px', overflowY: 'auto', maxHeight: '42vh', minHeight: 160 }}>
                             {renderSheetList()}
                         </div>
-                        <div className="sheet-footer" style={{ padding: '16px', justifyContent: 'space-around', position: 'absolute', bottom: 0, width: '100%', background: 'var(--semi-color-bg-1)' }}>
+                        <div className="sheet-footer" style={{ padding: '16px', justifyContent: 'space-around', position: 'absolute', bottom: 0, left: 0, right: 0, boxSizing: 'border-box', background: 'var(--semi-color-bg-1)' }}>
                             <Button style={{ marginRight: 10 }} onClick={() => setSheetVisible(false)}>放弃更改</Button>
                             <Button theme="solid" onClick={saveSheet}>保存</Button>
                         </div>
