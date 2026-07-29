@@ -34,6 +34,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import fansirsqi.xposed.sesame.SesameApplication.Companion.PREFERENCES_KEY
 import fansirsqi.xposed.sesame.entity.UserEntity
 import fansirsqi.xposed.sesame.ui.MainActivity
+import fansirsqi.xposed.sesame.ui.PersistentLaunchUiState
 import fansirsqi.xposed.sesame.ui.navigation.BottomNavItem
 import fansirsqi.xposed.sesame.ui.screen.content.HomeContent
 import fansirsqi.xposed.sesame.ui.screen.content.LogsContent
@@ -46,6 +47,7 @@ fun MainScreen(
     oneWord: String,
     activeUserName: String,
     moduleStatus: MainViewModel.ModuleStatus,
+    persistentLaunchUiState: PersistentLaunchUiState,
     viewModel: MainViewModel,
     isDynamicColor: Boolean, // 传给 MainScreen
     userList: List<UserEntity>, // 🔥 确保 userList 被传入 MainScreen
@@ -138,6 +140,8 @@ fun MainScreen(
             when (currentScreen) {
                 BottomNavItem.Home -> HomeContent(
                     moduleStatus = moduleStatus,
+                    persistentLaunchUiState =
+                        persistentLaunchUiState,
                     deviceInfoMap = deviceInfoMap,
                     oneWord = oneWord,
                     isOneWordLoading = isOneWordLoading,

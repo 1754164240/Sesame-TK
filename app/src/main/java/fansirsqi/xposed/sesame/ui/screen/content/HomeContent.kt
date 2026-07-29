@@ -23,6 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import fansirsqi.xposed.sesame.ui.MainActivity
+import fansirsqi.xposed.sesame.ui.PersistentLaunchUiState
 import fansirsqi.xposed.sesame.ui.screen.DeviceInfoCard
 import fansirsqi.xposed.sesame.ui.screen.card.ModuleStatusCard
 import fansirsqi.xposed.sesame.ui.screen.card.OneWordCard
@@ -32,6 +33,7 @@ import fansirsqi.xposed.sesame.util.ToastUtil
 @Composable
 fun HomeContent(
     moduleStatus: MainViewModel.ModuleStatus,
+    persistentLaunchUiState: PersistentLaunchUiState,
     deviceInfoMap: Map<String, String>?,
     oneWord: String,
     isOneWordLoading: Boolean,
@@ -65,6 +67,7 @@ fun HomeContent(
         item {
             ModuleStatusCard(
                 status = moduleStatus,
+                persistentLaunchUiState = persistentLaunchUiState,
                 expanded = isStatusCardExpanded,
                 onClick = {
                     if (moduleStatus is MainViewModel.ModuleStatus.NotActivated) {

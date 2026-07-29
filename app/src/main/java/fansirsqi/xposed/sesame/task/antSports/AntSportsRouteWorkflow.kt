@@ -10,6 +10,7 @@ class AntSportsRouteWorkflow(
     private val queryPath: suspend (String) -> String,
     private val queryWorldMap: suspend (String) -> String,
     private val queryCityPath: suspend (String) -> String,
+    private val queryCityKnowledgeDetail: suspend (String) -> String,
     private val joinPath: suspend (String) -> String,
     private val walkGo: suspend (String, Int) -> String,
     private val receiveEvent: suspend (String) -> String
@@ -32,7 +33,19 @@ class AntSportsRouteWorkflow(
             if (!cityPaths.recognized) {
                 return AntSportsRouteDiscovery(false, null)
             }
-            cityPaths.unfinishedPathIds.firstOrNull()?.let { pathId ->
+            if (cityPaths.unfinishedPathIds.isEmpty()) {
+                continue
+            }
+            val knowledge = AntSportsRoutePolicy.parseCityKnowledge(
+                queryCityKnowledgeDetail(cityId)
+            )
+            if (!knowledge.recognized) {
+                return AntSportsRouteDiscovery(false, null)
+            }
+            AntSportsRoutePolicy.selectKnowledgePaths(
+                cityPaths,
+                knowledge
+            ).firstOrNull()?.let { pathId ->
                 return AntSportsRouteDiscovery(true, pathId)
             }
         }

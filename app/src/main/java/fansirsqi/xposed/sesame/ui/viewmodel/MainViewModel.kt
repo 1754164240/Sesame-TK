@@ -9,6 +9,8 @@ import fansirsqi.xposed.sesame.entity.UserEntity
 import fansirsqi.xposed.sesame.service.ConnectionState
 import fansirsqi.xposed.sesame.service.LsposedServiceManager
 import fansirsqi.xposed.sesame.ui.screen.DeviceInfoUtil
+import fansirsqi.xposed.sesame.ui.PersistentLaunchUiState
+import fansirsqi.xposed.sesame.ui.PersistentLaunchUiStateResolver
 import fansirsqi.xposed.sesame.util.AssetUtil
 import fansirsqi.xposed.sesame.util.DataStore
 import fansirsqi.xposed.sesame.util.DirectoryWatcher
@@ -28,6 +30,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 
 /**
  * 主界面 ViewModel
@@ -73,6 +76,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _deviceInfo = MutableStateFlow<Map<String, String>?>(null)
     val deviceInfo = _deviceInfo.asStateFlow()
+
+    private val _persistentLaunchUiState =
+        MutableStateFlow(PersistentLaunchUiState.UNKNOWN)
+    val persistentLaunchUiState =
+        _persistentLaunchUiState.asStateFlow()
 
     // --- 监听器 ---
 
@@ -150,10 +158,32 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         try {
             val activeUserEntity = DataStore.get("activedUser", UserEntity::class.java)
             _activeUser.value = activeUserEntity
+            updatePersistentLaunchUiState(activeUserEntity?.userId)
         } catch (e: Exception) {
             Log.e(TAG, "Read active user failed", e)
             _activeUser.value = null
+            _persistentLaunchUiState.value =
+                PersistentLaunchUiState.UNKNOWN
         }
+    }
+
+    fun refreshPersistentLaunchUiState() {
+        viewModelScope.launch(Dispatchers.IO) {
+            updatePersistentLaunchUiState(_activeUser.value?.userId)
+        }
+    }
+
+    private fun updatePersistentLaunchUiState(userId: String?) {
+        val configFile = userId
+            ?.takeIf { it.isNotBlank() }
+            ?.let {
+                File(
+                    File(Files.CONFIG_DIR, it),
+                    "config_v2.json"
+                )
+            }
+        _persistentLaunchUiState.value =
+            PersistentLaunchUiStateResolver.resolve(userId, configFile)
     }
 
     @OptIn(FlowPreview::class)

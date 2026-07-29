@@ -515,6 +515,8 @@ class AntOrchard : ModelTask() {
                 )
                 taskContainer.optJSONObject("signTaskInfo")?.let(::orchardSign)
                 val workflow = createOrchardRewardWorkflow(currentUserId)
+                val browseWorkflow =
+                    createOrchardBrowseTaskWorkflow(currentUserId)
                 for (task in snapshot.tasks) {
                     val blacklistKey = task.groupId.ifBlank { task.id }
                     if (
@@ -527,7 +529,15 @@ class AntOrchard : ModelTask() {
                         )
                         continue
                     }
-                    when (workflow.processTask(task)) {
+                    val outcome = if (
+                        task.status.equals("TODO", true) &&
+                        task.actionType.equals("VISIT", true)
+                    ) {
+                        browseWorkflow.process(task)
+                    } else {
+                        workflow.processTask(task)
+                    }
+                    when (outcome) {
                         AntOrchardRewardOutcome.CONFIRMED ->
                             Log.farm("农场任务已由服务端确认[${task.title}]")
                         AntOrchardRewardOutcome.SKIPPED_UNSAFE ->
@@ -583,6 +593,26 @@ class AntOrchard : ModelTask() {
                     task.taskType,
                     task.awardCount
                 )
+            }
+        )
+    }
+
+    private fun createOrchardBrowseTaskWorkflow(
+        currentUserId: String
+    ): OrchardBrowseTaskWorkflow {
+        return OrchardBrowseTaskWorkflow(
+            listTasks = { AntOrchardRpcCall.orchardListTask() },
+            startBrowse = AntOrchardRpcCall::orchardSimple,
+            finishTask = { task, source ->
+                AntOrchardRpcCall.finishTask(
+                    currentUserId,
+                    task.sceneCode,
+                    task.id,
+                    source
+                )
+            },
+            waitForBrowse = {
+                CoroutineUtils.sleepCompat(15_000L)
             }
         )
     }

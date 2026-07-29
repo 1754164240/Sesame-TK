@@ -19,6 +19,7 @@ class AntSportsRouteWorkflowTest {
             },
             queryWorldMap = { "" },
             queryCityPath = { "" },
+            queryCityKnowledgeDetail = { "" },
             joinPath = {
                 actionCalls++
                 """{"success":true}"""
@@ -42,6 +43,7 @@ class AntSportsRouteWorkflowTest {
             queryPath = { """{"success":true,"data":{}}""" },
             queryWorldMap = { "" },
             queryCityPath = { "" },
+            queryCityKnowledgeDetail = { "" },
             joinPath = { "" },
             walkGo = { _, _ ->
                 walkCalls++
@@ -78,6 +80,7 @@ class AntSportsRouteWorkflowTest {
             },
             queryWorldMap = { "" },
             queryCityPath = { "" },
+            queryCityKnowledgeDetail = { "" },
             joinPath = { "" },
             walkGo = { _, _ -> "" },
             receiveEvent = { "" }
@@ -98,6 +101,7 @@ class AntSportsRouteWorkflowTest {
             },
             queryWorldMap = { "" },
             queryCityPath = { "" },
+            queryCityKnowledgeDetail = { "" },
             joinPath = { "" },
             walkGo = { _, _ -> "" },
             receiveEvent = { "" }
@@ -118,6 +122,7 @@ class AntSportsRouteWorkflowTest {
             },
             queryWorldMap = { "" },
             queryCityPath = { "" },
+            queryCityKnowledgeDetail = { "" },
             joinPath = { "" },
             walkGo = { _, _ -> "" },
             receiveEvent = { "" }
@@ -138,8 +143,9 @@ class AntSportsRouteWorkflowTest {
     }
 
     @Test
-    fun `按城市顺序返回首个未完成路线`() = runBlocking {
-        val queriedCities = mutableListOf<String>()
+    fun `按城市顺序只返回能够补充待收见闻的未完成路线`() = runBlocking {
+        val queriedPathCities = mutableListOf<String>()
+        val queriedKnowledgeCities = mutableListOf<String>()
         val workflow = AntSportsRouteWorkflow(
             queryUser = { "" },
             queryPath = { "" },
@@ -149,6 +155,7 @@ class AntSportsRouteWorkflowTest {
                       "success": true,
                       "data": {
                         "cityList": [
+                          {"cityId":"city-offline","status":"OFFLINE"},
                           {"cityId":"city-1","status":"ONLINE"},
                           {"cityId":"city-2","status":"ONLINE"}
                         ]
@@ -157,11 +164,60 @@ class AntSportsRouteWorkflowTest {
                 """.trimIndent()
             },
             queryCityPath = { cityId ->
-                queriedCities += cityId
+                queriedPathCities += cityId
                 if (cityId == "city-1") {
-                    """{"success":true,"data":{"cityPathList":[{"pathId":"path-done","pathCompleteStatus":"COMPLETED"}]}}"""
+                    """{"success":true,"data":{"cityPathList":[{"pathId":"path-received","pathCompleteStatus":"JOIN"},{"pathId":"path-unrelated","pathCompleteStatus":"JOIN"}]}}"""
                 } else {
                     """{"success":true,"data":{"cityPathList":[{"pathId":"path-open","pathCompleteStatus":"JOIN"},{"pathId":"path-later","pathCompleteStatus":"JOIN"}]}}"""
+                }
+            },
+            queryCityKnowledgeDetail = { cityId ->
+                queriedKnowledgeCities += cityId
+                if (cityId == "city-1") {
+                    """
+                        {
+                          "success": true,
+                          "data": {
+                            "cityKnowledgeList": [
+                              {
+                                "knowledgeId":"knowledge-received",
+                                "pathId":"path-received",
+                                "status":"RECEIVED"
+                              },
+                              {
+                                "knowledgeId":"knowledge-missing",
+                                "pathId":"path-missing",
+                                "status":"NOT_RECEIVE"
+                              }
+                            ]
+                          }
+                        }
+                    """.trimIndent()
+                } else {
+                    """
+                        {
+                          "success": true,
+                          "data": {
+                            "cityKnowledgeList": [
+                              {
+                                "knowledgeId":"knowledge-open",
+                                "pathId":"path-open",
+                                "status":"RECEIVED"
+                              },
+                              {
+                                "knowledgeId":"knowledge-later",
+                                "pathId":"path-later",
+                                "status":"NOT_RECEIVE"
+                              },
+                              {
+                                "knowledgeId":"knowledge-later-copy",
+                                "pathId":"path-later",
+                                "status":"NOT_RECEIVE"
+                              }
+                            ]
+                          }
+                        }
+                    """.trimIndent()
                 }
             },
             joinPath = { "" },
@@ -172,8 +228,9 @@ class AntSportsRouteWorkflowTest {
         val result = workflow.findJoinablePath("theme-1")
 
         assertEquals(true, result.recognized)
-        assertEquals("path-open", result.pathId)
-        assertEquals(listOf("city-1", "city-2"), queriedCities)
+        assertEquals("path-later", result.pathId)
+        assertEquals(listOf("city-1", "city-2"), queriedPathCities)
+        assertEquals(listOf("city-1", "city-2"), queriedKnowledgeCities)
     }
 
     @Test
@@ -194,6 +251,9 @@ class AntSportsRouteWorkflowTest {
                 """.trimIndent()
             },
             queryCityPath = { """{"success":true,"data":{}}""" },
+            queryCityKnowledgeDetail = {
+                error("城市路线未知时不应查询见闻")
+            },
             joinPath = { "" },
             walkGo = { _, _ -> "" },
             receiveEvent = { "" }
@@ -202,6 +262,85 @@ class AntSportsRouteWorkflowTest {
         val result = workflow.findJoinablePath("theme-1")
 
         assertEquals(false, result.recognized)
+        assertEquals(null, result.pathId)
+    }
+
+    @Test
+    fun `见闻详情结构未知时不回退扫描全部未完成路线`() = runBlocking {
+        val workflow = AntSportsRouteWorkflow(
+            queryUser = { "" },
+            queryPath = { "" },
+            queryWorldMap = {
+                """
+                    {
+                      "success": true,
+                      "data": {
+                        "cityList": [
+                          {"cityId":"city-1","status":"ONLINE"}
+                        ]
+                      }
+                    }
+                """.trimIndent()
+            },
+            queryCityPath = {
+                """{"success":true,"data":{"cityPathList":[{"pathId":"path-open","pathCompleteStatus":"JOIN"}]}}"""
+            },
+            queryCityKnowledgeDetail = {
+                """{"success":true,"data":{"unknownList":[]}}"""
+            },
+            joinPath = { "" },
+            walkGo = { _, _ -> "" },
+            receiveEvent = { "" }
+        )
+
+        val result = workflow.findJoinablePath("theme-1")
+
+        assertEquals(false, result.recognized)
+        assertEquals(null, result.pathId)
+    }
+
+    @Test
+    fun `见闻全部已领取时返回已识别但无候选路线`() = runBlocking {
+        val workflow = AntSportsRouteWorkflow(
+            queryUser = { "" },
+            queryPath = { "" },
+            queryWorldMap = {
+                """
+                    {
+                      "success": true,
+                      "data": {
+                        "cityList": [
+                          {"cityId":"city-1","status":"ONLINE"}
+                        ]
+                      }
+                    }
+                """.trimIndent()
+            },
+            queryCityPath = {
+                """{"success":true,"data":{"cityPathList":[{"pathId":"path-open","pathCompleteStatus":"JOIN"}]}}"""
+            },
+            queryCityKnowledgeDetail = {
+                """
+                    {
+                      "success": true,
+                      "data": {
+                        "cityKnowledgeList": [{
+                          "knowledgeId":"knowledge-received",
+                          "pathId":"path-open",
+                          "status":"RECEIVED"
+                        }]
+                      }
+                    }
+                """.trimIndent()
+            },
+            joinPath = { "" },
+            walkGo = { _, _ -> "" },
+            receiveEvent = { "" }
+        )
+
+        val result = workflow.findJoinablePath("theme-1")
+
+        assertEquals(true, result.recognized)
         assertEquals(null, result.pathId)
     }
 
@@ -235,6 +374,9 @@ class AntSportsRouteWorkflowTest {
                     }
                 """.trimIndent()
             },
+            queryCityKnowledgeDetail = {
+                error("没有未完成路线时不应查询见闻")
+            },
             joinPath = { "" },
             walkGo = { _, _ -> "" },
             receiveEvent = { "" }
@@ -261,6 +403,7 @@ class AntSportsRouteWorkflowTest {
             },
             queryWorldMap = { "" },
             queryCityPath = { "" },
+            queryCityKnowledgeDetail = { "" },
             joinPath = { "" },
             walkGo = { _, _ -> "" },
             receiveEvent = {
@@ -289,6 +432,7 @@ class AntSportsRouteWorkflowTest {
             },
             queryWorldMap = { "" },
             queryCityPath = { "" },
+            queryCityKnowledgeDetail = { "" },
             joinPath = {
                 actionCalls++
                 """{"success":true}"""
@@ -315,6 +459,7 @@ class AntSportsRouteWorkflowTest {
             },
             queryWorldMap = { "" },
             queryCityPath = { "" },
+            queryCityKnowledgeDetail = { "" },
             joinPath = { "" },
             walkGo = { _, _ ->
                 actionCalls++

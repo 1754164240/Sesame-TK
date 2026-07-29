@@ -1,7 +1,10 @@
 package fansirsqi.xposed.sesame.ui.dto;
 import lombok.Data;
 import fansirsqi.xposed.sesame.model.ModelField;
+import fansirsqi.xposed.sesame.ui.web.SettingsFieldUiContract;
+import fansirsqi.xposed.sesame.ui.web.SettingsUiContract;
 import java.io.Serializable;
+import java.util.List;
 /**
  * 模型字段展示数据传输对象。
  * 用于封装模型字段的展示信息，包括字段代码、名称、类型、扩展键和配置值。
@@ -33,6 +36,22 @@ public class ModelFieldShowDto implements Serializable {
      */
     private String desc;
     /**
+     * Web 设置页使用的结构化编辑器类型。
+     */
+    private String editorType;
+    /**
+     * 是否允许使用 -1 关闭该字段。
+     */
+    private boolean allowDisable;
+    /**
+     * 当前字段是否处于关闭状态。
+     */
+    private boolean disabled;
+    /**
+     * 字段默认配置值。
+     */
+    private String defaultConfigValue;
+    /**
      * 无参构造函数。
      */
     public ModelFieldShowDto() {
@@ -52,6 +71,12 @@ public class ModelFieldShowDto implements Serializable {
         dto.setExpandKey(modelField.getExpandKey());
         dto.setConfigValue(modelField.getConfigValue());
         dto.setDesc(modelField.getDesc());
+        SettingsFieldUiContract contract = SettingsUiContract.describeField(modelField);
+        dto.setEditorType(contract.getEditorType().name());
+        dto.setAllowDisable(contract.getAllowDisable());
+        dto.setDisabled(contract.getDisabled());
+        List<String> defaultValues = contract.getDefaultValues();
+        dto.setDefaultConfigValue(String.join(",", defaultValues));
         return dto;
     }
 }

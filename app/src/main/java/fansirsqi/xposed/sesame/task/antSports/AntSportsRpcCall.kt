@@ -593,6 +593,22 @@ object AntSportsRpcCall {
         )
     }
 
+    internal fun buildCityKnowledgeDetailArgs(cityId: String): String {
+        val request = JSONObject()
+            .put("chInfo", "medical_health")
+            .put("cityId", cityId)
+            .put("clientOS", "android")
+            .put("features", JSONArray(FEATURES))
+        return JSONArray().put(request).toString()
+    }
+
+    fun queryCityKnowledgeDetail(cityId: String): String {
+        return RequestManager.requestString(
+            "com.alipay.sportsplay.biz.rpc.walk.queryCityKnowledgeDetail",
+            buildCityKnowledgeDetailArgs(cityId)
+        )
+    }
+
     /**
      * @brief 查询路线详情 - 新版
      * 

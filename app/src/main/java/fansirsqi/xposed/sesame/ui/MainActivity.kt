@@ -79,6 +79,8 @@ class MainActivity : ComponentActivity() {
             val oneWord by viewModel.oneWord.collectAsStateWithLifecycle()
             val activeUser by viewModel.activeUser.collectAsStateWithLifecycle()
             val moduleStatus by viewModel.moduleStatus.collectAsStateWithLifecycle()
+            val persistentLaunchUiState by
+                viewModel.persistentLaunchUiState.collectAsStateWithLifecycle()
             val userList by viewModel.userList.collectAsStateWithLifecycle()
             val isDynamicColor by ThemeManager.isDynamicColor.collectAsStateWithLifecycle()
 
@@ -88,6 +90,7 @@ class MainActivity : ComponentActivity() {
                     oneWord = oneWord,
                     activeUserName = activeUser?.showName ?: "未载入",
                     moduleStatus = moduleStatus,
+                    persistentLaunchUiState = persistentLaunchUiState,
                     viewModel = viewModel,
                     isDynamicColor = isDynamicColor,
                     userList = userList,
@@ -172,7 +175,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        if (hasPermissions) viewModel.refreshUserConfigs()
+        if (hasPermissions) {
+            viewModel.refreshUserConfigs()
+            viewModel.refreshPersistentLaunchUiState()
+        }
     }
 
     override fun onDestroy() {

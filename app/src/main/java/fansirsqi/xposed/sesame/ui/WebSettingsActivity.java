@@ -39,6 +39,8 @@ import fansirsqi.xposed.sesame.BuildConfig;
 import fansirsqi.xposed.sesame.R;
 import fansirsqi.xposed.sesame.data.Config;
 import fansirsqi.xposed.sesame.entity.AlipayUser;
+import fansirsqi.xposed.sesame.entity.friend.FriendCenterConfig;
+import fansirsqi.xposed.sesame.entity.friend.FriendSelectionSpec;
 import fansirsqi.xposed.sesame.model.Model;
 import fansirsqi.xposed.sesame.model.ModelConfig;
 import fansirsqi.xposed.sesame.model.ModelField;
@@ -52,6 +54,8 @@ import fansirsqi.xposed.sesame.ui.dto.ModelFieldShowDto;
 import fansirsqi.xposed.sesame.ui.dto.ModelGroupDto;
 import fansirsqi.xposed.sesame.ui.model.UiMode;
 import fansirsqi.xposed.sesame.ui.repository.ConfigRepository;
+import fansirsqi.xposed.sesame.ui.web.FriendCenterUiProjector;
+import fansirsqi.xposed.sesame.ui.web.SettingsUiContract;
 import fansirsqi.xposed.sesame.ui.widget.ListDialog;
 import fansirsqi.xposed.sesame.util.Files;
 import fansirsqi.xposed.sesame.util.JsonUtil;
@@ -69,6 +73,7 @@ import fansirsqi.xposed.sesame.util.maps.UserMap;
 import fansirsqi.xposed.sesame.util.maps.VitalityRewardsMap;
 import fansirsqi.xposed.sesame.util.PortUtil;
 import fansirsqi.xposed.sesame.util.StringUtil;
+import fansirsqi.xposed.sesame.util.friend.FriendRepository;
 
 public class WebSettingsActivity extends BaseActivity {
     private static final String TAG = "WebSettingsActivity";
@@ -123,8 +128,10 @@ public class WebSettingsActivity extends BaseActivity {
                     webView.goBack();
                 } else {
                     Log.record(TAG, "WebSettingsActivity.handleOnBackPressed: save");
-                    save();
-                    finish();
+                    flushWebInputs(() -> {
+                        save();
+                        finish();
+                    });
                 }
             }
         });
@@ -216,8 +223,10 @@ public class WebSettingsActivity extends BaseActivity {
                     webView.goBack();
                 } else {
                     Log.record(TAG, "WebAppInterface onBackPressed: save");
-                    save();
-                    WebSettingsActivity.this.finish();
+                    flushWebInputs(() -> {
+                        save();
+                        WebSettingsActivity.this.finish();
+                    });
                 }
             });
         }
@@ -369,6 +378,66 @@ public class WebSettingsActivity extends BaseActivity {
             return null;
         }
 
+        /**
+         * 返回列表控件需要的安全元数据，不暴露模型字段内部对象。
+         */
+        @JavascriptInterface
+        public String getListMetadata(String modelCode, String fieldCode) {
+            ModelConfig modelConfig = ModelTask.getModelConfigMap().get(modelCode);
+            if (modelConfig == null) {
+                return "[]";
+            }
+            ModelField<?> modelField = modelConfig.getModelField(fieldCode);
+            if (modelField == null) {
+                return "[]";
+            }
+            try {
+                FriendCenterConfig friendConfig = FriendRepository.currentUserConfig(
+                        StringUtil.isEmpty(userId) ? "" : userId
+                );
+                return JsonUtil.formatJson(
+                        FriendCenterUiProjector.decorateListItems(
+                                friendConfig,
+                                SettingsUiContract.listItems(modelField)
+                        ),
+                        false
+                );
+            } catch (Exception e) {
+                Log.printStackTrace(TAG, e);
+                return "[]";
+            }
+        }
+
+        /**
+         * 对候选好友范围执行只读预览，不读取或写入网页侧存储。
+         */
+        @JavascriptInterface
+        public String previewFriendScope(String selectionJson) {
+            try {
+                FriendSelectionSpec spec = JsonUtil.parseObject(
+                        selectionJson,
+                        FriendSelectionSpec.class
+                );
+                FriendCenterConfig config = FriendRepository.currentUserConfig(
+                        StringUtil.isEmpty(userId) ? "" : userId
+                );
+                return JsonUtil.formatJson(
+                        FriendCenterUiProjector.project(config, spec),
+                        false
+                );
+            } catch (Exception e) {
+                Log.printStackTrace(TAG, e);
+                FriendCenterConfig emptyConfig = new FriendCenterConfig();
+                return JsonUtil.formatJson(
+                        FriendCenterUiProjector.project(
+                                emptyConfig,
+                                new FriendSelectionSpec()
+                        ),
+                        false
+                );
+            }
+        }
+
 
         @JavascriptInterface
         public String setField(String modelCode, String fieldCode, String fieldValue) {
@@ -474,12 +543,7 @@ public class WebSettingsActivity extends BaseActivity {
                 startActivity(intent);
                 break;
             case 6:
-                // 在调用 save() 之前，先调用 JS 函数同步 WebView 中的数据到 Java 端
-                Log.record(TAG, "WebSettingsActivity.onOptionsItemSelected: Calling handleData() in WebView");
-                webView.evaluateJavascript("if(typeof handleData === 'function'){ handleData(); } else { console.error('handleData function not found'); }", null);
-                // 使用 Handler 延迟执行 save()，给 JS 一点时间完成异步操作
-                // 200 毫秒是一个经验值，如果仍然有问题可以适当增加
-                new Handler(Looper.getMainLooper()).postDelayed(this::save, 200); // 延迟 200 毫秒
+                flushWebInputs(this::save);
                 break;
             case 7:
                 //复制userId到剪切板
@@ -490,6 +554,17 @@ public class WebSettingsActivity extends BaseActivity {
                 break;
         }
         return super.onOptionsItemSelected(item);
+    }
+
+    private void flushWebInputs(Runnable afterFlush) {
+        if (webView == null) {
+            afterFlush.run();
+            return;
+        }
+        webView.evaluateJavascript(
+                "if(typeof handleData === 'function'){ handleData(); true; } else { false; }",
+                ignored -> afterFlush.run()
+        );
     }
 
     private void save() {

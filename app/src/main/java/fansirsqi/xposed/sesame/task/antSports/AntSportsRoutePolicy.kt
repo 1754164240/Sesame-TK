@@ -24,6 +24,18 @@ data class AntSportsCityPathSnapshot(
     val unfinishedPathIds: List<String>
 )
 
+data class RouteKnowledgeEntry(
+    val knowledgeId: String,
+    val pathId: String,
+    val name: String,
+    val status: String
+)
+
+data class RouteKnowledgeSnapshot(
+    val recognized: Boolean,
+    val entries: List<RouteKnowledgeEntry>
+)
+
 data class AntSportsRouteSnapshot(
     val recognized: Boolean,
     val pathId: String,
@@ -68,6 +80,60 @@ object AntSportsRoutePolicy {
             }
         }
         return AntSportsCityPathSnapshot(true, unfinishedPathIds)
+    }
+
+    fun parseCityKnowledge(response: String): RouteKnowledgeSnapshot {
+        val root = runCatching { JSONObject(response) }.getOrNull()
+            ?: return RouteKnowledgeSnapshot(false, emptyList())
+        if (!isSuccess(root)) {
+            return RouteKnowledgeSnapshot(false, emptyList())
+        }
+        val data = root.optJSONObject("data")
+        val result = root.optJSONObject("result")
+        val resultData = result?.optJSONObject("data")
+        val nestedData = data?.optJSONObject("data")
+        val knowledgeList = sequenceOf(
+            root,
+            data,
+            resultData,
+            result,
+            nestedData
+        ).filterNotNull()
+            .mapNotNull { it.optJSONArray("cityKnowledgeList") }
+            .firstOrNull()
+            ?: return RouteKnowledgeSnapshot(false, emptyList())
+        val entries = buildList {
+            for (index in 0 until knowledgeList.length()) {
+                val knowledge = knowledgeList.optJSONObject(index)
+                    ?: continue
+                add(
+                    RouteKnowledgeEntry(
+                        knowledgeId = knowledge.optString("knowledgeId"),
+                        pathId = knowledge.optString("pathId"),
+                        name = knowledge.optString("name"),
+                        status = knowledge.optString("status")
+                    )
+                )
+            }
+        }
+        return RouteKnowledgeSnapshot(true, entries)
+    }
+
+    fun selectKnowledgePaths(
+        cityPaths: AntSportsCityPathSnapshot,
+        knowledge: RouteKnowledgeSnapshot
+    ): List<String> {
+        if (!cityPaths.recognized || !knowledge.recognized) {
+            return emptyList()
+        }
+        val pendingPathIds = knowledge.entries.asSequence()
+            .filter { it.status.equals("NOT_RECEIVE", true) }
+            .map { it.pathId }
+            .filter { it.isNotBlank() }
+            .toSet()
+        return cityPaths.unfinishedPathIds
+            .filter { it in pendingPathIds }
+            .distinct()
     }
 
     fun parseWorldMap(response: String): AntSportsWorldMapSnapshot {

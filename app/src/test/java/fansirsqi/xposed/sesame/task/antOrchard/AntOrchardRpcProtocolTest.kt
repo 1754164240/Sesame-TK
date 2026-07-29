@@ -55,4 +55,21 @@ class AntOrchardRpcProtocolTest {
             claimArgs.getString("sceneCode")
         )
     }
+
+    @Test
+    fun `果园浏览参数使用JSON构造并完整保留来源`() {
+        val args = JSONArray(
+            AntOrchardRpcCall.buildOrchardSimpleArgs(
+                "source-\"quoted\"-&-中文"
+            )
+        ).getJSONObject(0)
+
+        assertEquals("NORMAL", args.getString("requestType"))
+        assertEquals("ORCHARD", args.getString("sceneCode"))
+        assertEquals(
+            "source-\"quoted\"-&-中文",
+            args.getString("source")
+        )
+        assertEquals("20260721.01", args.getString("version"))
+    }
 }

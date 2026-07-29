@@ -120,6 +120,23 @@ object AntOrchardRpcCall {
         )
     }
 
+    internal fun buildOrchardSimpleArgs(source: String): String {
+        val args = JSONObject().apply {
+            put("requestType", "NORMAL")
+            put("sceneCode", "ORCHARD")
+            put("source", source)
+            put("version", VERSION)
+        }
+        return JSONArray().put(args).toString()
+    }
+
+    fun orchardSimple(source: String): String {
+        return RequestManager.requestString(
+            "com.alipay.antorchard.orchardSimple",
+            buildOrchardSimpleArgs(source)
+        )
+    }
+
     fun orchardSign(): String {
         return RequestManager.requestString(
             "com.alipay.antfarm.orchardSign",

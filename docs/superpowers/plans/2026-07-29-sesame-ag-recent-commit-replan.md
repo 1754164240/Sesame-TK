@@ -318,23 +318,23 @@ data class RouteKnowledgeSnapshot(
 
 `AntSportsRouteWorkflow` 增加 `queryCityKnowledgeDetail: suspend (String) -> String` 依赖。路线发现只允许使用“在线城市 + 未完成城市路线 + `NOT_RECEIVE` 见闻条目”三者的交集，交集为空时返回已识别但无候选，任一容器未知时返回不可识别。
 
-- [ ] **Step 1: 写见闻详情解析测试**
+- [x] **Step 1: 写见闻详情解析测试**
 
 覆盖根节点、`data.cityKnowledgeList`、`result.data.cityKnowledgeList`、`NOT_RECEIVE`、已领取、空 `pathId`、重复路线和未知容器；解析结果必须保留 `recognized`，不能把未知结构解释成空列表。
 
-- [ ] **Step 2: 写路线选择测试**
+- [x] **Step 2: 写路线选择测试**
 
 只从 `NOT_RECEIVE`、所属城市在线且仍存在于未完成 `cityPathList` 的路线中选择；按世界地图城市顺序和城市路线顺序稳定去重。详情查询失败、结构未知或只有已领取碎片时不切换路线，不采用上游的扩大回退扫描。
 
-- [ ] **Step 3: 增加 `queryCityKnowledgeDetail(cityId)` RPC**
+- [x] **Step 3: 增加 `queryCityKnowledgeDetail(cityId)` RPC**
 
 RPC 方法固定为 `com.alipay.sportsplay.biz.rpc.walk.queryCityKnowledgeDetail`。请求参数由纯 JSON 构造方法生成，字段固定为 `chInfo=medical_health`、`cityId`、`clientOS=android` 和现有 `features`，并增加协议测试，禁止字符串拼接遗漏转义。
 
-- [ ] **Step 4: 接入现有路线发现工作流**
+- [x] **Step 4: 接入现有路线发现工作流**
 
 在 `AntSports.kt#createSportsPlayWorkflow()` 注入 `queryCityKnowledgeDetail`，并通过 `AntSportsRouteIntegrationTest` 锁定生产源码确实使用新依赖。保持 `joinPath`、`walkGo` 和 `receiveEvent` 的动作后回查；见闻详情只影响候选选择，不改变步数和领奖终态规则。
 
-- [ ] **Step 5: 运行全部运动测试**
+- [x] **Step 5: 运行全部运动测试**
 
 先运行 `AntSportsRoute*Test`，再运行全部 `antSports.*` 测试：
 
@@ -352,6 +352,8 @@ RPC 方法固定为 `com.alipay.sportsplay.biz.rpc.walk.queryCityKnowledgeDetail
   --no-daemon --console=plain
 ```
 
+完成证据：2026-07-29 运动域共 6 个测试类、38 项，0 失败、0 错误、0 跳过，Gradle `BUILD SUCCESSFUL`。路线发现只返回在线城市、未完成路线与 `NOT_RECEIVE` 见闻条目的交集，未知详情容器不再回退扫描全部路线。
+
 ## Task 5: 果园浏览任务安全白名单
 
 **Files:**
@@ -363,21 +365,23 @@ RPC 方法固定为 `com.alipay.sportsplay.biz.rpc.walk.queryCityKnowledgeDetail
 - Modify: `app/src/main/java/fansirsqi/xposed/sesame/task/antOrchard/AntOrchard.kt`
 - Modify: `app/src/main/java/fansirsqi/xposed/sesame/task/antOrchard/AntOrchardRewardPolicy.kt`
 
-- [ ] **Step 1: 写白名单测试**
+- [x] **Step 1: 写白名单测试**
 
 必须同时满足已识别 `groupId`、`sceneCode`、非空 `targetUrl.source`、浏览语义和无游戏/广告/下单/充值/支付信号。未知来源、嵌套跳转缺失来源和任一风险信号均跳过。
 
-- [ ] **Step 2: 写动作后回查测试**
+- [x] **Step 2: 写动作后回查测试**
 
 浏览开始和完成 ACK 后重新查询任务；只有状态推进到 `FINISHED/RECEIVED` 或任务从已识别列表消失才确认。计时结束但状态未推进返回重试。
 
-- [ ] **Step 3: 实现独立浏览工作流**
+- [x] **Step 3: 实现独立浏览工作流**
 
 不把 `VISIT` 加入全局 `safeCompleteActions`，仅由 `OrchardBrowseTaskPolicy` 对已验证结构放行，避免扩大其他模块和未知访问任务的执行范围。
 
-- [ ] **Step 4: 运行完整果园回归**
+- [x] **Step 4: 运行完整果园回归**
 
 运行 `OrchardBrowseTask*Test`、`AntOrchardReward*Test` 和全部 `antOrchard.*` 测试。
+
+完成证据：2026-07-29 果园域共 5 个测试类、24 项，0 失败、0 错误、0 跳过，Gradle `BUILD SUCCESSFUL`。`VISIT` 未加入全局安全动作集合，只有 `groupId=12172`、`sceneCode=972`、`taskPlantType=TAOBAO`、浏览语义明确、来源可解析且无风险信号的任务才进入专用工作流；浏览触发和完成后均由已识别任务列表确认终态。
 
 ## Task 6: 持久拉起状态展示
 
@@ -389,21 +393,23 @@ RPC 方法固定为 `com.alipay.sportsplay.biz.rpc.walk.queryCityKnowledgeDetail
 - Modify: `app/src/main/java/fansirsqi/xposed/sesame/ui/screen/card/ModuleStatusCard.kt`
 - Modify: `app/src/main/java/fansirsqi/xposed/sesame/ui/screen/content/HomeContent.kt`
 
-- [ ] **Step 1: 写账户配置解析测试**
+- [x] **Step 1: 写账户配置解析测试**
 
 覆盖无账户、配置文件不存在、字段缺失、显式 `false`、显式 `true` 和损坏 JSON。未知状态展示“未确认”，不得按启用展示。
 
-- [ ] **Step 2: 实现只读 UI 状态解析器**
+- [x] **Step 2: 实现只读 UI 状态解析器**
 
 读取当前账户配置中的 `BaseModel.allowPersistentForegroundLaunch`，不修改配置、不触发调度、不拉起目标应用。
 
-- [ ] **Step 3: 接入 `ModuleStatusCard`**
+- [x] **Step 3: 接入 `ModuleStatusCard`**
 
 展示“持久调度前台拉起：已开启/已关闭/未确认”，并明确关闭只影响系统持久调度主动拉起，不影响用户手动打开目标应用后的流程。
 
-- [ ] **Step 4: 运行 UI 状态单元测试和编译**
+- [x] **Step 4: 运行 UI 状态单元测试和编译**
 
 运行 `PersistentLaunchUiStateResolverTest`，随后执行 `compileDebugKotlin`。
+
+完成证据：2026-07-29 `PersistentLaunchUiStateResolverTest` 与 `PersistentLaunchPolicyTest` 通过，`compileDebugKotlin` 为 `BUILD SUCCESSFUL`。UI 直接只读当前账户 `config/<userId>/config_v2.json`，不调用带迁移写入的配置路径；无账户、文件不存在、字段缺失、非布尔值和损坏 JSON 均显示“未确认”。
 
 ## Task 7: Web 设置页 clean-room 增强
 
@@ -417,23 +423,23 @@ RPC 方法固定为 `com.alipay.sportsplay.biz.rpc.walk.queryCityKnowledgeDetail
 - Modify: `app/src/main/java/fansirsqi/xposed/sesame/ui/dto/ModelFieldShowDto.java`
 - Modify: `app/src/main/assets/web/semi_index.html`
 
-- [ ] **Step 1: 先定义 Android/WebView JSON 合同**
+- [x] **Step 1: 先定义 Android/WebView JSON 合同**
 
 合同只暴露字段类型、允许禁用、默认时间、列表项安全标签、好友分组、关系、能力状态和预览结果。JavaScript 不直接读取内部存储文件。
 
-- [ ] **Step 2: 写合同和投影失败测试**
+- [x] **Step 2: 写合同和投影失败测试**
 
 覆盖时间点、时间窗口、禁用值 `-1`、普通列表、计数列表、动态全部好友、分组包含/排除、黑名单、未知能力和旧配置适配。
 
-- [ ] **Step 3: 扩展 `HOOK` 只读接口**
+- [x] **Step 3: 扩展 `HOOK` 只读接口**
 
 新增列表元数据和好友范围预览接口；配置保存继续通过现有统一保存入口，禁止为单个控件增加绕过校验的写接口。
 
-- [ ] **Step 4: 重写时间和列表编辑器**
+- [x] **Step 4: 重写时间和列表编辑器**
 
 实现时间点/时间窗口结构化编辑、安全标签筛选、搜索、批量选择和计数编辑。所有输入在切换模块、关闭抽屉和保存前统一 flush，避免最后一次输入丢失。
 
-- [ ] **Step 5: 接入好友中心预览**
+- [x] **Step 5: 接入好友中心预览**
 
 展示动态全部好友、分组、排除、关系和能力筛选后的有效/失效数量；未知能力默认排除，不迁移现有业务模块的配置所有权。
 
@@ -441,9 +447,11 @@ RPC 方法固定为 `com.alipay.sportsplay.biz.rpc.walk.queryCityKnowledgeDetail
 
 执行 HTML/JavaScript 语法检查、DTO 合同单元测试和 `assembleDebug`。真机 WebView 验证搜索、批量选择、输入落盘、重开页面回显和旧配置兼容。
 
+自动化证据：2026-07-29 使用项目内 Babel 对 `semi_index.html` 的 JSX 完成静态转译检查；设置页合同、好友中心投影和相关好友域测试均包含在全量 492 项单元测试中且无失败；`assembleDebug` 为 `BUILD SUCCESSFUL`。当前 ADB 无连接设备，真机 WebView 验收仍待完成，因此 Step 6 保持未勾选。
+
 ## Task 8: 最终自动化与真机验收
 
-- [ ] **Step 1: 运行全部单元测试**
+- [x] **Step 1: 运行全部单元测试**
 
 ```powershell
 .\gradlew.bat testDebugUnitTest `
@@ -452,7 +460,7 @@ RPC 方法固定为 `com.alipay.sportsplay.biz.rpc.walk.queryCityKnowledgeDetail
   --no-daemon --console=plain
 ```
 
-- [ ] **Step 2: 构建 Debug APK**
+- [x] **Step 2: 构建 Debug APK**
 
 ```powershell
 .\gradlew.bat assembleDebug `
@@ -461,11 +469,11 @@ RPC 方法固定为 `com.alipay.sportsplay.biz.rpc.walk.queryCityKnowledgeDetail
   --no-daemon --console=plain
 ```
 
-- [ ] **Step 3: 审计危险 RPC 和不可达路径**
+- [x] **Step 3: 审计危险 RPC 和不可达路径**
 
 扫描 `withdraw`、`cashExchange`、`task.complete`、`task.trigger`、`exchangeYebExpGold`、`finishAdTask`、`recordFarmGame`、`GAME_TRAN_TASK`、`LIGHT_AD_TASK`、下单和充值关键字。每个命中必须属于只读查询、无调用声明、明确阻断分支或默认关闭且本批次不可达的遗留功能。
 
-- [ ] **Step 4: 检查工作区质量**
+- [x] **Step 4: 检查工作区质量**
 
 运行 `git diff --check`、UTF-8 BOM 扫描、测试 XML 汇总和 APK 数量/ABI 核对。禁止把 CRLF 提示误判为 `git diff --check` 失败。
 
@@ -473,15 +481,17 @@ RPC 方法固定为 `com.alipay.sportsplay.biz.rpc.walk.queryCityKnowledgeDetail
 
 验证 API 102 Hook、Binder 跨进程、进程重启、设备重启、应用升级、时间变化、权限变化、森林任务回查、N 倍卡保护性补兑、NPC 状态回查、见闻路线、果园浏览白名单、设置页落盘和持久拉起状态展示。遇到验证码、风控或安全验证立即停止当前业务链路。
 
+自动化证据：2026-07-29 全量 `testDebugUnitTest` 共 105 个测试类、492 项，0 失败、0 错误、0 跳过；`assembleDebug` 成功生成 arm64-v8a、armeabi-v7a、x86、x86_64 和 universal 共 5 个 APK，ABI 与文件名一致。危险 RPC 全仓扫描确认本批未新增调用路径，果园新增的 `WITHDRAW` 仅为阻断关键词；仓库既有命中属于只读预咨询、调试入口、策略阻断或默认关闭的遗留功能。`git diff --check` 返回 0，33 个变更文件均无 UTF-8 BOM。ADB 未连接设备，Step 5 保持未勾选。
+
 ## 三、执行顺序
 
 1. 已完成 Task 1：森林通用任务协议、签到闭环、游戏/广告阻断和森林域回归，不重复实施。
 2. 已完成 Task 2：金球正数终态、专用被浇水状态、N 倍卡补兑、强制查包、使用后主页回查和服务端结束时间均已闭合。
 3. 已完成 Task 3：庄园 NPC 雇佣、遣返、领取和重雇均通过动作后状态回查；大表鸽任务领奖继续由独立工作流处理。
-4. 从 Task 4 开始：在现有运动路线闭环上增加严格收窄的见闻碎片筛选。
-5. 执行 Task 5：实现果园浏览任务专用白名单，不扩大通用 `VISIT`。
-6. 执行 Task 6：完成持久拉起状态展示。
-7. 执行 Task 7：在好友中心和持久调度合同稳定后增强 Web 设置页。
-8. 执行 Task 8：重新执行全部自动化、APK 构建、安全审计和真机验收。
+4. 已完成 Task 4：运动见闻详情、待收碎片路线交集、未知容器保护和生产入口接入均已闭合。
+5. 已完成 Task 5：果园浏览任务使用专用白名单，不扩大通用 `VISIT`。
+6. 已完成 Task 6：持久拉起状态按当前账户显示“已开启、已关闭、未确认”三态。
+7. Task 7 已完成合同、实现和自动化验收；真机 WebView 验收待连接设备后执行。
+8. Task 8 已完成全量自动化、APK 构建和安全审计；真机验收待连接设备后执行。
 
 每个业务任务严格执行红灯、最小绿灯、模块全量回归。未经用户授权，不执行 `git add`、`git commit` 或 `git push`。

@@ -854,6 +854,9 @@ class AntSports : ModelTask() {
             queryCityPath = { cityId ->
                 AntSportsRpcCall.queryCityPath(cityId)
             },
+            queryCityKnowledgeDetail = { cityId ->
+                AntSportsRpcCall.queryCityKnowledgeDetail(cityId)
+            },
             joinPath = { pathId -> AntSportsRpcCall.joinPath(pathId) },
             walkGo = { pathId, useStepCount ->
                 AntSportsRpcCall.walkGo(date, pathId, useStepCount)

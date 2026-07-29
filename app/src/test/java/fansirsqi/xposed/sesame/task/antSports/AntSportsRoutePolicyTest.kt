@@ -68,6 +68,118 @@ class AntSportsRoutePolicyTest {
     }
 
     @Test
+    fun `见闻详情识别多层容器并保留服务端状态`() {
+        val root = AntSportsRoutePolicy.parseCityKnowledge(
+            knowledgeResponse(
+                container = "root",
+                entries = listOf(
+                    RouteKnowledgeEntry(
+                        knowledgeId = "knowledge-1",
+                        pathId = "path-1",
+                        name = "待收见闻",
+                        status = "NOT_RECEIVE"
+                    )
+                )
+            )
+        )
+        val data = AntSportsRoutePolicy.parseCityKnowledge(
+            knowledgeResponse(
+                container = "data",
+                entries = listOf(
+                    RouteKnowledgeEntry(
+                        knowledgeId = "knowledge-2",
+                        pathId = "path-2",
+                        name = "已收见闻",
+                        status = "RECEIVED"
+                    )
+                )
+            )
+        )
+        val resultData = AntSportsRoutePolicy.parseCityKnowledge(
+            knowledgeResponse(
+                container = "resultData",
+                entries = listOf(
+                    RouteKnowledgeEntry(
+                        knowledgeId = "knowledge-3",
+                        pathId = "path-3",
+                        name = "另一见闻",
+                        status = "NOT_RECEIVE"
+                    )
+                )
+            )
+        )
+
+        assertTrue(root.recognized)
+        assertEquals("NOT_RECEIVE", root.entries.single().status)
+        assertTrue(data.recognized)
+        assertEquals("path-2", data.entries.single().pathId)
+        assertTrue(resultData.recognized)
+        assertEquals("knowledge-3", resultData.entries.single().knowledgeId)
+    }
+
+    @Test
+    fun `见闻详情未知容器不能解释为空列表`() {
+        val snapshot = AntSportsRoutePolicy.parseCityKnowledge(
+            """{"success":true,"data":{"unknownList":[]}}"""
+        )
+
+        assertFalse(snapshot.recognized)
+        assertTrue(snapshot.entries.isEmpty())
+    }
+
+    @Test
+    fun `候选路线只取未完成路线与待收见闻交集`() {
+        val cityPaths = AntSportsRoutePolicy.parseCityPaths(
+            cityPathResponse(
+                "path-received" to "JOIN",
+                "path-target" to "JOIN",
+                "path-unrelated" to "JOIN",
+                "path-done" to "COMPLETED"
+            )
+        )
+        val knowledge = RouteKnowledgeSnapshot(
+            recognized = true,
+            entries = listOf(
+                RouteKnowledgeEntry(
+                    knowledgeId = "knowledge-received",
+                    pathId = "path-received",
+                    name = "已收见闻",
+                    status = "RECEIVED"
+                ),
+                RouteKnowledgeEntry(
+                    knowledgeId = "knowledge-target",
+                    pathId = "path-target",
+                    name = "待收见闻",
+                    status = "NOT_RECEIVE"
+                ),
+                RouteKnowledgeEntry(
+                    knowledgeId = "knowledge-target-copy",
+                    pathId = "path-target",
+                    name = "重复见闻",
+                    status = "NOT_RECEIVE"
+                ),
+                RouteKnowledgeEntry(
+                    knowledgeId = "knowledge-empty",
+                    pathId = "",
+                    name = "无路线见闻",
+                    status = "NOT_RECEIVE"
+                ),
+                RouteKnowledgeEntry(
+                    knowledgeId = "knowledge-done",
+                    pathId = "path-done",
+                    name = "已完成路线见闻",
+                    status = "NOT_RECEIVE"
+                )
+            )
+        )
+
+        assertEquals(
+            listOf("path-target"),
+            AntSportsRoutePolicy.selectKnowledgePaths(cityPaths, knowledge)
+        )
+    }
+
+    @Test
     fun `路线宝箱只有回查后消失才确认领取`() {
         val before = AntSportsRoutePolicy.parsePath(
             pathResponse(
@@ -274,5 +386,29 @@ class AntSportsRoutePolicyTest {
               }
             }
         """.trimIndent()
+    }
+
+    private fun knowledgeResponse(
+        container: String,
+        entries: List<RouteKnowledgeEntry>
+    ): String {
+        val items = entries.joinToString(",") { entry ->
+            """
+                {
+                  "knowledgeId":"${entry.knowledgeId}",
+                  "pathId":"${entry.pathId}",
+                  "name":"${entry.name}",
+                  "status":"${entry.status}"
+                }
+            """.trimIndent()
+        }
+        val list = """"cityKnowledgeList":[$items]"""
+        val payload = when (container) {
+            "root" -> list
+            "data" -> """"data":{$list}"""
+            "resultData" -> """"result":{"data":{$list}}"""
+            else -> error("不支持的测试容器")
+        }
+        return """{"success":true,$payload}"""
     }
 }

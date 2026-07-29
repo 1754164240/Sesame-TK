@@ -17,16 +17,21 @@ object PersistentLaunchPolicy {
 
     @JvmStatic
     fun isEnabledInConfig(configJson: String): Boolean {
-        if (configJson.isBlank()) return false
-        return runCatching {
-            JSONObject(configJson)
+        return configuredForegroundLaunch(configJson) == true
+    }
+
+    @JvmStatic
+    fun configuredForegroundLaunch(configJson: String): Boolean? {
+        if (configJson.isBlank()) return null
+        return runCatching<Boolean?> {
+            val value = JSONObject(configJson)
                 .optJSONObject("modelFieldsMap")
                 ?.optJSONObject("BaseModel")
                 ?.optJSONObject("allowPersistentForegroundLaunch")
                 ?.takeIf { it.has("value") }
-                ?.optBoolean("value", false)
-                ?: false
-        }.getOrDefault(false)
+                ?.opt("value")
+            value as? Boolean
+        }.getOrNull()
     }
 
     @JvmStatic

@@ -42,7 +42,7 @@ enum class FriendCapabilityState {
 data class FriendCapabilityFilter(
     var moduleKeys: LinkedHashSet<String> = linkedSetOf(),
     var requiredStates: LinkedHashSet<FriendCapabilityState> = linkedSetOf(FriendCapabilityState.OPEN),
-    var includeUnknown: Boolean = true
+    var includeUnknown: Boolean = false
 ) : Serializable
 
 @JsonIgnoreProperties(ignoreUnknown = true)

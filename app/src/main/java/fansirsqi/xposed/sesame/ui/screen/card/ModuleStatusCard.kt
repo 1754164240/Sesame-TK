@@ -27,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import fansirsqi.xposed.sesame.BuildConfig
+import fansirsqi.xposed.sesame.ui.PersistentLaunchUiState
 import fansirsqi.xposed.sesame.ui.screen.components.HtmlText
 import fansirsqi.xposed.sesame.ui.viewmodel.MainViewModel
 
@@ -34,6 +35,7 @@ import fansirsqi.xposed.sesame.ui.viewmodel.MainViewModel
 @Composable
 fun ModuleStatusCard(
     status: MainViewModel.ModuleStatus,
+    persistentLaunchUiState: PersistentLaunchUiState,
     expanded: Boolean,
     onClick: () -> Unit
 ) {
@@ -85,6 +87,18 @@ fun ModuleStatusCard(
                     }
                 }
             }
+
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = "持久调度前台拉起：${persistentLaunchUiState.displayText}",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                text = "关闭仅影响系统持久调度主动拉起，不影响手动打开目标应用后的流程",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
 
             AnimatedVisibility(
                 visible = expanded,
