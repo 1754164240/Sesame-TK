@@ -10,13 +10,6 @@ data class FarmRewardCandidate(
 
 object AntFarmRewardPolicy {
     private val successCodes = setOf("SUCCESS", "100", "200", "0")
-    private val blockedChouAdTaskIds = setOf(
-        "SHANGYEHUA_DAILY_DRAW_TIMES",
-        "IP_SHANGYEHUA_TASK"
-    )
-
-    fun shouldExecuteChouTask(taskId: String): Boolean =
-        taskId !in blockedChouAdTaskIds
 
     fun selectWithinCapacity(
         candidates: List<FarmRewardCandidate>,

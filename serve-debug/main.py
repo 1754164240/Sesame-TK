@@ -108,6 +108,16 @@ async def get_webhooks(
 def get_lan_ip():
     import socket, ipaddress
 
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as route_socket:
+            route_socket.connect(("8.8.8.8", 80))
+            route_ip = route_socket.getsockname()[0]
+            route_ip_obj = ipaddress.ip_address(route_ip)
+            if route_ip_obj.is_private and not route_ip_obj.is_loopback:
+                return route_ip
+    except OSError:
+        pass
+
     for family, _, _, _, sockaddr in socket.getaddrinfo(socket.gethostname(), None):
         if family == socket.AF_INET:  # ✅ 强制 IPv4
             ip = sockaddr[0]

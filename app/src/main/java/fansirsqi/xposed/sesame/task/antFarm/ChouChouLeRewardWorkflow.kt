@@ -11,8 +11,16 @@ data class ChouChouLeRewardTask(
     val taskId: String,
     val title: String,
     val status: String,
-    val innerAction: String
-)
+    val innerAction: String,
+    val rightsTimes: Int,
+    val rightsTimesLimit: Int,
+    val receivedAwardCount: Int,
+    val awardCount: Int
+) {
+    fun hasRemainingTimes(): Boolean {
+        return rightsTimes < rightsTimesLimit
+    }
+}
 
 data class ChouChouLeRewardSnapshot(
     val recognized: Boolean,
@@ -56,7 +64,14 @@ object ChouChouLeRewardPolicy {
                 taskId = taskId,
                 title = title,
                 status = status.uppercase(),
-                innerAction = task.optString("innerAction").trim()
+                innerAction = task.optString("innerAction").trim(),
+                rightsTimes = task.optInt("rightsTimes", 0),
+                rightsTimesLimit = task.optInt("rightsTimesLimit", 0),
+                receivedAwardCount = task.optInt(
+                    "alreadyReceiveStageAwardCount",
+                    0
+                ),
+                awardCount = task.optInt("awardCount", 0)
             )
         }
         return ChouChouLeRewardSnapshot(true, tasks)
@@ -84,6 +99,10 @@ object ChouChouLeRewardPolicy {
                 "DONE",
                 "COMPLETED"
             )
+        ) {
+            ChouChouLeRewardOutcome.CONFIRMED
+        } else if (
+            current.receivedAwardCount > before.receivedAwardCount
         ) {
             ChouChouLeRewardOutcome.CONFIRMED
         } else {
@@ -116,6 +135,10 @@ object ChouChouLeRewardPolicy {
 
 class ChouChouLeRewardWorkflow(
     private val queryTasks: (String) -> String,
+    private val executeTask: (
+        String,
+        ChouChouLeRewardTask
+    ) -> Boolean = { _, _ -> false },
     private val receiveReward: (String, String) -> String
 ) {
 
@@ -130,47 +153,74 @@ class ChouChouLeRewardWorkflow(
             return unrecognizedResult()
         }
         var recognized = true
-        var unsupportedPendingCount = current.tasks.count {
-            it.status == "TODO"
-        }
         val executions = mutableListOf<ChouChouLeRewardExecution>()
-        val rewardTaskIds = current.tasks.asSequence()
-            .filter { it.status == "FINISHED" }
-            .map(ChouChouLeRewardTask::taskId)
-            .distinct()
-            .toList()
-        for (taskId in rewardTaskIds) {
-            val task = current.tasks.firstOrNull {
-                it.taskId == taskId && it.status == "FINISHED"
-            } ?: continue
-            val response = receiveReward(drawType, task.taskId)
+        val failedTaskIds = mutableSetOf<String>()
+        val failedRewardIds = mutableSetOf<String>()
+        var steps = 0
+        while (recognized && steps < 100) {
+            val pendingTask = current.tasks.firstOrNull {
+                isExecutablePendingTask(it) &&
+                    it.taskId !in failedTaskIds
+            }
+            if (pendingTask != null) {
+                steps++
+                if (!executeTask(drawType, pendingTask)) {
+                    failedTaskIds += pendingTask.taskId
+                    continue
+                }
+                val next = ChouChouLeRewardPolicy.parse(
+                    queryTasks(drawType)
+                )
+                recognized = recognized && next.recognized
+                if (!next.recognized) {
+                    current = next
+                    break
+                }
+                if (!hasTaskProgress(pendingTask, next)) {
+                    failedTaskIds += pendingTask.taskId
+                }
+                current = next
+                continue
+            }
+
+            val rewardTask = current.tasks.firstOrNull {
+                it.status == "FINISHED" &&
+                    it.taskId !in failedRewardIds
+            } ?: break
+            steps++
+            val response = receiveReward(
+                drawType,
+                rewardTask.taskId
+            )
             val outcome = if (
                 ChouChouLeRewardPolicy.isActionAccepted(response)
             ) {
-                current = ChouChouLeRewardPolicy.parse(
+                val next = ChouChouLeRewardPolicy.parse(
                     queryTasks(drawType)
                 )
-                recognized = recognized && current.recognized
-                if (current.recognized) {
-                    unsupportedPendingCount = current.tasks.count {
-                        it.status == "TODO"
-                    }
-                }
-                ChouChouLeRewardPolicy.verifyReward(task, current)
+                recognized = recognized && next.recognized
+                current = next
+                ChouChouLeRewardPolicy.verifyReward(
+                    rewardTask,
+                    next
+                )
             } else {
                 ChouChouLeRewardOutcome.RETRY
             }
             executions += ChouChouLeRewardExecution(
-                taskId = task.taskId,
-                title = task.title,
+                taskId = rewardTask.taskId,
+                title = rewardTask.title,
                 outcome = outcome
             )
-            if (!current.recognized) {
-                break
+            if (outcome == ChouChouLeRewardOutcome.RETRY) {
+                failedRewardIds += rewardTask.taskId
             }
         }
         val hasPendingReward = current.tasks.any {
             it.status == "FINISHED"
+        }
+        val unsupportedPendingCount = current.tasks.count {
+            isExecutablePendingTask(it)
         }
         val finished = recognized &&
             unsupportedPendingCount == 0 &&
@@ -184,6 +234,27 @@ class ChouChouLeRewardWorkflow(
             unsupportedPendingCount = unsupportedPendingCount,
             executions = executions
         )
+    }
+
+    private fun hasTaskProgress(
+        before: ChouChouLeRewardTask,
+        after: ChouChouLeRewardSnapshot
+    ): Boolean {
+        val current = after.tasks.firstOrNull {
+            it.taskId == before.taskId
+        } ?: return true
+        return current.status != before.status ||
+            current.rightsTimes > before.rightsTimes ||
+            current.awardCount > before.awardCount ||
+            current.receivedAwardCount > before.receivedAwardCount
+    }
+
+    private fun isExecutablePendingTask(
+        task: ChouChouLeRewardTask
+    ): Boolean {
+        return task.status == "TODO" &&
+            task.innerAction.uppercase() != "DONATION" &&
+            task.hasRemainingTimes()
     }
 
     private fun unrecognizedResult(): ChouChouLeRewardResult {

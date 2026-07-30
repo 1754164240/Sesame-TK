@@ -8,19 +8,6 @@ import org.junit.Test
 class AntFarmRewardPolicyTest {
 
     @Test
-    fun `抽抽乐广告任务不得执行伪完成`() {
-        assertFalse(
-            AntFarmRewardPolicy.shouldExecuteChouTask("SHANGYEHUA_DAILY_DRAW_TIMES")
-        )
-        assertFalse(
-            AntFarmRewardPolicy.shouldExecuteChouTask("IP_SHANGYEHUA_TASK")
-        )
-        assertTrue(
-            AntFarmRewardPolicy.shouldExecuteChouTask("NORMAL_DRAW_TASK")
-        )
-    }
-
-    @Test
     fun `多项饲料奖励按剩余容量选择且不超领`() {
         val candidates = listOf(
             FarmRewardCandidate("task-1", 90),

@@ -1094,6 +1094,18 @@ public class AntFarmRpcCall {
         return RequestManager.requestString("com.alipay.adexchange.ad.facade.xlightPlugin", params);
     }
 
+    public static String chouchouleQueryBrowseTask() throws JSONException {
+        JSONObject args = new JSONObject();
+        args.put(
+                "spaceCode",
+                "mediaScene#27##adPosId#2025042822702040737##spaceCode#MYZYDETCJJ_FEEDS_20250428120325"
+        );
+        return RequestManager.requestString(
+                "com.alipay.adtask.biz.mobilegw.service.applayer.query",
+                "[" + args + "]"
+        );
+    }
+
     /**
      * 完成普通任务（无广告）
      *
