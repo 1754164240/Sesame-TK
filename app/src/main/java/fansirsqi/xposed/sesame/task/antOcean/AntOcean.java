@@ -88,6 +88,7 @@ public class AntOcean extends ModelTask {
     }
 
     private BooleanModelField dailyOceanTask;
+    private BooleanModelField aiFish;
     private BooleanModelField cleanOcean;
     private ChoiceModelField cleanOceanType;
     private SelectModelField cleanOceanList;
@@ -112,6 +113,7 @@ public class AntOcean extends ModelTask {
     public ModelFields getFields() {
         ModelFields modelFields = new ModelFields();
         modelFields.addField(dailyOceanTask = new BooleanModelField("dailyOceanTask", "海洋任务", false));
+        modelFields.addField(aiFish = new BooleanModelField("aiFish", "AI摸鱼", false));
         modelFields.addField(collectOceanEnergy = new BooleanModelField("collectOceanEnergy", "海洋能量 | 收取", false));
         modelFields.addField(oceanSelfCollectEnergyThreshold = new IntegerModelField("oceanSelfCollectEnergyThreshold", "海洋能量 | 最低收取克数", 0));
         modelFields.addField(cleanOcean = new BooleanModelField("cleanOcean", "清理 | 开启", false));
@@ -139,6 +141,10 @@ public class AntOcean extends ModelTask {
                 receiveTaskAward();
             }
 
+            if (aiFish.getValue()) {
+                doAiFish();
+            }
+
             if (!userprotectType.getValue().equals(protectType.DONT_PROTECT)) {
                 protectOcean();
             }
@@ -158,6 +164,57 @@ public class AntOcean extends ModelTask {
             Log.printStackTrace(TAG,"start.run err:", t);
         } finally {
             Log.record(TAG, "执行结束-" + getName());
+        }
+    }
+
+    private void doAiFish() {
+        try {
+            AiFishRunResult result = new AiFishWorkflow(new AiFishGateway() {
+                @Override
+                public String queryStatus() {
+                    return AntAiFishRpcCall.status();
+                }
+
+                @Override
+                public String queryHome() {
+                    return AntAiFishRpcCall.homepage();
+                }
+
+                @Override
+                public String listTasks(String sceneCode) {
+                    return AntAiFishRpcCall.listTasks(sceneCode);
+                }
+
+                @Override
+                public String finishTask(String sceneCode, String taskType) {
+                    return AntAiFishRpcCall.finishTask(sceneCode, taskType);
+                }
+
+                @Override
+                public String receiveTaskAward(String sceneCode, String taskType) {
+                    return AntAiFishRpcCall.receiveTaskAward(sceneCode, taskType);
+                }
+
+                @Override
+                public String rescueFish() {
+                    return AntAiFishRpcCall.rescueFish();
+                }
+
+                @Override
+                public String touchFish() {
+                    return AntAiFishRpcCall.touchFish();
+                }
+
+                @Override
+                public void waitMillis(long millis) {
+                    GlobalThreadPools.sleepCompat(millis);
+                }
+            }).run();
+            for (String event : result.getEvents()) {
+                Log.forest("神奇海洋🌊[" + event + "]");
+            }
+        } catch (Throwable t) {
+            Log.printStackTrace(TAG, "AI摸鱼执行异常:", t);
         }
     }
 
