@@ -21,6 +21,7 @@ import fansirsqi.xposed.sesame.util.RandomUtil
 import fansirsqi.xposed.sesame.util.ResChecker
 import fansirsqi.xposed.sesame.util.TaskBlacklist
 import fansirsqi.xposed.sesame.util.maps.UserMap
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
 import java.util.Calendar
@@ -44,6 +45,7 @@ class AntOrchard : ModelTask() {
     private lateinit var orchardSpreadManureCountYeb: IntegerModelField
 
     private lateinit var assistFriendList: SelectModelField
+    private lateinit var goldenBeanTreasure: BooleanModelField
     private lateinit var fishPondTask: BooleanModelField
     private lateinit var autoFish: BooleanModelField
     private lateinit var fishDailyLimit: IntegerModelField
@@ -93,6 +95,13 @@ class AntOrchard : ModelTask() {
         )
         modelFields.addField(
             BooleanModelField(
+                "goldenBeanTreasure",
+                "金豆夺宝 | 任务与领奖",
+                false
+            ).also { goldenBeanTreasure = it }
+        )
+        modelFields.addField(
+            BooleanModelField(
                 "fishPondTask",
                 "福气鱼池 | 任务与领奖",
                 false
@@ -126,6 +135,11 @@ class AntOrchard : ModelTask() {
                     taskEnabled = fishPondTask.value == true,
                     autoFishEnabled = autoFish.value == true,
                     dailyLimit = fishDailyLimit.value ?: 30
+                )
+            },
+            goldenBeanBlock = {
+                GoldenBeanTreasureRunner.run(
+                    enabled = goldenBeanTreasure.value == true
                 )
             }
         )
@@ -226,6 +240,8 @@ class AntOrchard : ModelTask() {
             // 助力
             orchardAssistFriend()
 
+        } catch (e: CancellationException) {
+            throw e
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "start.run err:", t)
         } finally {

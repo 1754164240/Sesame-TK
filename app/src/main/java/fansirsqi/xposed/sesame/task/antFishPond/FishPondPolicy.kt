@@ -1,6 +1,8 @@
 package fansirsqi.xposed.sesame.task.antFishPond
 
 import org.json.JSONObject
+import java.net.URLDecoder
+import java.nio.charset.StandardCharsets
 
 enum class FishPondTaskDecision {
     CLAIM,
@@ -16,6 +18,12 @@ data class FishPondTaskSnapshot(
     val title: String,
     val adBizNo: String,
     val actionType: String
+)
+
+data class FishPondAdConfig(
+    val querySpaceCode: String,
+    val exposureSpaceCode: String,
+    val pageUrl: String
 )
 
 object FishPondPolicy {
@@ -67,6 +75,53 @@ object FishPondPolicy {
         return (seconds * 1_000.0).toLong()
     }
 
+    fun extractAdConfig(task: JSONObject): FishPondAdConfig {
+        val targetUrl = task.optJSONObject("taskDisplayConfig")
+            ?.optString("targetUrl")
+            .orEmpty()
+        val query = targetUrl.substringAfter('?', "")
+        val params = query.split('&')
+            .mapNotNull { entry ->
+                val separator = entry.indexOf('=')
+                if (separator <= 0) {
+                    null
+                } else {
+                    decode(entry.substring(0, separator)) to
+                        decode(entry.substring(separator + 1))
+                }
+            }
+            .toMap()
+        return FishPondAdConfig(
+            querySpaceCode = params["renderConfigKey"]
+                .orEmpty()
+                .ifBlank { DEFAULT_QUERY_SPACE_CODE },
+            exposureSpaceCode = params["spaceCode"]
+                .orEmpty()
+                .ifBlank { DEFAULT_EXPOSURE_SPACE_CODE },
+            pageUrl = params["url"]
+                .orEmpty()
+                .ifBlank { DEFAULT_PAGE_URL }
+        )
+    }
+
+    fun adDurationMillis(response: JSONObject?, task: JSONObject): Long {
+        val seconds = response
+            ?.optJSONObject("resultData")
+            ?.optDouble("duration", Double.NaN)
+            ?.takeIf { it.isFinite() && it > 0.0 }
+            ?: response
+                ?.optJSONObject("data")
+                ?.optJSONObject("resultData")
+                ?.optDouble("duration", Double.NaN)
+                ?.takeIf { it.isFinite() && it > 0.0 }
+        return if (seconds == null) {
+            browseDurationMillis(task)
+        } else {
+            (seconds.coerceIn(MIN_BROWSE_SECONDS, MAX_BROWSE_SECONDS) * 1_000.0)
+                .toLong()
+        }
+    }
+
     fun canContinueFishing(
         rodCount: Int,
         todayCount: Int,
@@ -79,6 +134,9 @@ object FishPondPolicy {
     }
 
     fun isRpcSuccess(response: JSONObject): Boolean {
+        if (response.has("success") && !response.optBoolean("success", false)) {
+            return false
+        }
         if (response.optBoolean("success", false)) {
             return true
         }
@@ -92,4 +150,16 @@ object FishPondPolicy {
 
         return response.optJSONObject("result")?.let(::isRpcSuccess) == true
     }
+
+    private fun decode(value: String): String =
+        runCatching {
+            URLDecoder.decode(value, StandardCharsets.UTF_8.name())
+        }.getOrDefault(value)
+
+    private const val DEFAULT_QUERY_SPACE_CODE =
+        "adPosId#2024042922700095310##sceneCode#null##mediaScene#27##rewardNum#1##spaceCode#TASK_ONE_TASK_GET_FISH_ROD_ONCE_DAY_NEW##expCode#AntFishingStyleV2"
+    private const val DEFAULT_EXPOSURE_SPACE_CODE =
+        "TASK_ONE_TASK_GET_FISH_ROD_ONCE_DAY_NEW"
+    private const val DEFAULT_PAGE_URL =
+        "https://render.alipay.com/p/yuyan/180020010001256918/fishing-landing.html?caprMode=sync"
 }

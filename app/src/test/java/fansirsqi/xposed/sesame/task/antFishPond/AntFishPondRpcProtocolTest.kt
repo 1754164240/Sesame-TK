@@ -49,5 +49,32 @@ class AntFishPondRpcProtocolTest {
         assertEquals("ADBASICLIB", finish.getString("source"))
     }
 
+    @Test
+    fun `广告配置和曝光参数使用抓包确认字段`() {
+        val config = request(
+            AntFishPondRpcCall.buildAdTaskConfigArgs("ad-position")
+        )
+        val exposure = request(
+            AntFishPondRpcCall.buildAdExposureArgs(
+                spaceCode = "TASK_ONE_TASK_GET_FISH_ROD_ONCE_DAY_NEW",
+                pageUrl = "https://render.alipay.com/fishing-landing.html",
+                session = "session-1"
+            )
+        )
+
+        assertEquals("ad-position", config.getString("spaceCode"))
+        assertEquals(
+            "TASK_ONE_TASK_GET_FISH_ROD_ONCE_DAY_NEW",
+            exposure.getJSONObject("positionRequest").getString("spaceCode")
+        )
+        val pageInfo = exposure.getJSONObject("sdkPageInfo")
+        assertEquals("session-1", pageInfo.getString("session"))
+        assertEquals(
+            "https://render.alipay.com/fishing-landing.html",
+            pageInfo.getString("pageUrl")
+        )
+        assertEquals("2060090000304921", pageInfo.getString("unionAppId"))
+    }
+
     private fun request(args: String) = JSONArray(args).getJSONObject(0)
 }

@@ -6,6 +6,7 @@ import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.maps.IdMapManager
 import fansirsqi.xposed.sesame.util.maps.UserMap
 import fansirsqi.xposed.sesame.util.maps.VipDataIdMap
+import kotlinx.coroutines.CancellationException
 
 object AntFishPondRunner {
 
@@ -18,7 +19,7 @@ object AntFishPondRunner {
             return
         }
 
-        try {
+        runGuarded {
             val riskToken = loadRiskToken()
             if (autoFishEnabled && riskToken.isNullOrBlank() &&
                 !Status.hasFlagToday(StatusFlags.FLAG_ANTFISHPOND_RISK_TOKEN_MISSING)
@@ -52,6 +53,14 @@ object AntFishPondRunner {
             if (result.retryNeeded) {
                 Log.other(TAG, "鱼池响应暂不完整，本轮安全停止，等待后续重试")
             }
+        }
+    }
+
+    internal suspend fun runGuarded(block: suspend () -> Unit) {
+        try {
+            block()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.printStackTrace(TAG, "福气鱼池执行异常", e)
         }

@@ -178,7 +178,6 @@ class FishPondWorkflow(
                 allSucceeded = false
                 continue
             }
-            state.markProgress()
             val syncTypes = if (decision == FishPondTaskDecision.COMPLETE) {
                 TASK_COMPLETION_SYNC_TYPES
             } else {
@@ -186,7 +185,27 @@ class FishPondWorkflow(
             }
             if (!syncAfterAction(syncTypes)) {
                 allSucceeded = false
+                continue
             }
+            if (decision == FishPondTaskDecision.COMPLETE &&
+                snapshot.adBizNo.isNotBlank() &&
+                !verifyTaskState(
+                    snapshot,
+                    setOf("FINISHED", "TO_RECEIVE", "RECEIVED", "DONE")
+                )
+            ) {
+                allSucceeded = false
+                state.markRetry()
+                continue
+            }
+            if (decision == FishPondTaskDecision.CLAIM &&
+                !verifyTaskState(snapshot, setOf("RECEIVED", "DONE"))
+            ) {
+                allSucceeded = false
+                state.markRetry()
+                continue
+            }
+            state.markProgress()
         }
         return allSucceeded
     }
@@ -251,7 +270,17 @@ class FishPondWorkflow(
             if (callSuccess { gateway.fishpondAdNotice(adBizNo) } == null) {
                 return false
             }
-            waitForTask(FishPondPolicy.browseDurationMillis(task))
+            val adConfig = FishPondPolicy.extractAdConfig(task)
+            val configResponse = callSuccess {
+                gateway.queryAdTaskConfig(adConfig.querySpaceCode)
+            }
+            requestAdExposureBestEffort(
+                adConfig.exposureSpaceCode,
+                adConfig.pageUrl
+            )
+            waitForTask(
+                FishPondPolicy.adDurationMillis(configResponse, task)
+            )
         } else if (snapshot.actionType.equals("VISIT", ignoreCase = true)) {
             waitForTask(FishPondPolicy.browseDurationMillis(task))
         }
@@ -262,6 +291,39 @@ class FishPondWorkflow(
                 adBizNo.ifEmpty { null }
             )
         } != null
+    }
+
+    private fun requestAdExposureBestEffort(
+        spaceCode: String,
+        pageUrl: String
+    ) {
+        try {
+            gateway.requestAdExposure(spaceCode, pageUrl)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // 抓包中的曝光请求失败后任务仍可完成，因此这里只做尽力请求。
+        }
+    }
+
+    private fun verifyTaskState(
+        snapshot: FishPondTaskSnapshot,
+        acceptedStatuses: Set<String>
+    ): Boolean {
+        val response = callSuccess(gateway::listTask) ?: return false
+        val taskList = payload(response).optJSONArray("taskList") ?: return false
+        for (index in 0 until taskList.length()) {
+            val task = taskList.optJSONObject(index) ?: continue
+            val taskType = task.optString("taskId")
+                .ifBlank { task.optString("taskType") }
+            val sceneCode = task.optString("sceneCode")
+                .ifBlank { "ANTFISHPOND_TASK" }
+            if (taskType != snapshot.type || sceneCode != snapshot.sceneCode) {
+                continue
+            }
+            return task.optString("taskStatus").uppercase() in acceptedStatuses
+        }
+        return false
     }
 
     private fun handleSign(data: JSONObject, state: RunState): Boolean? {

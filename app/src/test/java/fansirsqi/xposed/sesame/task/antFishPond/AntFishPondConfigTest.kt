@@ -14,6 +14,7 @@ class AntFishPondConfigTest {
     fun `福气鱼池设置直接位于农场且没有独立模块`() {
         val fields = AntOrchard().fields
 
+        assertFalse(fields["goldenBeanTreasure"]?.value as Boolean)
         assertFalse(fields["fishPondTask"]?.value as Boolean)
         assertFalse(fields["autoFish"]?.value as Boolean)
         val limit = fields["fishDailyLimit"] as IntegerModelField

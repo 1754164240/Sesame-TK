@@ -27,14 +27,118 @@ class FishPondWorkflowTest {
         assertEquals(
             listOf(
                 "notice:ad-1",
+                "queryAdConfig",
+                "requestAdExposure",
                 "wait:15000",
                 "finish:AD_TASK:ad-1",
-                "sync:FISH_ACTIVITY,TASK_DISPLAY,TOMORROW_ROD,LOTTERY_PLUS"
+                "sync:FISH_ACTIVITY,TASK_DISPLAY,TOMORROW_ROD,LOTTERY_PLUS",
+                "listTask"
             ),
-            fake.events.windowed(4).first {
+            fake.events.windowed(7).first {
                 it.first() == "notice:ad-1"
             }
         )
+    }
+
+    @Test
+    fun `广告曝光失败仍继续完成并复查任务`() = runBlocking {
+        val fake = FakeFishPondGateway().apply {
+            exposureResponse = """{"success":false,"retCode":"217"}"""
+        }
+
+        val result = FishPondWorkflow(
+            fake,
+            waitForTask = { millis -> fake.events += "wait:$millis" }
+        ).run(
+            taskEnabled = true,
+            autoFishEnabled = false,
+            todayFishCount = 0,
+            dailyLimit = 30,
+            riskToken = null
+        )
+
+        assertTrue(fake.events.contains("finish:AD_TASK:ad-1"))
+        assertFalse(result.retryNeeded)
+    }
+
+    @Test
+    fun `广告完成后任务状态未推进则保留重试`() = runBlocking {
+        val fake = FakeFishPondGateway().apply {
+            adTaskStatusAfterCompletion = "TODO"
+        }
+
+        val result = FishPondWorkflow(fake, waitForTask = {}).run(
+            taskEnabled = true,
+            autoFishEnabled = false,
+            todayFishCount = 0,
+            dailyLimit = 30,
+            riskToken = null
+        )
+
+        assertTrue(result.retryNeeded)
+    }
+
+    @Test
+    fun `广告任务完成后领奖并复查已领取终态`() = runBlocking {
+        val fake = FakeFishPondGateway().apply {
+            adTaskStatusesAfterCompletion.addAll(
+                listOf("TODO", "FINISHED", "FINISHED", "RECEIVED")
+            )
+        }
+
+        val result = FishPondWorkflow(fake, waitForTask = {}).run(
+            taskEnabled = true,
+            autoFishEnabled = false,
+            todayFishCount = 0,
+            dailyLimit = 30,
+            riskToken = null
+        )
+
+        assertTrue(
+            fake.events.toString(),
+            fake.events.contains("claim:AD_TASK")
+        )
+        assertFalse(result.retryNeeded)
+    }
+
+    @Test
+    fun `广告领奖后仍为完成状态则保留重试`() = runBlocking {
+        val fake = FakeFishPondGateway().apply {
+            adTaskStatusesAfterCompletion.addAll(
+                listOf("TODO", "FINISHED", "FINISHED", "FINISHED")
+            )
+        }
+
+        val result = FishPondWorkflow(fake, waitForTask = {}).run(
+            taskEnabled = true,
+            autoFishEnabled = false,
+            todayFishCount = 0,
+            dailyLimit = 30,
+            riskToken = null
+        )
+
+        assertTrue(
+            fake.events.toString(),
+            fake.events.contains("claim:AD_TASK")
+        )
+        assertTrue(result.retryNeeded)
+    }
+
+    @Test
+    fun `广告复查不接受其他场景的同名任务`() = runBlocking {
+        val fake = FakeFishPondGateway().apply {
+            adTaskSceneAfterCompletion = "OTHER_SCENE"
+        }
+
+        val result = FishPondWorkflow(fake, waitForTask = {}).run(
+            taskEnabled = true,
+            autoFishEnabled = false,
+            todayFishCount = 0,
+            dailyLimit = 30,
+            riskToken = null
+        )
+
+        assertTrue(result.retryNeeded)
     }
 
     @Test
@@ -207,6 +311,10 @@ class FishPondWorkflowTest {
             }
             """.trimIndent()
         var positionResponse = """{"success":true}"""
+        var exposureResponse = """{"success":true}"""
+        var adTaskStatusAfterCompletion = "RECEIVED"
+        val adTaskStatusesAfterCompletion = ArrayDeque<String>()
+        var adTaskSceneAfterCompletion = "ANTFISHPOND_TASK"
         var failedTaskType: String? = null
         var thrownTaskType: String? = null
         var subplotResponse =
@@ -247,6 +355,18 @@ class FishPondWorkflowTest {
 
         override fun listTask(): String {
             listTaskCalls++
+            events += "listTask"
+            val adStatus = if (listTaskCalls == 1) {
+                "TODO"
+            } else {
+                adTaskStatusesAfterCompletion.removeFirstOrNull()
+                    ?: adTaskStatusAfterCompletion
+            }
+            val adScene = if (listTaskCalls == 1) {
+                "ANTFISHPOND_TASK"
+            } else {
+                adTaskSceneAfterCompletion
+            }
             return """
                 {
                   "success": true,
@@ -267,16 +387,20 @@ class FishPondWorkflowTest {
                       {
                         "taskId":"FISH_TASK_14",
                         "sceneCode":"ANTFISHPOND_TASK",
-                        "taskStatus":"FINISHED",
+                        "taskStatus":"${if ("FISH_TASK_14" in claimedTasks) "RECEIVED" else "FINISHED"}",
                         "actionType":"GOFISH",
                         "taskTitle":"浏览鱼池"
                       },
                       {
                         "taskId":"AD_TASK",
-                        "sceneCode":"ANTFISHPOND_TASK",
-                        "taskStatus":"TODO",
+                        "sceneCode":"$adScene",
+                        "taskStatus":"$adStatus",
                         "taskTitle":"观看广告",
-                        "adBizNo":"ad-1"
+                        "adBizNo":"ad-1",
+                        "taskDisplayConfig":{
+                          "desc":"浏览30秒得钓竿",
+                          "targetUrl":"alipays://platformapi/startapp?renderConfigKey=query-space&spaceCode=exposure-space&url=https%3A%2F%2Frender.alipay.com%2Ffish.html"
+                        }
                       }
                     ]
                   }
@@ -300,6 +424,16 @@ class FishPondWorkflowTest {
             return """{"success":true}"""
         }
 
+        override fun queryAdTaskConfig(spaceCode: String): String {
+            events += "queryAdConfig"
+            return """{"success":true,"resultData":{"duration":15.0}}"""
+        }
+
+        override fun requestAdExposure(spaceCode: String, pageUrl: String): String {
+            events += "requestAdExposure"
+            return exposureResponse
+        }
+
         override fun finishTask(
             taskType: String,
             sceneCode: String,
@@ -319,6 +453,7 @@ class FishPondWorkflowTest {
 
         override fun receiveTaskAward(taskType: String, sceneCode: String): String {
             claimedTasks += taskType
+            events += "claim:$taskType"
             return """{"success":true}"""
         }
 

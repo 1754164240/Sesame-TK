@@ -15,6 +15,10 @@ interface FishPondGateway {
     fun fishpondExchangeReward(): String
     fun fishpondAdNotice(adBizNo: String): String =
         """{"success":false,"resultDesc":"尚未实现广告通知"}"""
+    fun queryAdTaskConfig(spaceCode: String): String =
+        """{"success":false,"resultDesc":"尚未实现广告配置查询"}"""
+    fun requestAdExposure(spaceCode: String, pageUrl: String): String =
+        """{"success":false,"resultDesc":"尚未实现广告曝光"}"""
     fun finishTask(taskType: String, sceneCode: String): String
     fun finishTask(
         taskType: String,
@@ -90,10 +94,61 @@ object AntFishPondRpcCall {
             .toString()
     }
 
+    internal fun buildAdTaskConfigArgs(spaceCode: String): String =
+        JSONArray()
+            .put(JSONObject().put("spaceCode", spaceCode))
+            .toString()
+
+    internal fun buildAdExposureArgs(
+        spaceCode: String,
+        pageUrl: String,
+        session: String
+    ): String {
+        val positionRequest = JSONObject()
+            .put("extMap", JSONObject())
+            .put("referInfo", JSONObject())
+            .put("searchInfo", JSONObject())
+            .put("spaceCode", spaceCode)
+        val pageInfo = JSONObject()
+            .put("adComponentType", "FEEDS")
+            .put("adComponentVersion", "4.31.18")
+            .put("enableFusion", true)
+            .put("networkType", "WIFI")
+            .put("pageFrom", "ch_ecopromotion")
+            .put("pageNo", 1)
+            .put("pageUrl", pageUrl)
+            .put("session", session)
+            .put("unionAppId", "2060090000304921")
+            .put("xlightRuntimeSDKversion", "4.31.18")
+            .put("xlightSDKType", "h5")
+            .put("xlightSDKVersion", "4.31.18")
+        return JSONArray()
+            .put(
+                JSONObject()
+                    .put("positionRequest", positionRequest)
+                    .put("sdkPageInfo", pageInfo)
+            )
+            .toString()
+    }
+
     fun fishpondAdNotice(adBizNo: String): String {
         return RequestManager.requestString(
             "com.alipay.antfishpond.fishpondAdNotice",
             buildAdNoticeArgs(adBizNo)
+        )
+    }
+
+    fun queryAdTaskConfig(spaceCode: String): String =
+        RequestManager.requestString(
+            "com.alipay.adtask.biz.mobilegw.service.applayer.query",
+            buildAdTaskConfigArgs(spaceCode)
+        )
+
+    fun requestAdExposure(spaceCode: String, pageUrl: String): String {
+        val session = "u_${RandomUtil.getRandomString(5)}_${RandomUtil.getRandomString(5)}"
+        return RequestManager.requestString(
+            "com.alipay.adexchange.ad.facade.xlightPlugin",
+            buildAdExposureArgs(spaceCode, pageUrl, session)
         )
     }
 
@@ -183,6 +238,12 @@ class AntFishPondRpcGateway : FishPondGateway {
 
     override fun fishpondAdNotice(adBizNo: String): String =
         AntFishPondRpcCall.fishpondAdNotice(adBizNo)
+
+    override fun queryAdTaskConfig(spaceCode: String): String =
+        AntFishPondRpcCall.queryAdTaskConfig(spaceCode)
+
+    override fun requestAdExposure(spaceCode: String, pageUrl: String): String =
+        AntFishPondRpcCall.requestAdExposure(spaceCode, pageUrl)
 
     override fun finishTask(taskType: String, sceneCode: String): String =
         AntFishPondRpcCall.finishTask(taskType, sceneCode)

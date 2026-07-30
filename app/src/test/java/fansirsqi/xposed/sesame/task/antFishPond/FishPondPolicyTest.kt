@@ -78,6 +78,49 @@ class FishPondPolicyTest {
     }
 
     @Test
+    fun `从广告任务链接解码广告位和页面地址`() {
+        val task = JSONObject(
+            """
+            {
+              "taskDisplayConfig": {
+                "targetUrl": "alipays://platformapi/startapp?appId=2060090000304921&renderConfigKey=adPosId%232024042922700095310%23%23spaceCode%23TASK_ONE_TASK_GET_FISH_ROD_ONCE_DAY_NEW&spaceCode=TASK_ONE_TASK_GET_FISH_ROD_ONCE_DAY_NEW&url=https%3A%2F%2Frender.alipay.com%2Fp%2Fyuyan%2Ffishing-landing.html%3FcaprMode%3Dsync"
+              }
+            }
+            """.trimIndent()
+        )
+
+        val config = FishPondPolicy.extractAdConfig(task)
+
+        assertEquals(
+            "adPosId#2024042922700095310##spaceCode#TASK_ONE_TASK_GET_FISH_ROD_ONCE_DAY_NEW",
+            config.querySpaceCode
+        )
+        assertEquals(
+            "TASK_ONE_TASK_GET_FISH_ROD_ONCE_DAY_NEW",
+            config.exposureSpaceCode
+        )
+        assertEquals(
+            "https://render.alipay.com/p/yuyan/fishing-landing.html?caprMode=sync",
+            config.pageUrl
+        )
+    }
+
+    @Test
+    fun `广告配置时长优先于任务描述`() {
+        val response = JSONObject(
+            """{"success":true,"resultData":{"duration":15.0}}"""
+        )
+        val task = JSONObject(
+            """{"taskDisplayConfig":{"desc":"浏览30秒得钓竿"}}"""
+        )
+
+        assertEquals(
+            15_000L,
+            FishPondPolicy.adDurationMillis(response, task)
+        )
+    }
+
+    @Test
     fun `普通安全任务按状态完成领取或等待`() {
         assertEquals(
             FishPondTaskDecision.COMPLETE,
@@ -125,6 +168,11 @@ class FishPondPolicyTest {
             )
         )
         assertFalse(FishPondPolicy.isRpcSuccess(JSONObject("""{"success":false}""")))
+        assertFalse(
+            FishPondPolicy.isRpcSuccess(
+                JSONObject("""{"success":false,"resultCode":"100"}""")
+            )
+        )
         assertFalse(FishPondPolicy.isRpcSuccess(JSONObject("""{"code":"SYSTEM_ERROR"}""")))
         assertFalse(FishPondPolicy.isRpcSuccess(JSONObject()))
     }
