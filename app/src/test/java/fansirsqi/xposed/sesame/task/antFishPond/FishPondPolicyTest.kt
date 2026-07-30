@@ -9,38 +9,71 @@ import org.junit.Test
 class FishPondPolicyTest {
 
     @Test
-    fun `已完成任务领奖且危险任务始终跳过`() {
+    fun `所有已完成任务领奖且所有待办动作均尝试推进`() {
         assertEquals(
             FishPondTaskDecision.CLAIM,
             FishPondPolicy.decideTask(task(status = "FINISHED"))
         )
-        assertEquals(
-            FishPondTaskDecision.SKIP,
-            FishPondPolicy.decideTask(task(type = "FISHPOND_GAME", status = "TODO"))
-        )
-        assertEquals(
-            FishPondTaskDecision.SKIP,
-            FishPondPolicy.decideTask(task(title = "观看广告", status = "TODO"))
-        )
-        assertEquals(
-            FishPondTaskDecision.SKIP,
-            FishPondPolicy.decideTask(task(adBizNo = "ad-1", status = "TODO"))
-        )
-        assertEquals(
-            FishPondTaskDecision.SKIP,
-            FishPondPolicy.decideTask(task(type = "FISHPOND_AD_TASK", status = "TODO"))
-        )
+        listOf(
+            "VISIT",
+            "ADD_HOME",
+            "TRIGGER",
+            "PUSH_SUBSCRIBE",
+            "EXCH_MANURE_4_ROD",
+            "OFFLINE_SHARE"
+        ).forEach { actionType ->
+            assertEquals(
+                actionType,
+                FishPondTaskDecision.COMPLETE,
+                FishPondPolicy.decideTask(
+                    task(
+                        type = "TASK_$actionType",
+                        status = "TODO",
+                        actionType = actionType,
+                        title = "任务-$actionType",
+                        adBizNo = if (actionType == "VISIT") "ad-1" else ""
+                    )
+                )
+            )
+        }
         assertEquals(
             FishPondTaskDecision.COMPLETE,
             FishPondPolicy.decideTask(
-                task(type = "FISH_TASK_15", status = "TODO", actionType = "VISIT")
-            )
-        )
-        assertEquals(
-            FishPondTaskDecision.SKIP,
-            FishPondPolicy.decideTask(
                 task(type = "NEW_TASK", status = "TODO", actionType = "UNKNOWN")
             )
+        )
+    }
+
+    @Test
+    fun `浏览时长优先读取浮球配置并兼容标题秒数`() {
+        val capturedTask = JSONObject(
+            """
+                {
+                  "taskDisplayConfig": {
+                    "title": "看精选商品得钓竿",
+                    "desc": "浏览15秒得钓竿",
+                    "floatBallConfig": {
+                      "floatBallDuration": 15
+                    }
+                  }
+                }
+            """.trimIndent()
+        )
+        val titleTask = JSONObject(
+            """{"taskDisplayConfig":{"title":"玩寻道大千30s"}}"""
+        )
+        val unknownTask = JSONObject(
+            """{"taskDisplayConfig":{"title":"普通任务"}}"""
+        )
+
+        assertEquals(
+            15_000L,
+            FishPondPolicy.browseDurationMillis(capturedTask)
+        )
+        assertEquals(30_000L, FishPondPolicy.browseDurationMillis(titleTask))
+        assertEquals(
+            15_000L,
+            FishPondPolicy.browseDurationMillis(unknownTask)
         )
     }
 

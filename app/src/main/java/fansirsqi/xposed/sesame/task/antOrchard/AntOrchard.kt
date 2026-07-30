@@ -13,6 +13,7 @@ import fansirsqi.xposed.sesame.model.modelFieldExt.ChoiceModelField
 import fansirsqi.xposed.sesame.model.modelFieldExt.IntegerModelField
 import fansirsqi.xposed.sesame.model.modelFieldExt.SelectModelField
 import fansirsqi.xposed.sesame.task.ModelTask
+import fansirsqi.xposed.sesame.task.antFishPond.AntFishPondRunner
 import fansirsqi.xposed.sesame.util.CoroutineUtils
 import fansirsqi.xposed.sesame.util.GameTask
 import fansirsqi.xposed.sesame.util.Log
@@ -43,6 +44,9 @@ class AntOrchard : ModelTask() {
     private lateinit var orchardSpreadManureCountYeb: IntegerModelField
 
     private lateinit var assistFriendList: SelectModelField
+    private lateinit var fishPondTask: BooleanModelField
+    private lateinit var autoFish: BooleanModelField
+    private lateinit var fishDailyLimit: IntegerModelField
     //模式选择
     private lateinit var plantModeField: ChoiceModelField
 
@@ -87,11 +91,47 @@ class AntOrchard : ModelTask() {
         modelFields.addField(
             SelectModelField("assistFriendList", "助力好友列表", LinkedHashSet(), AlipayUser::getList).also { assistFriendList = it }
         )
+        modelFields.addField(
+            BooleanModelField(
+                "fishPondTask",
+                "福气鱼池 | 任务与领奖",
+                false
+            ).also { fishPondTask = it }
+        )
+        modelFields.addField(
+            BooleanModelField(
+                "autoFish",
+                "福气鱼池 | 自动钓鱼",
+                false
+            ).also { autoFish = it }
+        )
+        modelFields.addField(
+            IntegerModelField(
+                "fishDailyLimit",
+                "福气鱼池 | 每日钓鱼次数",
+                30,
+                0,
+                200
+            ).also { fishDailyLimit = it }
+        )
 
         return modelFields
     }
 
     override suspend fun runSuspend() {
+        OrchardFishPondExecution.run(
+            orchardBlock = { runOrchardSuspend() },
+            fishPondBlock = {
+                AntFishPondRunner.run(
+                    taskEnabled = fishPondTask.value == true,
+                    autoFishEnabled = autoFish.value == true,
+                    dailyLimit = fishDailyLimit.value ?: 30
+                )
+            }
+        )
+    }
+
+    private suspend fun runOrchardSuspend() {
         try {
             Log.record(TAG, "执行开始-$name")
             executeIntervalInt = maxOf(executeInterval.value, 500)

@@ -5,7 +5,6 @@ import fansirsqi.xposed.sesame.task.EcoProtection.EcoProtection
 import fansirsqi.xposed.sesame.task.antCooperate.AntCooperate
 import fansirsqi.xposed.sesame.task.antDodo.AntDodo
 import fansirsqi.xposed.sesame.task.antFarm.AntFarm
-import fansirsqi.xposed.sesame.task.antFishPond.AntFishPond
 import fansirsqi.xposed.sesame.task.antForest.AntForest
 import fansirsqi.xposed.sesame.task.antMember.AntMember
 import fansirsqi.xposed.sesame.task.antOcean.AntOcean
@@ -23,7 +22,6 @@ object ModelOrder {
         AntForest::class.java,       // 森林
         AntFarm::class.java,         // 庄园
         AntOcean::class.java,        // 海洋
-        AntFishPond::class.java,     // 福气鱼池
         AntStall::class.java,      // 蚂蚁新村
         AntDodo::class.java,       // 神奇物种
         AntCooperate::class.java,    // 合种

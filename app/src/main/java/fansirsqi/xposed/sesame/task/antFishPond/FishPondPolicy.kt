@@ -19,55 +19,52 @@ data class FishPondTaskSnapshot(
 )
 
 object FishPondPolicy {
-    private val unsafeWords = listOf(
-        "广告",
-        "分享",
-        "订阅",
-        "邀请",
-        "游戏"
-    )
-    private val unsafeTypeTokens = setOf(
-        "AD",
-        "ADVERT",
-        "ADVERTISEMENT",
-        "SHARE",
-        "SUBSCRIBE",
-        "INVITE",
-        "GAME"
-    )
+    private const val DEFAULT_BROWSE_SECONDS = 15.0
+    private const val MIN_BROWSE_SECONDS = 1.0
+    private const val MAX_BROWSE_SECONDS = 120.0
+    private val durationPattern =
+        Regex("""(\d+(?:\.\d+)?)\s*(?:秒|s\b)""", RegexOption.IGNORE_CASE)
 
     fun decideTask(snapshot: FishPondTaskSnapshot): FishPondTaskDecision {
-        val typeTokens = snapshot.type
-            .uppercase()
-            .split(Regex("[^A-Z0-9]+"))
-            .filter(String::isNotBlank)
-        val unsafeTask = snapshot.adBizNo.isNotBlank() ||
-            unsafeWords.any { snapshot.title.contains(it, ignoreCase = true) } ||
-            typeTokens.any(unsafeTypeTokens::contains)
-        if (unsafeTask) {
-            return FishPondTaskDecision.SKIP
-        }
-
-        val actionType = snapshot.actionType.uppercase()
-        val knownSafeTask = snapshot.sceneCode == "ANTFISHPOND_TASK" &&
-            snapshot.type.startsWith("FISH_TASK_") &&
-            actionType in setOf("VISIT", "GOFISH")
-        if (!knownSafeTask) {
+        if (snapshot.type.isBlank() || snapshot.sceneCode.isBlank()) {
             return FishPondTaskDecision.SKIP
         }
 
         return when (snapshot.status.uppercase()) {
             "FINISHED", "TO_RECEIVE" -> FishPondTaskDecision.CLAIM
             "TODO", "TO_DO" -> {
-                if (actionType == "VISIT") {
-                    FishPondTaskDecision.COMPLETE
-                } else {
+                if (snapshot.actionType.equals("GOFISH", ignoreCase = true)) {
                     FishPondTaskDecision.WAIT
+                } else {
+                    FishPondTaskDecision.COMPLETE
                 }
             }
             "RECEIVED", "DONE" -> FishPondTaskDecision.WAIT
             else -> FishPondTaskDecision.SKIP
         }
+    }
+
+    fun browseDurationMillis(task: JSONObject): Long {
+        val displayConfig = task.optJSONObject("taskDisplayConfig")
+        val configuredSeconds = displayConfig
+            ?.optJSONObject("floatBallConfig")
+            ?.optDouble("floatBallDuration", Double.NaN)
+            ?.takeIf { it.isFinite() && it > 0.0 }
+        val textSeconds = sequenceOf(
+            displayConfig?.optString("desc"),
+            displayConfig?.optString("title"),
+            displayConfig?.optJSONObject("subTitle")?.optString("desc"),
+            task.optString("taskTitle"),
+            task.optString("title")
+        )
+            .filterNotNull()
+            .mapNotNull { text ->
+                durationPattern.find(text)?.groupValues?.getOrNull(1)?.toDoubleOrNull()
+            }
+            .firstOrNull()
+        val seconds = (configuredSeconds ?: textSeconds ?: DEFAULT_BROWSE_SECONDS)
+            .coerceIn(MIN_BROWSE_SECONDS, MAX_BROWSE_SECONDS)
+        return (seconds * 1_000.0).toLong()
     }
 
     fun canContinueFishing(

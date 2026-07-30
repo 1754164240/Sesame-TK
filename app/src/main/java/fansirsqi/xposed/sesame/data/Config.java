@@ -49,10 +49,7 @@ public class Config {
     public void setModelFieldsMap(Map<String, ModelFields> newModels) {
         modelFieldsMap.clear();
         Map<String, ModelConfig> modelConfigMap = ModelTask.getModelConfigMap();
-        // 如果传入的 newModels 为 null，初始化为空
-        if (newModels == null) {
-            newModels = new HashMap<>();
-        }
+        newModels = migrateLegacyFishPondFields(newModels);
         // 遍历所有模型配置，合并字段配置
         for (ModelConfig modelConfig : modelConfigMap.values()) {
             String modelCode = modelConfig.getCode();
@@ -83,6 +80,47 @@ public class Config {
             }
             modelFieldsMap.put(modelCode, newModelFields);
         }
+    }
+
+    /**
+     * 将旧版独立福气鱼池配置迁移到农场模型。
+     */
+    public static Map<String, ModelFields> migrateLegacyFishPondFields(
+            Map<String, ModelFields> sourceModels) {
+        Map<String, ModelFields> migratedModels = new HashMap<>();
+        if (sourceModels != null) {
+            migratedModels.putAll(sourceModels);
+        }
+
+        ModelFields legacyFields = migratedModels.get("AntFishPond");
+        if (legacyFields == null) {
+            return migratedModels;
+        }
+
+        ModelFields orchardFields = new ModelFields();
+        ModelFields configuredOrchardFields = migratedModels.get("AntOrchard");
+        if (configuredOrchardFields != null) {
+            for (ModelField<?> field : configuredOrchardFields.values()) {
+                orchardFields.addField(field);
+            }
+        }
+
+        String[] fishPondFieldCodes = {
+                "fishPondTask",
+                "autoFish",
+                "fishDailyLimit"
+        };
+        for (String fieldCode : fishPondFieldCodes) {
+            if (orchardFields.containsKey(fieldCode)) {
+                continue;
+            }
+            ModelField<?> legacyField = legacyFields.get(fieldCode);
+            if (legacyField != null) {
+                orchardFields.addField(legacyField);
+            }
+        }
+        migratedModels.put("AntOrchard", orchardFields);
+        return migratedModels;
     }
 
     /**

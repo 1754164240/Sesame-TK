@@ -13,7 +13,14 @@ interface FishPondGateway {
     fun listTask(): String
     fun sign(signKey: String): String
     fun fishpondExchangeReward(): String
+    fun fishpondAdNotice(adBizNo: String): String =
+        """{"success":false,"resultDesc":"尚未实现广告通知"}"""
     fun finishTask(taskType: String, sceneCode: String): String
+    fun finishTask(
+        taskType: String,
+        sceneCode: String,
+        adBizNo: String?
+    ): String = finishTask(taskType, sceneCode)
     fun receiveTaskAward(taskType: String, sceneCode: String): String
     fun fishpondAngle(riskToken: String): String
     fun fishpondAngleRodPositioning(bizNo: String, areaType: String): String
@@ -77,17 +84,55 @@ object AntFishPondRpcCall {
         return request("com.alipay.antfishpond.fishpondExchangeReward", baseArgs())
     }
 
-    fun finishTask(taskType: String, sceneCode: String): String {
+    fun buildAdNoticeArgs(adBizNo: String): String {
+        return JSONArray()
+            .put(baseArgs().put("adBizNo", adBizNo))
+            .toString()
+    }
+
+    fun fishpondAdNotice(adBizNo: String): String {
+        return RequestManager.requestString(
+            "com.alipay.antfishpond.fishpondAdNotice",
+            buildAdNoticeArgs(adBizNo)
+        )
+    }
+
+    fun buildFinishTaskArgs(
+        taskType: String,
+        sceneCode: String,
+        adBizNo: String?,
+        outBizNo: String
+    ): String {
         val args = JSONObject()
-            .put(
-                "outBizNo",
-                "${taskType}_${System.currentTimeMillis()}_${RandomUtil.getRandomString(8)}"
-            )
+            .put("outBizNo", outBizNo)
             .put("requestType", "RPC")
             .put("sceneCode", sceneCode)
             .put("source", "ADBASICLIB")
             .put("taskType", taskType)
-        return request("com.alipay.antiep.finishTask", args)
+        if (!adBizNo.isNullOrBlank()) {
+            args.put(
+                "finishBusinessInfo",
+                JSONObject().put("pwPreBizId", adBizNo)
+            )
+        }
+        return JSONArray().put(args).toString()
+    }
+
+    fun finishTask(taskType: String, sceneCode: String): String {
+        return finishTask(taskType, sceneCode, null)
+    }
+
+    fun finishTask(
+        taskType: String,
+        sceneCode: String,
+        adBizNo: String?
+    ): String {
+        val outBizNo =
+            "${taskType}_${System.currentTimeMillis()}_${RandomUtil.getRandomString(8)}"
+        return RequestManager.requestString(
+            "com.alipay.antiep.finishTask",
+            buildFinishTaskArgs(taskType, sceneCode, adBizNo, outBizNo)
+        )
     }
 
     fun receiveTaskAward(taskType: String, sceneCode: String): String {
@@ -136,8 +181,17 @@ class AntFishPondRpcGateway : FishPondGateway {
     override fun fishpondExchangeReward(): String =
         AntFishPondRpcCall.fishpondExchangeReward()
 
+    override fun fishpondAdNotice(adBizNo: String): String =
+        AntFishPondRpcCall.fishpondAdNotice(adBizNo)
+
     override fun finishTask(taskType: String, sceneCode: String): String =
         AntFishPondRpcCall.finishTask(taskType, sceneCode)
+
+    override fun finishTask(
+        taskType: String,
+        sceneCode: String,
+        adBizNo: String?
+    ): String = AntFishPondRpcCall.finishTask(taskType, sceneCode, adBizNo)
 
     override fun receiveTaskAward(taskType: String, sceneCode: String): String =
         AntFishPondRpcCall.receiveTaskAward(taskType, sceneCode)

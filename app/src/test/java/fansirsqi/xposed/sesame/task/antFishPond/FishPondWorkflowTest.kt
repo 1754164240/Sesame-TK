@@ -1,5 +1,6 @@
 package fansirsqi.xposed.sesame.task.antFishPond
 
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -8,9 +9,40 @@ import org.junit.Test
 class FishPondWorkflowTest {
 
     @Test
-    fun `稳健流程处理基础奖励安全任务和一次福利鱼`() {
+    fun `浏览任务按通知等待完成和同步的顺序执行`() = runBlocking {
         val fake = FakeFishPondGateway()
-        val result = FishPondWorkflow(fake).run(
+        val result = FishPondWorkflow(
+            fake,
+            waitForTask = { millis -> fake.events += "wait:$millis" }
+        ).run(
+            taskEnabled = true,
+            autoFishEnabled = false,
+            todayFishCount = 0,
+            dailyLimit = 30,
+            riskToken = null
+        )
+
+        assertTrue(result.progressed)
+        assertFalse(result.retryNeeded)
+        assertEquals(
+            listOf(
+                "notice:ad-1",
+                "wait:15000",
+                "finish:AD_TASK:ad-1",
+                "sync:FISH_ACTIVITY,TASK_DISPLAY,TOMORROW_ROD,LOTTERY_PLUS"
+            ),
+            fake.events.windowed(4).first {
+                it.first() == "notice:ad-1"
+            }
+        )
+    }
+
+    @Test
+    fun `单个任务抛错仍继续后续领奖和钓鱼`() = runBlocking {
+        val fake = FakeFishPondGateway().apply {
+            thrownTaskType = "FISH_TASK_15"
+        }
+        val result = FishPondWorkflow(fake, waitForTask = {}).run(
             taskEnabled = true,
             autoFishEnabled = true,
             todayFishCount = 0,
@@ -18,26 +50,35 @@ class FishPondWorkflowTest {
             riskToken = "risk-token"
         )
 
-        assertEquals(1, result.confirmedFishCount)
-        assertTrue(result.progressed)
-        assertFalse(result.retryNeeded)
+        assertTrue(result.retryNeeded)
         assertEquals(listOf("FISH_TASK_14"), fake.claimedTasks)
-        assertEquals(listOf("FISH_TASK_15"), fake.completedTasks)
-        assertFalse(fake.completedTasks.contains("AD_TASK"))
-        assertEquals(
-            listOf("GIFT_BOX" to "receiveAward", "TOMORROW_ROD" to "FINISH"),
-            fake.triggeredActivities
-        )
-        assertEquals(listOf("2026-07-28"), fake.signKeys)
         assertEquals(1, fake.angleCalls)
-        assertEquals(listOf("fish-biz" to "SPECIAL_BIG_ZONE"), fake.positionCalls)
-        assertTrue(fake.syncCalls.isNotEmpty())
+        assertEquals(1, result.confirmedFishCount)
     }
 
     @Test
-    fun `缺少风控令牌只跳过钓鱼并继续领取任务奖励`() {
+    fun `支线查询失败仍继续主任务和钓鱼`() = runBlocking {
+        val fake = FakeFishPondGateway().apply {
+            subplotResponse = """{"success":false}"""
+        }
+        val result = FishPondWorkflow(fake, waitForTask = {}).run(
+            taskEnabled = true,
+            autoFishEnabled = true,
+            todayFishCount = 0,
+            dailyLimit = 30,
+            riskToken = "risk-token"
+        )
+
+        assertTrue(result.retryNeeded)
+        assertEquals(listOf("FISH_TASK_14"), fake.claimedTasks)
+        assertTrue(fake.completedTasks.contains("FISH_TASK_15"))
+        assertEquals(1, fake.angleCalls)
+    }
+
+    @Test
+    fun `缺少风控令牌只跳过钓鱼并继续领取任务奖励`() = runBlocking {
         val fake = FakeFishPondGateway()
-        val result = FishPondWorkflow(fake).run(
+        val result = FishPondWorkflow(fake, waitForTask = {}).run(
             taskEnabled = true,
             autoFishEnabled = true,
             todayFishCount = 0,
@@ -52,9 +93,9 @@ class FishPondWorkflowTest {
     }
 
     @Test
-    fun `达到每日上限或首页暂态失败时安全停止`() {
+    fun `达到每日上限或首页暂态失败时安全停止`() = runBlocking {
         val limited = FakeFishPondGateway()
-        val limitedResult = FishPondWorkflow(limited).run(
+        val limitedResult = FishPondWorkflow(limited, waitForTask = {}).run(
             taskEnabled = false,
             autoFishEnabled = true,
             todayFishCount = 30,
@@ -65,7 +106,7 @@ class FishPondWorkflowTest {
         assertEquals(0, limited.angleCalls)
 
         val failed = FakeFishPondGateway().apply { indexResponse = "" }
-        val failedResult = FishPondWorkflow(failed).run(
+        val failedResult = FishPondWorkflow(failed, waitForTask = {}).run(
             taskEnabled = true,
             autoFishEnabled = true,
             todayFishCount = 0,
@@ -79,12 +120,30 @@ class FishPondWorkflowTest {
     }
 
     @Test
-    fun `角度成功但福利鱼定位失败仍立即计入每日次数`() {
+    fun `福利鱼定位失败时不计入每日次数`() = runBlocking {
         val fake = FakeFishPondGateway().apply {
             positionResponse = """{"success":false}"""
         }
         val persistedCounts = mutableListOf<Int>()
-        val result = FishPondWorkflow(fake).run(
+        val result = FishPondWorkflow(fake, waitForTask = {}).run(
+            taskEnabled = false,
+            autoFishEnabled = true,
+            todayFishCount = 5,
+            dailyLimit = 30,
+            riskToken = "risk-token",
+            onFishConfirmed = persistedCounts::add
+        )
+
+        assertEquals(0, result.confirmedFishCount)
+        assertTrue(result.retryNeeded)
+        assertTrue(persistedCounts.isEmpty())
+    }
+
+    @Test
+    fun `福利鱼定位成功后才计入每日次数`() = runBlocking {
+        val fake = FakeFishPondGateway()
+        val persistedCounts = mutableListOf<Int>()
+        val result = FishPondWorkflow(fake, waitForTask = {}).run(
             taskEnabled = false,
             autoFishEnabled = true,
             todayFishCount = 5,
@@ -94,7 +153,38 @@ class FishPondWorkflowTest {
         )
 
         assertEquals(1, result.confirmedFishCount)
-        assertTrue(result.retryNeeded)
+        assertFalse(result.retryNeeded)
+        assertEquals(listOf(6), persistedCounts)
+    }
+
+    @Test
+    fun `响应根节点要求定位时必须先定位再计数`() = runBlocking {
+        val fake = FakeFishPondGateway().apply {
+            angleResponse =
+                """
+                {
+                  "success": true,
+                  "needRodPositioning": true,
+                  "rodSumCount": 1,
+                  "angleResultInfo": {
+                    "fishType":"BIG_FISH",
+                    "bizNo":"fish-biz"
+                  }
+                }
+                """.trimIndent()
+        }
+        val persistedCounts = mutableListOf<Int>()
+        val result = FishPondWorkflow(fake, waitForTask = {}).run(
+            taskEnabled = false,
+            autoFishEnabled = true,
+            todayFishCount = 5,
+            dailyLimit = 30,
+            riskToken = "risk-token",
+            onFishConfirmed = persistedCounts::add
+        )
+
+        assertEquals(listOf("fish-biz" to "SPECIAL_BIG_ZONE"), fake.positionCalls)
+        assertEquals(1, result.confirmedFishCount)
         assertEquals(listOf(6), persistedCounts)
     }
 
@@ -103,23 +193,23 @@ class FishPondWorkflowTest {
             """{"success":true,"data":{"rodSumCount":1,"canExchange":false}}"""
         var listTaskCalls = 0
         var angleCalls = 0
+        var angleResponse =
+            """
+            {
+              "success": true,
+              "data": {
+                "rodSumCount": 0,
+                "angleResultInfo": {
+                  "fishType":"WELFARE_FISH",
+                  "bizNo":"fish-biz"
+                }
+              }
+            }
+            """.trimIndent()
         var positionResponse = """{"success":true}"""
-        val signKeys = mutableListOf<String>()
-        val syncCalls = mutableListOf<List<String>>()
-        val triggeredActivities = mutableListOf<Pair<String, String>>()
-        val claimedTasks = mutableListOf<String>()
-        val completedTasks = mutableListOf<String>()
-        val positionCalls = mutableListOf<Pair<String, String>>()
-
-        override fun fishpondIndex(): String = indexResponse
-
-        override fun fishpondSyncIndex(syncTypes: List<String>): String {
-            syncCalls += syncTypes
-            val rodCount = if (angleCalls == 0) 1 else 0
-            return """{"success":true,"data":{"rodSumCount":$rodCount}}"""
-        }
-
-        override fun querySubplotsActivity(): String =
+        var failedTaskType: String? = null
+        var thrownTaskType: String? = null
+        var subplotResponse =
             """
             {
               "success": true,
@@ -131,6 +221,24 @@ class FishPondWorkflowTest {
               }
             }
             """.trimIndent()
+        val signKeys = mutableListOf<String>()
+        val syncCalls = mutableListOf<List<String>>()
+        val triggeredActivities = mutableListOf<Pair<String, String>>()
+        val claimedTasks = mutableListOf<String>()
+        val completedTasks = mutableListOf<String>()
+        val positionCalls = mutableListOf<Pair<String, String>>()
+        val events = mutableListOf<String>()
+
+        override fun fishpondIndex(): String = indexResponse
+
+        override fun fishpondSyncIndex(syncTypes: List<String>): String {
+            syncCalls += syncTypes
+            events += "sync:${syncTypes.joinToString(",")}"
+            val rodCount = if (angleCalls == 0) 1 else 0
+            return """{"success":true,"data":{"rodSumCount":$rodCount}}"""
+        }
+
+        override fun querySubplotsActivity(): String = subplotResponse
 
         override fun triggerSubplotsActivity(activityType: String, actionType: String): String {
             triggeredActivities += activityType to actionType
@@ -150,18 +258,18 @@ class FishPondWorkflowTest {
                     },
                     "taskList": [
                       {
-                        "taskId":"FISH_TASK_14",
-                        "sceneCode":"ANTFISHPOND_TASK",
-                        "taskStatus":"FINISHED",
-                        "actionType":"GOFISH",
-                        "taskTitle":"浏览鱼池"
-                      },
-                      {
                         "taskId":"FISH_TASK_15",
                         "sceneCode":"ANTFISHPOND_TASK",
                         "taskStatus":"TODO",
                         "actionType":"VISIT",
                         "taskTitle":"查看鱼池进度"
+                      },
+                      {
+                        "taskId":"FISH_TASK_14",
+                        "sceneCode":"ANTFISHPOND_TASK",
+                        "taskStatus":"FINISHED",
+                        "actionType":"GOFISH",
+                        "taskTitle":"浏览鱼池"
                       },
                       {
                         "taskId":"AD_TASK",
@@ -184,8 +292,29 @@ class FishPondWorkflowTest {
         override fun fishpondExchangeReward(): String = """{"success":true}"""
 
         override fun finishTask(taskType: String, sceneCode: String): String {
-            completedTasks += taskType
+            return finishTask(taskType, sceneCode, null)
+        }
+
+        override fun fishpondAdNotice(adBizNo: String): String {
+            events += "notice:$adBizNo"
             return """{"success":true}"""
+        }
+
+        override fun finishTask(
+            taskType: String,
+            sceneCode: String,
+            adBizNo: String?
+        ): String {
+            if (taskType == thrownTaskType) {
+                error("任务调用异常")
+            }
+            completedTasks += taskType
+            events += "finish:$taskType:${adBizNo.orEmpty()}"
+            return if (taskType == failedTaskType) {
+                """{"success":false}"""
+            } else {
+                """{"success":true}"""
+            }
         }
 
         override fun receiveTaskAward(taskType: String, sceneCode: String): String {
@@ -195,18 +324,7 @@ class FishPondWorkflowTest {
 
         override fun fishpondAngle(riskToken: String): String {
             angleCalls++
-            return """
-                {
-                  "success": true,
-                  "data": {
-                    "rodSumCount": 0,
-                    "angleResultInfo": {
-                      "fishType":"WELFARE_FISH",
-                      "bizNo":"fish-biz"
-                    }
-                  }
-                }
-            """.trimIndent()
+            return angleResponse
         }
 
         override fun fishpondAngleRodPositioning(bizNo: String, areaType: String): String {

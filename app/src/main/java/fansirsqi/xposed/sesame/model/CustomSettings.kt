@@ -58,7 +58,6 @@ object CustomSettings {
             SimpleEntity("antForest", "蚂蚁森林"),
             SimpleEntity("antFarm", "蚂蚁庄园"),
             SimpleEntity("antOcean", "海洋"),
-            SimpleEntity("antFishPond", "福气鱼池"),
             SimpleEntity("antOrchard", "农场"),
             SimpleEntity("antStall", "新村"),
             SimpleEntity("antDodo", "神奇物种"),
@@ -163,7 +162,7 @@ object CustomSettings {
             taskInfo.contains("合种") || taskInfo.contains("antCooperate") -> "antCooperate"
             taskInfo.contains("蚂蚁森林") || taskInfo.contains("antForest") -> "antForest"
             taskInfo.contains("蚂蚁庄园") || taskInfo.contains("antFarm") -> "antFarm"
-            taskInfo.contains("福气鱼池") || taskInfo.contains("antFishPond") -> "antFishPond"
+            taskInfo.contains("福气鱼池") || taskInfo.contains("antFishPond") -> "antOrchard"
             taskInfo.contains("海洋") || taskInfo.contains("antOcean") -> "antOcean"
             taskInfo.contains("农场") || taskInfo.contains("antOrchard") -> "antOrchard"
             taskInfo.contains("新村") || taskInfo.contains("antStall") -> "antStall"

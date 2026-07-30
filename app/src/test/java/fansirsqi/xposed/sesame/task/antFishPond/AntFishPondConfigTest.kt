@@ -1,20 +1,18 @@
 package fansirsqi.xposed.sesame.task.antFishPond
 
-import fansirsqi.xposed.sesame.model.ModelGroup
-import fansirsqi.xposed.sesame.model.ModelOrder
 import fansirsqi.xposed.sesame.model.CustomSettings
+import fansirsqi.xposed.sesame.model.ModelOrder
 import fansirsqi.xposed.sesame.model.modelFieldExt.IntegerModelField
-import fansirsqi.xposed.sesame.task.antOcean.AntOcean
+import fansirsqi.xposed.sesame.task.antOrchard.AntOrchard
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AntFishPondConfigTest {
 
     @Test
-    fun `配置默认关闭且钓鱼上限范围为零到二百`() {
-        val fields = AntFishPond().fields
+    fun `福气鱼池设置直接位于农场且没有独立模块`() {
+        val fields = AntOrchard().fields
 
         assertFalse(fields["fishPondTask"]?.value as Boolean)
         assertFalse(fields["autoFish"]?.value as Boolean)
@@ -27,28 +25,20 @@ class AntFishPondConfigTest {
         assertEquals(0, limit.value)
         limit.setConfigValue("201")
         assertEquals(200, limit.value)
-    }
 
-    @Test
-    fun `鱼池属于森林分组并注册在海洋之后`() {
-        val model = AntFishPond()
-        assertEquals(ModelGroup.FOREST, model.group)
-        assertEquals("AntOcean.png", model.icon)
-
-        val order = ModelOrder.allConfig
-        val oceanIndex = order.indexOf(AntOcean::class.java)
-        val fishPondIndex = order.indexOf(AntFishPond::class.java)
-        assertTrue(oceanIndex >= 0)
-        assertEquals(oceanIndex + 1, fishPondIndex)
-    }
-
-    @Test
-    fun `鱼池可加入每日只运行一次筛选`() {
-        assertEquals("antFishPond", CustomSettings.getModuleId("福气鱼池"))
-        assertTrue(
+        assertFalse(
+            ModelOrder.allConfig.map { it.simpleName }.contains("AntFishPond")
+        )
+        assertFalse(
             CustomSettings.onlyOnceDailyList.expandValue.any {
-                it.id == "antFishPond" && it.name == "福气鱼池"
+                it.id == "antFishPond"
             }
         )
+    }
+
+    @Test
+    fun `历史鱼池任务标识归入农场每日单次运行`() {
+        assertEquals("antOrchard", CustomSettings.getModuleId("福气鱼池"))
+        assertEquals("antOrchard", CustomSettings.getModuleId("antFishPond"))
     }
 }
