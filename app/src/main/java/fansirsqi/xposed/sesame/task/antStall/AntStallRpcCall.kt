@@ -182,6 +182,32 @@ object AntStallRpcCall {
         )
     }
 
+    fun xlightPlugin(): String {
+        return RequestManager.requestString(
+            "com.alipay.adexchange.ad.facade.xlightPlugin",
+            "[{\"positionRequest\":{\"extMap\":{\"xlightPlayInstanceId\":\"300004\"},\"referInfo\":{},\"spaceCode\":\"ANT_FARM_NEW_VILLAGE\"},\"sdkPageInfo\":{\"adComponentType\":\"FEEDS\",\"adComponentVersion\":\"4.11.13\",\"enableFusion\":true,\"networkType\":\"WIFI\",\"pageFrom\":\"ch_url-https://68687809.h5app.alipay.com/www/game.html\",\"pageNo\":1,\"pageUrl\":\"https://render.alipay.com/p/yuyan/180020010001256918/multi-stage-task.html?caprMode=sync&spaceCodeFeeds=ANT_FARM_NEW_VILLAGE&usePlayLink=true&xlightPlayInstanceId=300004\",\"unionAppId\":\"2060090000304921\",\"usePlayLink\":\"true\",\"xlightSDKType\":\"h5\",\"xlightSDKVersion\":\"4.11.13\"}}]"
+        )
+    }
+
+    fun finishXlight(
+        playBizId: String,
+        playEventInfo: JSONObject
+    ): String {
+        val extendInfo = JSONObject()
+            .put("iepTaskSceneCode", "ANTSTALL_TASK")
+            .put("iepTaskType", "ANTSTALL_XLIGHT_VARIABLE_AWARD")
+            .put("playEndingStatus", "success")
+        val args = JSONObject()
+            .put("extendInfo", extendInfo)
+            .put("playBizId", playBizId)
+            .put("playEventInfo", playEventInfo)
+            .put("source", "adx")
+        return RequestManager.requestString(
+            "com.alipay.adtask.biz.mobilegw.service.interaction.finish",
+            "[$args]"
+        )
+    }
+
     /**
      * @brief 查询应用跳转 Schema
      * @param sceneCode 场景代码

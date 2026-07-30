@@ -31,13 +31,27 @@ class StallTaskSafetyPolicyTest {
             StallTaskSafetyPolicy.classify("LIGHT_AD_TASK", "看广告领币", "VISIT_AUTO_FINISH")
         )
         assertEquals(
-            StallTaskDecision.SKIP_AD,
+            StallTaskDecision.HANDLE_XLIGHT,
             StallTaskSafetyPolicy.classify("ANTSTALL_XLIGHT_VARIABLE_AWARD", "浏览任务", "")
         )
         assertEquals(
             StallTaskDecision.SKIP_FINANCIAL,
             StallTaskSafetyPolicy.classify("ANTSTALL_TASK_diantao202311", "点淘赚元宝提现", "VISIT_AUTO_FINISH")
         )
+    }
+
+    @Test
+    fun `兑换现金和捐赠任务继续阻断`() {
+        for (signal in listOf("EXCHANGE", "CASH", "DONATION", "捐赠")) {
+            assertEquals(
+                StallTaskDecision.SKIP_FINANCIAL,
+                StallTaskSafetyPolicy.classify(
+                    "ANTSTALL_$signal",
+                    signal,
+                    "VISIT_AUTO_FINISH"
+                )
+            )
+        }
     }
 
     @Test

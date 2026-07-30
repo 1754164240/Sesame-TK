@@ -30,14 +30,14 @@ class SportsTaskPolicyTest {
             )
         )
         assertEquals(
-            SportsTaskAction.SKIP_UNSAFE,
+            SportsTaskAction.COMPLETE_TASK,
             SportsTaskPolicy.decide(
                 "SPORTS_DAILY_GROUP",
                 signTask
             )
         )
         assertEquals(
-            SportsTaskAction.SKIP_UNSAFE,
+            SportsTaskAction.COMPLETE_TASK,
             SportsTaskPolicy.decide(
                 "SPORTS_DAILY_GROUP",
                 browseTask
@@ -47,14 +47,15 @@ class SportsTaskPolicyTest {
 
     @Test
     fun `广告游戏资金和相似词任务均保护性跳过`() {
-        val tasks = listOf(
+        val riskyTasks = listOf(
             task("SPORTS_LIGHT_AD_TASK", "AD", "看广告", "TODO"),
             task("SPORTS_GAME_TASK", "GAME", "完成游戏", "TODO"),
             task("SPORTS_CASH_TASK", "CASH", "现金任务", "TODO"),
-            task("SPORTS_SPREAD_TASK", "SPREAD", "未知任务", "TODO")
+            task("SPORTS_EXCHANGE_TASK", "EXCHANGE", "兑换奖励", "TODO"),
+            task("SPORTS_DONATION_TASK", "DONATION", "公益捐赠", "TODO")
         )
 
-        tasks.forEach { state ->
+        riskyTasks.forEach { state ->
             assertEquals(
                 SportsTaskAction.SKIP_UNSAFE,
                 SportsTaskPolicy.decide(
@@ -62,7 +63,24 @@ class SportsTaskPolicyTest {
                     state
                 )
             )
+            assertEquals(
+                SportsTaskAction.SKIP_UNSAFE,
+                SportsTaskPolicy.decide(
+                    "SPORTS_DAILY_GROUP",
+                    state
+                )
+            )
         }
+        val similarWord = task(
+            "SPORTS_SPREAD_TASK",
+            "SPREAD",
+            "浏览文体页面",
+            "TODO"
+        )
+        assertEquals(
+            SportsTaskAction.COMPLETE_TASK,
+            SportsTaskPolicy.decide("SPORTS_DAILY_GROUP", similarWord)
+        )
     }
 
     @Test

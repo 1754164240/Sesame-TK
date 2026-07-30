@@ -26,7 +26,14 @@ class GameCenterP2eTaskWorkflow(
     private val completeTask: (JSONObject) -> String,
     private val receiveTask: (JSONObject) -> String,
     private val isActionSuccess: (String) -> Boolean,
-    private val pauseAfterAction: () -> Unit = {}
+    private val pauseAfterAction: () -> Unit = {},
+    private val executeInteractiveTask: (JSONObject) ->
+        GameCenterInteractiveResult = {
+            GameCenterInteractiveResult(
+                GameCenterInteractiveOutcome.SKIPPED,
+                "未配置游戏中心交互执行器"
+            )
+        }
 ) {
 
     fun run(): GameCenterP2eRunResult {
@@ -64,6 +71,9 @@ class GameCenterP2eTaskWorkflow(
         return when (decision) {
             GameCenterTaskDecision.SIGN_UP -> signupAndComplete(task, title)
             GameCenterTaskDecision.SEND -> completeAndConfirm(task, title, decision)
+            GameCenterTaskDecision.EXECUTE_GAME,
+            GameCenterTaskDecision.EXECUTE_AD ->
+                executeInteractive(task, title, decision)
             GameCenterTaskDecision.CLAIM_ONLY -> receiveAndConfirm(task, title)
             GameCenterTaskDecision.TERMINAL -> null
             GameCenterTaskDecision.SKIP_REAL_GAME,
@@ -71,6 +81,31 @@ class GameCenterP2eTaskWorkflow(
             GameCenterTaskDecision.SKIP_FINANCIAL,
             GameCenterTaskDecision.SKIP_UNSUPPORTED ->
                 skipped(taskId, title, decision)
+        }
+    }
+
+    private fun executeInteractive(
+        task: JSONObject,
+        title: String,
+        decision: GameCenterTaskDecision
+    ): GameCenterP2eTaskOutcome {
+        val taskId = task.optString("taskId")
+        return when (val result = executeInteractiveTask(task)) {
+            is GameCenterInteractiveResult -> when (result.outcome) {
+                GameCenterInteractiveOutcome.CONFIRMED ->
+                    confirmed(taskId, title, decision, result.message)
+                GameCenterInteractiveOutcome.RETRY ->
+                    retry(taskId, title, decision, result.message)
+                GameCenterInteractiveOutcome.SKIPPED ->
+                    GameCenterP2eTaskOutcome(
+                        taskId,
+                        title,
+                        decision,
+                        false,
+                        false,
+                        result.message
+                    )
+            }
         }
     }
 

@@ -8,9 +8,10 @@ import org.junit.Test
 class GameCenterPlatformWorkflowTest {
 
     @Test
-    fun `真实游戏任务不会调用报名或发送接口`() {
+    fun `真实游戏任务进入交互工作流`() {
         var signupCalls = 0
         var sendCalls = 0
+        var interactiveCalls = 0
         val workflow = GameCenterPlatformWorkflow(
             queryTasks = {
                 taskResponse(
@@ -34,15 +35,23 @@ class GameCenterPlatformWorkflowTest {
                 sendCalls++
                 """{"success":true}"""
             },
-            isActionSuccess =(::isSuccess)
+            isActionSuccess =(::isSuccess),
+            executeInteractiveTask = {
+                interactiveCalls++
+                GameCenterInteractiveResult(
+                    GameCenterInteractiveOutcome.CONFIRMED,
+                    "真实游戏状态已确认"
+                )
+            }
         )
 
         val result = workflow.run()
 
         assertEquals(0, signupCalls)
         assertEquals(0, sendCalls)
-        assertEquals(1, result.skipped)
-        assertEquals(0, result.completed)
+        assertEquals(1, interactiveCalls)
+        assertEquals(0, result.skipped)
+        assertEquals(1, result.completed)
     }
 
     @Test

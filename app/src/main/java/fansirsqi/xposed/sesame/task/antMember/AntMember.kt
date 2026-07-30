@@ -1,6 +1,8 @@
 package fansirsqi.xposed.sesame.task.antMember
 
 import android.annotation.SuppressLint
+import android.content.Intent
+import android.net.Uri
 import fansirsqi.xposed.sesame.data.Status.Companion.canMemberPointExchangeBenefitToday
 import fansirsqi.xposed.sesame.data.Status.Companion.canMemberSignInToday
 import fansirsqi.xposed.sesame.data.Status.Companion.hasFlagToday
@@ -10,6 +12,7 @@ import fansirsqi.xposed.sesame.data.Status.Companion.setFlagToday
 import fansirsqi.xposed.sesame.data.StatusFlags
 import fansirsqi.xposed.sesame.entity.MemberBenefit
 import fansirsqi.xposed.sesame.entity.SesameGift
+import fansirsqi.xposed.sesame.hook.ApplicationHook
 import fansirsqi.xposed.sesame.hook.internal.LocationHelper.requestLocationSuspend
 import fansirsqi.xposed.sesame.hook.internal.SecurityBodyHelper.getSecurityBodyData
 import fansirsqi.xposed.sesame.model.ModelFields
@@ -1700,7 +1703,9 @@ class AntMember : ModelTask() {
                     },
                     pauseAfterAction = {
                         GlobalThreadPools.sleepCompat(300L)
-                    }
+                    },
+                    executeInteractiveTask =
+                        createPlatformGameCenterInteractiveWorkflow()::execute
                 )
                 val result = workflow.run()
                 if (!result.recognized) {
@@ -1985,7 +1990,9 @@ class AntMember : ModelTask() {
                 AntMemberRpcCall.gameCenterP2eTaskReceive(task)
             },
             isActionSuccess = isActionSuccess,
-            pauseAfterAction = pauseAfterAction
+            pauseAfterAction = pauseAfterAction,
+            executeInteractiveTask =
+                createP2eGameCenterInteractiveWorkflow(sessionId)::execute
         )
         val taskResult = taskWorkflow.run()
         if (!taskResult.recognized) {
@@ -2042,6 +2049,90 @@ class AntMember : ModelTask() {
                 "游戏中心🎮[P2E现金档位只读]#金币:${cashSnapshot.goldAmount ?: "未知"} " +
                     "档位:${tierSummary.ifBlank { "无" }}"
             )
+        }
+    }
+
+    private fun createPlatformGameCenterInteractiveWorkflow():
+        GameCenterInteractiveWorkflow {
+        return createGameCenterInteractiveWorkflow(
+            signupTask = { task ->
+                AntMemberRpcCall.doTaskSignup(task.optString("taskId"))
+            },
+            completeTask = { task ->
+                AntMemberRpcCall.doTaskSend(task.optString("taskId"))
+            },
+            refreshTask = { taskId ->
+                GameCenterTaskPolicy.findTask(
+                    GameCenterTaskPolicy.parsePlatformTasks(
+                        AntMemberRpcCall.queryGameCenterTaskList()
+                    ),
+                    taskId
+                )
+            },
+            receiveTask = null,
+            requireTaskToken = false
+        )
+    }
+
+    private fun createP2eGameCenterInteractiveWorkflow(
+        sessionId: String
+    ): GameCenterInteractiveWorkflow {
+        return createGameCenterInteractiveWorkflow(
+            signupTask = AntMemberRpcCall::gameCenterP2ePlatformTaskSignUp,
+            completeTask = { task ->
+                AntMemberRpcCall.gameCenterP2ePlatformTaskComplete(task)
+            },
+            refreshTask = { taskId ->
+                GameCenterTaskPolicy.findTask(
+                    GameCenterTaskPolicy.parseP2eTasks(
+                        AntMemberRpcCall.queryGameCenterP2eTaskList(sessionId)
+                    ),
+                    taskId
+                )
+            },
+            receiveTask = AntMemberRpcCall::gameCenterP2eTaskReceive,
+            requireTaskToken = true
+        )
+    }
+
+    private fun createGameCenterInteractiveWorkflow(
+        signupTask: (JSONObject) -> String,
+        completeTask: (JSONObject) -> String,
+        refreshTask: (String) -> JSONObject?,
+        receiveTask: ((JSONObject) -> String)?,
+        requireTaskToken: Boolean
+    ): GameCenterInteractiveWorkflow {
+        return GameCenterInteractiveWorkflow(
+            signupTask = signupTask,
+            launch = ::launchGameCenterTarget,
+            simulateGame = {
+                """{"success":true}"""
+            },
+            queryAd = AntMemberRpcCall::queryGameCenterAd,
+            finishAdEvent = AntMemberRpcCall::finishGameCenterAd,
+            completeTask = completeTask,
+            refreshTask = refreshTask,
+            receiveTask = receiveTask,
+            pause = GlobalThreadPools::sleepCompat,
+            isActionSuccess = { response ->
+                runCatching {
+                    ResChecker.checkRes(TAG, JSONObject(response))
+                }.getOrDefault(false)
+            },
+            requireTaskToken = requireTaskToken
+        )
+    }
+
+    private fun launchGameCenterTarget(targetUrl: String): Boolean {
+        val context = ApplicationHook.appContext ?: return false
+        return runCatching {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(targetUrl))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+            true
+        }.getOrElse { error ->
+            Log.printStackTrace(TAG, "启动游戏中心任务失败:", error)
+            false
         }
     }
 

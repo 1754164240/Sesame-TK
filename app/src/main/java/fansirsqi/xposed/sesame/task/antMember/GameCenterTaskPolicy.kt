@@ -11,6 +11,8 @@ data class GameCenterTaskSnapshot(
 enum class GameCenterTaskDecision {
     SIGN_UP,
     SEND,
+    EXECUTE_GAME,
+    EXECUTE_AD,
     CLAIM_ONLY,
     TERMINAL,
     SKIP_REAL_GAME,
@@ -39,7 +41,23 @@ object GameCenterTaskPolicy {
         "下单",
         "购买",
         "支付",
-        "现金兑换"
+        "兑换",
+        "投资",
+        "理财",
+        "现金",
+        "捐赠"
+    )
+    private val financialAsciiKeywords = setOf(
+        "PURCHASE",
+        "RECHARGE",
+        "WITHDRAW",
+        "EXCHANGE",
+        "LOAN",
+        "INVEST",
+        "CASH",
+        "DONATE",
+        "DONATION",
+        "PAYMENT"
     )
     private val gameplayKeywords = setOf(
         "通关",
@@ -60,20 +78,19 @@ object GameCenterTaskPolicy {
         if (isFinancialTask(task)) {
             return GameCenterTaskDecision.SKIP_FINANCIAL
         }
-        if (isRealGameplayTask(task)) {
-            return GameCenterTaskDecision.SKIP_REAL_GAME
-        }
-
         val actionType = task.optString("actionType").uppercase()
-        if (actionType.contains("AD") || task.optString("title").contains("广告")) {
-            return GameCenterTaskDecision.SKIP_AD
-        }
         if (status in terminalStatuses) {
             return if (buttonText.contains("领取")) {
                 GameCenterTaskDecision.CLAIM_ONLY
             } else {
                 GameCenterTaskDecision.TERMINAL
             }
+        }
+        if (isRealGameplayTask(task)) {
+            return GameCenterTaskDecision.EXECUTE_GAME
+        }
+        if (actionType.contains("AD") || task.optString("title").contains("广告")) {
+            return GameCenterTaskDecision.EXECUTE_AD
         }
         if (task.optBoolean("needSignUp", false) && status == "NOT_DONE") {
             return GameCenterTaskDecision.SIGN_UP
@@ -97,21 +114,21 @@ object GameCenterTaskPolicy {
         val taskType = task.optString("taskType").uppercase()
         val actionType = task.optString("actionType").uppercase()
         return when {
-            taskType == "GAME_TRAN_TASK" ->
-                GameCenterTaskDecision.SKIP_REAL_GAME
-
-            actionType == "LIGHT_AD_TASK" || actionType.contains("AD") ->
-                GameCenterTaskDecision.SKIP_AD
-
-            taskType != "PLATFORM_TRAN_TASK" || actionType != "VIEW_TASK" ->
-                GameCenterTaskDecision.SKIP_UNSUPPORTED
-
             status in terminalStatuses ->
                 if (buttonText.contains("领取")) {
                     GameCenterTaskDecision.CLAIM_ONLY
                 } else {
                     GameCenterTaskDecision.TERMINAL
                 }
+
+            taskType == "GAME_TRAN_TASK" ->
+                GameCenterTaskDecision.EXECUTE_GAME
+
+            actionType == "LIGHT_AD_TASK" || actionType.contains("AD") ->
+                GameCenterTaskDecision.EXECUTE_AD
+
+            taskType != "PLATFORM_TRAN_TASK" || actionType != "VIEW_TASK" ->
+                GameCenterTaskDecision.SKIP_UNSUPPORTED
 
             task.optBoolean("needSignUp", false) &&
                 status in setOf("UN_SIGNUP", "NONE_SIGNUP", "NOT_DONE") ->
@@ -212,8 +229,20 @@ object GameCenterTaskPolicy {
     }
 
     private fun isFinancialTask(task: JSONObject): Boolean {
-        val text = "${task.optString("title")} ${task.optString("subTitle")}"
-        return financialKeywords.any(text::contains)
+        val text = buildString {
+            append(task.optString("title"))
+            append(' ')
+            append(task.optString("subTitle"))
+            append(' ')
+            append(task.optString("taskType"))
+            append(' ')
+            append(task.optString("actionType"))
+        }
+        if (financialKeywords.any(text::contains)) {
+            return true
+        }
+        val upper = text.uppercase()
+        return financialAsciiKeywords.any(upper::contains)
     }
 
     private fun isRealGameplayTask(task: JSONObject): Boolean {

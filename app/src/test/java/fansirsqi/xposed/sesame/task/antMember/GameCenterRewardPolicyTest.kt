@@ -110,7 +110,7 @@ class GameCenterRewardPolicyTest {
     }
 
     @Test
-    fun `P2E只允许平台浏览任务`() {
+    fun `P2E平台浏览和真实游戏进入对应执行链`() {
         val allowed = JSONObject()
             .put("taskType", "PLATFORM_TRAN_TASK")
             .put("actionType", "VIEW_TASK")
@@ -129,7 +129,7 @@ class GameCenterRewardPolicyTest {
             GameCenterTaskPolicy.classifyP2eTask(allowed)
         )
         assertEquals(
-            GameCenterTaskDecision.SKIP_REAL_GAME,
+            GameCenterTaskDecision.EXECUTE_GAME,
             GameCenterTaskPolicy.classifyP2eTask(game)
         )
         assertEquals(

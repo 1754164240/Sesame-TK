@@ -324,6 +324,53 @@ public class AntMemberRpcCall {
                 "[{\"source\":\"ch_alipaysearch__chsub_normal\",\"taskId\":\"" + taskId + "\"}]");
     }
 
+    public static String queryGameCenterAd(JSONObject task) {
+        JSONObject request = task.optJSONObject("adQueryParams");
+        if (request == null) {
+            JSONObject positionRequest = task.optJSONObject("positionRequest");
+            if (positionRequest == null) {
+                return "{\"success\":false,\"resultDesc\":\"广告查询参数缺失\"}";
+            }
+            request = new JSONObject();
+            try {
+                request.put("positionRequest", positionRequest);
+                JSONObject sdkPageInfo = task.optJSONObject("sdkPageInfo");
+                if (sdkPageInfo != null) {
+                    request.put("sdkPageInfo", sdkPageInfo);
+                }
+            } catch (JSONException exception) {
+                return "{\"success\":false,\"resultDesc\":\"广告查询参数无效\"}";
+            }
+        }
+        return RequestManager.requestString(
+                "com.alipay.adexchange.ad.facade.xlightPlugin",
+                new JSONArray().put(request).toString()
+        );
+    }
+
+    public static String finishGameCenterAd(
+            String playBizId,
+            JSONObject playEventInfo
+    ) {
+        try {
+            JSONObject extendInfo = new JSONObject()
+                    .put("iepTaskSceneCode", "GAME_CENTER_TASK")
+                    .put("iepTaskType", "LIGHT_AD_TASK")
+                    .put("playEndingStatus", "success");
+            JSONObject args = new JSONObject()
+                    .put("extendInfo", extendInfo)
+                    .put("playBizId", playBizId)
+                    .put("playEventInfo", playEventInfo)
+                    .put("source", "adx");
+            return RequestManager.requestString(
+                    "com.alipay.adtask.biz.mobilegw.service.interaction.finish",
+                    new JSONArray().put(args).toString()
+            );
+        } catch (JSONException exception) {
+            return "{\"success\":false,\"resultDesc\":\"广告事件参数无效\"}";
+        }
+    }
+
     /**
      * 查询 P2E 首页签到、免费抽金币和资产状态。
      */

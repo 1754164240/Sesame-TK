@@ -4,9 +4,14 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.UUID;
+
 import fansirsqi.xposed.sesame.hook.RequestManager;
 import fansirsqi.xposed.sesame.hook.ApplicationHook;
 import fansirsqi.xposed.sesame.util.Log;
+import fansirsqi.xposed.sesame.util.RandomUtil;
 
 public class AntFarmRpcCall {
     private static final String VERSION = "1.8.2302070202.46";
@@ -260,6 +265,70 @@ public class AntFarmRpcCall {
         return RequestManager.requestString("com.alipay.antfarm.initFarmGame",
                 "[{\"gameType\":\"" + gameType
                         + "\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ANTFARM\",\"source\":\"H5\",\"toolTypes\":\"STEALTOOL,ACCELERATETOOL,SHARETOOL\"}]");
+    }
+
+    public static String recordFarmGame(String gameType) {
+        String uuid = farmGameUuid();
+        String md5 = farmGameMd5(uuid);
+        int score = farmGameScore(gameType);
+        if ("flyGame".equals(gameType)) {
+            int foodCount = score / 50;
+            return RequestManager.requestString(
+                    "com.alipay.antfarm.recordFarmGame",
+                    "[{\"foodCount\":" + foodCount + ",\"gameType\":\"flyGame\",\"md5\":\"" + md5
+                            + "\",\"requestType\":\"RPC\",\"sceneCode\":\"FLAYGAME\",\"score\":" + score
+                            + ",\"source\":\"ANTFARM\",\"toolTypes\":\"ACCELERATETOOL,SHARETOOL,NONE\",\"uuid\":\""
+                            + uuid + "\",\"version\":\"\"}]"
+            );
+        }
+        if ("hitGame".equals(gameType)) {
+            return RequestManager.requestString(
+                    "com.alipay.antfarm.recordFarmGame",
+                    "[{\"gameType\":\"hitGame\",\"md5\":\"" + md5
+                            + "\",\"requestType\":\"RPC\",\"sceneCode\":\"HITGAME\",\"score\":" + score
+                            + ",\"source\":\"ANTFARM\",\"toolTypes\":\"ACCELERATETOOL,SHARETOOL,NONE\",\"uuid\":\""
+                            + uuid + "\",\"version\":\"\"}]"
+            );
+        }
+        return RequestManager.requestString(
+                "com.alipay.antfarm.recordFarmGame",
+                "[{\"gameType\":\"" + gameType + "\",\"md5\":\"" + md5
+                        + "\",\"requestType\":\"NORMAL\",\"sceneCode\":\"ANTFARM\",\"score\":" + score
+                        + ",\"source\":\"H5\",\"toolTypes\":\"STEALTOOL,ACCELERATETOOL,SHARETOOL\",\"uuid\":\""
+                        + uuid + "\"}]"
+        );
+    }
+
+    private static int farmGameScore(String gameType) {
+        return switch (gameType) {
+            case "starGame" -> RandomUtil.nextInt(300, 400);
+            case "jumpGame" -> RandomUtil.nextInt(250, 270) * 10;
+            case "flyGame" -> RandomUtil.nextInt(4000, 8000);
+            case "hitGame" -> RandomUtil.nextInt(80, 120);
+            default -> 210;
+        };
+    }
+
+    private static String farmGameUuid() {
+        StringBuilder result = new StringBuilder();
+        for (String part : UUID.randomUUID().toString().split("-")) {
+            result.append(part.substring(part.length() / 2));
+        }
+        return result.toString();
+    }
+
+    private static String farmGameMd5(String value) {
+        try {
+            byte[] bytes = MessageDigest.getInstance("MD5").digest(value.getBytes());
+            StringBuilder result = new StringBuilder();
+            for (byte current : bytes) {
+                result.append(String.format("%02x", current & 0xff));
+            }
+            return result.toString();
+        } catch (NoSuchAlgorithmException exception) {
+            Log.printStackTrace(exception);
+            return "";
+        }
     }
 
     /**

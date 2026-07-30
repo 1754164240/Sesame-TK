@@ -39,7 +39,8 @@ class SportsTaskWorkflow(
             } ?: continue
             val action = SportsTaskPolicy.decide(groupId, task)
             val outcome = when (action) {
-                SportsTaskAction.COMPLETE_SIGN_IN -> {
+                SportsTaskAction.COMPLETE_SIGN_IN,
+                SportsTaskAction.COMPLETE_TASK -> {
                     val response = completeTask(
                         task.bizType,
                         task.taskId

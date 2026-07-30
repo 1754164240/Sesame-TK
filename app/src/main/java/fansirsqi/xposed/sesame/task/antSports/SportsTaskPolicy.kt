@@ -4,6 +4,7 @@ import org.json.JSONObject
 
 enum class SportsTaskAction {
     COMPLETE_SIGN_IN,
+    COMPLETE_TASK,
     CLAIM_REWARD,
     SKIP_UNSAFE,
     NONE
@@ -41,7 +42,10 @@ object SportsTaskPolicy {
         "LOAN",
         "INVEST",
         "WITHDRAW",
-        "CASH"
+        "EXCHANGE",
+        "CASH",
+        "DONATE",
+        "DONATION"
     )
     private val riskyTextSignals = listOf(
         "广告",
@@ -52,7 +56,9 @@ object SportsTaskPolicy {
         "借贷",
         "投资",
         "提现",
-        "现金"
+        "兑换",
+        "现金",
+        "捐赠"
     )
     private val signAsciiSignals = listOf(
         "SIGN",
@@ -122,6 +128,11 @@ object SportsTaskPolicy {
                     containsSignSignal(task)
                 ) {
                     SportsTaskAction.COMPLETE_SIGN_IN
+                } else if (
+                    groupId == "SPORTS_DAILY_GROUP" &&
+                    task.bizType.isNotBlank()
+                ) {
+                    SportsTaskAction.COMPLETE_TASK
                 } else {
                     SportsTaskAction.SKIP_UNSAFE
                 }

@@ -810,6 +810,46 @@ class AntStall : ModelTask() {
                             }
                         }
 
+                        StallTaskDecision.HANDLE_XLIGHT -> {
+                            val result = StallXlightWorkflow(
+                                queryAd = AntStallRpcCall::xlightPlugin,
+                                finishEvent = AntStallRpcCall::finishXlight,
+                                refreshTask = {
+                                    refreshTaskState(taskType)
+                                },
+                                pauseAfterAction = { millis ->
+                                    GlobalThreadPools.sleepCompat(millis)
+                                },
+                                isActionSuccess = { response ->
+                                    runCatching {
+                                        ResChecker.checkRes(
+                                            TAG,
+                                            JSONObject(response)
+                                        )
+                                    }.getOrDefault(false)
+                                }
+                            ).run(beforeState)
+                            when (result.outcome) {
+                                StallXlightOutcome.CONFIRMED -> {
+                                    Log.farm("蚂蚁新村💣任务[$title]广告已完成")
+                                    if (
+                                        StallTaskProtocol.isRewardReady(
+                                            result.refreshedState
+                                        )
+                                    ) {
+                                        receiveTaskAward(
+                                            taskType,
+                                            result.refreshedState!!
+                                        )
+                                    }
+                                }
+                                StallXlightOutcome.LIMITED ->
+                                    Log.record(TAG, "新村 XLight 流量受限，停止本轮")
+                                StallXlightOutcome.RETRY ->
+                                    Log.record(TAG, result.message)
+                            }
+                        }
+
                         StallTaskDecision.HANDLE_QA -> {
                             if (ReadingDada.answerQuestion(bizInfo)) {
                                 val refreshed = refreshTaskState(taskType)

@@ -25,7 +25,14 @@ class GameCenterPlatformWorkflow(
     private val signupTask: (String) -> String,
     private val sendTask: (String) -> String,
     private val isActionSuccess: (String) -> Boolean,
-    private val pauseAfterAction: () -> Unit = {}
+    private val pauseAfterAction: () -> Unit = {},
+    private val executeInteractiveTask: (JSONObject) ->
+        GameCenterInteractiveResult = {
+            GameCenterInteractiveResult(
+                GameCenterInteractiveOutcome.SKIPPED,
+                "未配置游戏中心交互执行器"
+            )
+        }
 ) {
 
     fun run(): GameCenterPlatformRunResult {
@@ -68,6 +75,10 @@ class GameCenterPlatformWorkflow(
             GameCenterTaskDecision.SEND ->
                 sendAndConfirm(taskId, title, decision)
 
+            GameCenterTaskDecision.EXECUTE_GAME,
+            GameCenterTaskDecision.EXECUTE_AD ->
+                executeInteractive(task, taskId, title, decision)
+
             GameCenterTaskDecision.CLAIM_ONLY,
             GameCenterTaskDecision.TERMINAL ->
                 null
@@ -77,6 +88,30 @@ class GameCenterPlatformWorkflow(
             GameCenterTaskDecision.SKIP_FINANCIAL,
             GameCenterTaskDecision.SKIP_UNSUPPORTED ->
                 skippedOutcome(taskId, title, decision)
+        }
+    }
+
+    private fun executeInteractive(
+        task: JSONObject,
+        taskId: String,
+        title: String,
+        decision: GameCenterTaskDecision
+    ): GameCenterPlatformTaskOutcome {
+        val result = executeInteractiveTask(task)
+        return when (result.outcome) {
+            GameCenterInteractiveOutcome.CONFIRMED ->
+                confirmedOutcome(taskId, title, decision, result.message)
+            GameCenterInteractiveOutcome.RETRY ->
+                retryableOutcome(taskId, title, decision, result.message)
+            GameCenterInteractiveOutcome.SKIPPED ->
+                GameCenterPlatformTaskOutcome(
+                    taskId,
+                    title,
+                    decision,
+                    false,
+                    false,
+                    result.message
+                )
         }
     }
 

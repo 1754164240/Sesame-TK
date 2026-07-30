@@ -33,6 +33,7 @@ import fansirsqi.xposed.sesame.task.antForest.TaskTimeChecker
 import fansirsqi.xposed.sesame.util.CoroutineUtils
 import fansirsqi.xposed.sesame.util.DataStore
 import fansirsqi.xposed.sesame.util.GameTask
+import fansirsqi.xposed.sesame.util.GlobalThreadPools
 import fansirsqi.xposed.sesame.util.JsonUtil
 import fansirsqi.xposed.sesame.util.ListUtil
 import fansirsqi.xposed.sesame.util.Log
@@ -183,7 +184,7 @@ class AntFarm : ModelTask() {
     /**
      * 游戏改分
      */
-    private var queryFarmGameStatus: BooleanModelField? = null
+    private var recordFarmGame: BooleanModelField? = null
     private var gameRewardMax: IntegerModelField? = null
 
     /**
@@ -368,16 +369,16 @@ class AntFarm : ModelTask() {
         modelFields.addField(
             BooleanModelField(
                 "recordFarmGame",
-                "庄园游戏状态查询（不改分）",
+                "游戏改分(星星球、登山赛、飞行赛、揍小鸡)",
                 false
-            ).also { queryFarmGameStatus = it })
+            ).also { recordFarmGame = it })
         modelFields.addField(
             IntegerModelField("gameRewardMax", "旧版游戏产出预留量(g)", 180, 0, null).also { gameRewardMax = it }
         )
         modelFields.addField(
             ListJoinCommaToStringModelField(
                 "farmGameTime",
-                "庄园游戏状态查询时间(范围)",
+                "小鸡游戏时间(范围)",
                 ListUtil.newArrayList("2200-2400")
             ).also { farmGameTime = it })
         modelFields.addField(
@@ -722,8 +723,8 @@ class AntFarm : ModelTask() {
                 receiveToolTaskReward()
                 tc.countDebug("收取道具奖励")
             }
-            if (queryFarmGameStatus!!.value) {
-                tc.countDebug("庄园游戏状态查询（不改分）")
+            if (recordFarmGame!!.value) {
+                tc.countDebug("游戏改分(星星球、登山赛、飞行赛、揍小鸡)")
                 handleFarmGameLogic()
             }
 
@@ -1432,7 +1433,7 @@ class AntFarm : ModelTask() {
 
         // 在蹲点喂食逻辑中判断是否需要执行游戏改分及抽抽乐
         if (isChildTask) {
-            if (queryFarmGameStatus!!.value) {
+            if (recordFarmGame!!.value) {
                 handleFarmGameLogic()
             }
             if (enableChouchoule!!.value) {
@@ -2058,48 +2059,64 @@ class AntFarm : ModelTask() {
             GameType.starGame,
             GameType.jumpGame
         )
-        val snapshots = FarmGameReadOnlyWorkflow(
-            queryGame = AntFarmRpcCall::initFarmGame
-        ).inspect(gameTypes.map(GameType::name))
-        gameTypes.zip(snapshots).forEach { (gameType, snapshot) ->
-            if (!snapshot.recognized) {
-                Log.record(
-                    TAG,
-                    "庄园游戏状态未知[${gameType.gameName()}]"
-                )
-            } else {
-                Log.record(
-                    TAG,
-                    "庄园游戏状态[${gameType.gameName()}]#" +
-                        "剩余${snapshot.remainingGameCount}次，" +
-                        "三级奖励" +
-                        if (snapshot.levelThreeRewardReceived) {
-                            "已领取"
-                        } else {
-                            "未领取"
-                        }
-                )
+        val workflow = FarmGameWorkflow(
+            queryGame = AntFarmRpcCall::initFarmGame,
+            submitScore = AntFarmRpcCall::recordFarmGame,
+            pauseAfterAction = {
+                GlobalThreadPools.sleepCompat(3000L)
+            },
+            isActionSuccess = { response ->
+                runCatching {
+                    ResChecker.checkRes(TAG, JSONObject(response))
+                }.getOrDefault(false)
+            }
+        )
+        var allConfirmed = true
+        for (gameType in gameTypes) {
+            var steps = 0
+            while (steps++ < 20) {
+                val result = workflow.play(gameType.name)
+                when (result.outcome) {
+                    FarmGameOutcome.CONFIRMED -> {
+                        Log.farm(
+                            "庄园游戏🎮[${gameType.gameName()}]#" +
+                                "${result.message}"
+                        )
+                    }
+                    FarmGameOutcome.NO_ACTION -> break
+                    FarmGameOutcome.RETRY -> {
+                        allConfirmed = false
+                        Log.record(
+                            TAG,
+                            "庄园游戏🎮[${gameType.gameName()}]#" +
+                                result.message
+                        )
+                        break
+                    }
+                }
+            }
+            if (steps > 20) {
+                allConfirmed = false
+                Log.record(TAG, "庄园游戏[${gameType.gameName()}]达到步骤上限")
             }
         }
-        Log.record(TAG, "庄园游戏只读状态查询结束，未提交成绩")
-        return snapshots.size == gameTypes.size &&
-            snapshots.all(FarmGameReadOnlySnapshot::recognized)
+        return allConfirmed
     }
 
     private suspend fun handleFarmGameLogic() {
-        if (Status.hasFlagToday("farm::farmGameStatusQueried")) {
-            Log.record("今日庄园游戏状态已查询")
+        if (Status.hasFlagToday("farm::farmGameFinished")) {
+            Log.record("今日庄园游戏改分已完成")
             return
         }
         val inTimeRange = farmGameTime!!.value.any {
             TimeUtil.checkNowInTimeRange(it)
         }
         if (!inTimeRange) {
-            Log.record("庄园游戏状态查询未到设定时间")
+            Log.record("庄园游戏改分未到设定时间")
             return
         }
         if (playAllFarmGames()) {
-            Status.setFlagToday("farm::farmGameStatusQueried")
+            Status.setFlagToday("farm::farmGameFinished")
         }
     }
 
@@ -5129,11 +5146,11 @@ class AntFarm : ModelTask() {
      */
     suspend fun manualFarmGameLogic() {
         try {
-            Log.record(TAG, "开始执行手动庄园游戏状态查询...")
+            Log.record(TAG, "开始执行手动庄园游戏改分...")
             if (enterFarm() != null) {
                 syncAnimalStatus(ownerFarmId)
                 playAllFarmGames()
-                Log.record(TAG, "手动庄园游戏状态查询完毕")
+                Log.record(TAG, "手动庄园游戏改分完毕")
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "manualFarmGameLogic err:", t)

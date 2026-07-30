@@ -6,16 +6,18 @@ import org.junit.Test
 class SportsTaskWorkflowTest {
 
     @Test
-    fun `日常组TODO任务不会调用伪完成接口`() {
+    fun `普通日常任务完成并回查到COMPLETED才确认`() {
+        var queryCalls = 0
         var completeCalls = 0
         val workflow = SportsTaskWorkflow(
             queryGroup = {
+                queryCalls++
                 groupResponse(
                     taskJson(
                         "SPORTS_DAILY_BROWSE",
                         "BROWSE",
                         "浏览文体页面",
-                        "TODO"
+                        if (queryCalls == 1) "TODO" else "COMPLETED"
                     )
                 )
             },
@@ -29,9 +31,9 @@ class SportsTaskWorkflowTest {
         val result = workflow.process("SPORTS_DAILY_GROUP")
 
         assertEquals(true, result.recognized)
-        assertEquals(0, completeCalls)
+        assertEquals(1, completeCalls)
         assertEquals(
-            SportsTaskOutcome.SKIPPED_UNSAFE,
+            SportsTaskOutcome.CONFIRMED,
             result.executions.single().outcome
         )
     }

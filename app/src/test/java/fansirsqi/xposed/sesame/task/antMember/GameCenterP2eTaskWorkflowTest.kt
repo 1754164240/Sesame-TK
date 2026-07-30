@@ -8,7 +8,7 @@ import org.junit.Test
 class GameCenterP2eTaskWorkflowTest {
 
     @Test
-    fun `P2E游戏广告和未知任务不得调用任何动作`() {
+    fun `P2E已完成游戏广告允许领奖且未知任务跳过`() {
         var actionCalls = 0
         val workflow = workflow(
             queryTaskSources = {
@@ -42,9 +42,10 @@ class GameCenterP2eTaskWorkflowTest {
 
         val result = workflow.run()
 
-        assertEquals(0, actionCalls)
-        assertEquals(3, result.skipped)
+        assertEquals(2, actionCalls)
+        assertEquals(1, result.skipped)
         assertEquals(0, result.completed)
+        assertEquals(2, result.failed)
     }
 
     @Test
@@ -146,17 +147,56 @@ class GameCenterP2eTaskWorkflowTest {
         assertEquals(1, result.completed)
     }
 
+    @Test
+    fun `P2E真实游戏进入交互工作流`() {
+        var interactiveCalls = 0
+        val workflow = workflow(
+            queryTaskSources = {
+                listOf(
+                    taskResponse(
+                        task(
+                            "game-1",
+                            "NOT_DONE",
+                            "GAME_TRAN_TASK",
+                            "NORMAL"
+                        )
+                    )
+                )
+            },
+            executeInteractiveTask = {
+                interactiveCalls++
+                GameCenterInteractiveResult(
+                    GameCenterInteractiveOutcome.CONFIRMED,
+                    "真实游戏状态已确认"
+                )
+            }
+        )
+
+        val result = workflow.run()
+
+        assertEquals(1, interactiveCalls)
+        assertEquals(1, result.completed)
+    }
+
     private fun workflow(
         queryTaskSources: () -> List<String>,
         signupTask: (JSONObject) -> String = { successResponse() },
         completeTask: (JSONObject) -> String = { successResponse() },
-        receiveTask: (JSONObject) -> String = { successResponse() }
+        receiveTask: (JSONObject) -> String = { successResponse() },
+        executeInteractiveTask: (JSONObject) ->
+            GameCenterInteractiveResult = {
+                GameCenterInteractiveResult(
+                    GameCenterInteractiveOutcome.SKIPPED,
+                    "未配置"
+                )
+            }
     ): GameCenterP2eTaskWorkflow {
         return GameCenterP2eTaskWorkflow(
             queryTaskSources = queryTaskSources,
             signupTask = signupTask,
             completeTask = completeTask,
             receiveTask = receiveTask,
+            executeInteractiveTask = executeInteractiveTask,
             isActionSuccess = { response ->
                 JSONObject(response).optBoolean("success", false)
             }

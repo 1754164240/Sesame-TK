@@ -10,7 +10,7 @@ import org.junit.Test
 class GameCenterTaskPolicyTest {
 
     @Test
-    fun `普通真实游戏通关任务必须跳过`() {
+    fun `普通真实游戏通关任务允许交互执行`() {
         val task = JSONObject()
             .put("actionType", "NORMAL")
             .put("taskStatus", "NOT_DONE")
@@ -21,13 +21,13 @@ class GameCenterTaskPolicyTest {
             .put("title", "玩游戏通过一关")
 
         assertEquals(
-            GameCenterTaskDecision.SKIP_REAL_GAME,
+            GameCenterTaskDecision.EXECUTE_GAME,
             GameCenterTaskPolicy.classifyPlatformTask(task)
         )
     }
 
     @Test
-    fun `P2E真实游戏任务必须跳过`() {
+    fun `P2E真实游戏任务允许交互执行`() {
         val task = JSONObject()
             .put("taskType", "GAME_TRAN_TASK")
             .put("actionType", "NORMAL")
@@ -35,13 +35,13 @@ class GameCenterTaskPolicyTest {
             .put("title", "完成游戏订单")
 
         assertEquals(
-            GameCenterTaskDecision.SKIP_REAL_GAME,
+            GameCenterTaskDecision.EXECUTE_GAME,
             GameCenterTaskPolicy.classifyP2eTask(task)
         )
     }
 
     @Test
-    fun `P2E广告任务必须跳过`() {
+    fun `P2E广告任务允许交互执行`() {
         val task = JSONObject()
             .put("taskType", "PLATFORM_TRAN_TASK")
             .put("actionType", "LIGHT_AD_TASK")
@@ -49,13 +49,13 @@ class GameCenterTaskPolicyTest {
             .put("title", "观看广告")
 
         assertEquals(
-            GameCenterTaskDecision.SKIP_AD,
+            GameCenterTaskDecision.EXECUTE_AD,
             GameCenterTaskPolicy.classifyP2eTask(task)
         )
     }
 
     @Test
-    fun `P2E已完成真实游戏也不得领奖`() {
+    fun `P2E已完成真实游戏允许领奖`() {
         val task = JSONObject()
             .put("taskType", "GAME_TRAN_TASK")
             .put("actionType", "VIEW_TASK")
@@ -64,13 +64,13 @@ class GameCenterTaskPolicyTest {
             .put("title", "完成游戏订单")
 
         assertEquals(
-            GameCenterTaskDecision.SKIP_REAL_GAME,
+            GameCenterTaskDecision.CLAIM_ONLY,
             GameCenterTaskPolicy.classifyP2eTask(task)
         )
     }
 
     @Test
-    fun `P2E已完成广告任务也不得领奖`() {
+    fun `P2E已完成广告任务允许领奖`() {
         val task = JSONObject()
             .put("taskType", "PLATFORM_TRAN_TASK")
             .put("actionType", "LIGHT_AD_TASK")
@@ -79,7 +79,7 @@ class GameCenterTaskPolicyTest {
             .put("title", "观看广告")
 
         assertEquals(
-            GameCenterTaskDecision.SKIP_AD,
+            GameCenterTaskDecision.CLAIM_ONLY,
             GameCenterTaskPolicy.classifyP2eTask(task)
         )
     }
@@ -97,6 +97,39 @@ class GameCenterTaskPolicyTest {
             GameCenterTaskDecision.SKIP_FINANCIAL,
             GameCenterTaskPolicy.classifyP2eTask(task)
         )
+    }
+
+    @Test
+    fun `兑换投资现金和捐赠任务始终阻断`() {
+        val tasks = listOf(
+            JSONObject()
+                .put("taskStatus", "NOT_DONE")
+                .put("actionType", "VIEW_TASK")
+                .put("title", "兑换游戏礼包"),
+            JSONObject()
+                .put("taskStatus", "NOT_DONE")
+                .put("actionType", "INVEST_TASK")
+                .put("title", "浏览专区"),
+            JSONObject()
+                .put("taskStatus", "NOT_DONE")
+                .put("actionType", "VIEW_TASK")
+                .put("title", "领取现金"),
+            JSONObject()
+                .put("taskStatus", "NOT_DONE")
+                .put("actionType", "DONATION_TASK")
+                .put("title", "完成公益任务")
+        )
+
+        for (task in tasks) {
+            assertEquals(
+                GameCenterTaskDecision.SKIP_FINANCIAL,
+                GameCenterTaskPolicy.classifyPlatformTask(task)
+            )
+            assertEquals(
+                GameCenterTaskDecision.SKIP_FINANCIAL,
+                GameCenterTaskPolicy.classifyP2eTask(task)
+            )
+        }
     }
 
     @Test
