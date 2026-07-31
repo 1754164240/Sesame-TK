@@ -48,9 +48,9 @@ class MemberTaskSafetyPolicyTest {
     }
 
     @Test
-    fun `浏览任务不因标题关键词被阻断`() {
+    fun `代码黑名单阻断资金动作任务`() {
         assertEquals(
-            MemberTaskDecision.EXECUTE_BROWSE,
+            MemberTaskDecision.SKIP_UNSUPPORTED,
             MemberTaskSafetyPolicy.classify(
                 MemberTaskCandidate(
                     configId = "600202500151482",
@@ -59,6 +59,22 @@ class MemberTaskSafetyPolicyTest {
                 )
             )
         )
+    }
+
+    @Test
+    fun `玩一玩游戏和逛一逛不在代码黑名单`() {
+        listOf("玩一玩游戏", "逛一逛").forEach { title ->
+            assertEquals(
+                MemberTaskDecision.EXECUTE_BROWSE,
+                MemberTaskSafetyPolicy.classify(
+                    MemberTaskCandidate(
+                        configId = "unknown",
+                        title = title,
+                        targetBusiness = "BROWSE#15S#member-task"
+                    )
+                )
+            )
+        }
     }
 
     @Test

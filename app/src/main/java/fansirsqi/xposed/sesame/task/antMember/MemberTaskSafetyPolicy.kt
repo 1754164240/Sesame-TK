@@ -16,7 +16,25 @@ enum class MemberTaskDecision {
 }
 
 object MemberTaskSafetyPolicy {
+    private val blockedTitleKeywords = setOf(
+        "提现",
+        "借款",
+        "借一笔",
+        "借呗",
+        "贷款",
+        "充值",
+        "下单",
+        "购买",
+        "支付",
+        "开通额度",
+        "现金兑换"
+    )
+
     fun classify(candidate: MemberTaskCandidate): MemberTaskDecision {
+        if (blockedTitleKeywords.any(candidate.title::contains)) {
+            return MemberTaskDecision.SKIP_UNSUPPORTED
+        }
+
         if (candidate.adBizId.isNotBlank()) {
             return MemberTaskDecision.FINISH_AD
         }

@@ -109,6 +109,33 @@ class MemberTaskWorkflowTest {
     }
 
     @Test
+    fun `会员短标题未命中代码黑名单时仍然执行`() = runBlocking {
+        var executeCalls = 0
+        val workflow = MemberTaskWorkflow(
+            queryTaskSources = {
+                listOf(
+                    taskListResponse(
+                        status = "PROCESSING",
+                        title = "逛一逛"
+                    )
+                )
+            },
+            applyTask = { """{"success":true}""" },
+            executeTask = {
+                executeCalls++
+                """{"success":true}"""
+            },
+            queryTaskDetail = { taskDetailResponse(status = "COMPLETE") },
+            pauseBeforeCompletion = {}
+        )
+
+        val result = workflow.run()
+
+        assertEquals(1, executeCalls)
+        assertEquals(1, result.confirmed)
+    }
+
+    @Test
     fun `CALL_APP任务不调用动作且仅以详情终态确认`() = runBlocking {
         var actionCalls = 0
         var detailCalls = 0
