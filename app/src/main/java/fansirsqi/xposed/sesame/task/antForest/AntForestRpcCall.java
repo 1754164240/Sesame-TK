@@ -13,6 +13,7 @@ import fansirsqi.xposed.sesame.entity.AlipayVersion;
 import fansirsqi.xposed.sesame.entity.RpcEntity;
 import fansirsqi.xposed.sesame.hook.ApplicationHook;
 import fansirsqi.xposed.sesame.hook.RequestManager;
+import fansirsqi.xposed.sesame.hook.RpcRequestContext;
 import fansirsqi.xposed.sesame.util.Log;
 import fansirsqi.xposed.sesame.util.RandomUtil;
 
@@ -105,18 +106,44 @@ public class AntForestRpcCall {
     }
 
     public static String queryHomePage() throws JSONException {
+        return RequestManager.requestString(
+                "alipay.antforest.forest.h5.queryHomePage",
+                buildQueryHomePageArgs(),
+                3,
+                1000
+        );
+    }
+
+    public static boolean queryHomePageForVerificationProbe(long generation) {
+        try {
+            RpcRequestContext context = new RpcRequestContext(
+                    "verification-probe-" + generation,
+                    "人工验证恢复",
+                    "森林首页只读探测",
+                    null,
+                    null,
+                    null,
+                    null
+            );
+            return RequestManager.requestVerificationProbe(
+                    "alipay.antforest.forest.h5.queryHomePage",
+                    buildQueryHomePageArgs(),
+                    generation,
+                    context
+            );
+        } catch (JSONException e) {
+            return false;
+        }
+    }
+
+    private static String buildQueryHomePageArgs() throws JSONException {
         JSONObject requestObject = new JSONObject()
                 .put("activityParam", new JSONObject())
                 .put("configVersionMap", new JSONObject().put("wateringBubbleConfig", "0"))
                 .put("skipWhackMole", false)
                 .put("source", "chInfo_ch_appcenter__chsub_9patch")
                 .put("version", VERSION);
-        return RequestManager.requestString(
-                "alipay.antforest.forest.h5.queryHomePage",
-                new JSONArray().put(requestObject).toString(),
-                3,
-                1000
-        );
+        return new JSONArray().put(requestObject).toString();
     }
 
     public static String queryFriendHomePage(String userId, String fromAct) {

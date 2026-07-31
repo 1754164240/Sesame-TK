@@ -31,6 +31,7 @@ import fansirsqi.xposed.sesame.hook.keepalive.SmartSchedulerManager.cleanup
 import fansirsqi.xposed.sesame.hook.keepalive.SmartSchedulerManager.schedule
 import fansirsqi.xposed.sesame.hook.keepalive.PersistentSchedulerContract
 import fansirsqi.xposed.sesame.hook.keepalive.PersistentSchedulerRuntime
+import fansirsqi.xposed.sesame.hook.keepalive.PersistentScheduleKind
 import fansirsqi.xposed.sesame.hook.modern.ModernXposedRuntime
 import fansirsqi.xposed.sesame.hook.modern.ReflectionHelper
 import fansirsqi.xposed.sesame.hook.rpc.bridge.NewRpcBridge
@@ -47,6 +48,7 @@ import fansirsqi.xposed.sesame.model.BaseModel.Companion.destroyData
 import fansirsqi.xposed.sesame.model.BaseModel.Companion.execAtTimeList
 import fansirsqi.xposed.sesame.model.BaseModel.Companion.newRpc
 import fansirsqi.xposed.sesame.model.BaseModel.Companion.allowPersistentForegroundLaunch
+import fansirsqi.xposed.sesame.model.BaseModel.Companion.errNotify
 import fansirsqi.xposed.sesame.model.BaseModel.Companion.persistentSchedulerEnabled
 import fansirsqi.xposed.sesame.model.BaseModel.Companion.sendHookData
 import fansirsqi.xposed.sesame.model.BaseModel.Companion.sendHookDataUrl
@@ -55,7 +57,9 @@ import fansirsqi.xposed.sesame.model.Model
 import fansirsqi.xposed.sesame.task.CoroutineTaskRunner
 import fansirsqi.xposed.sesame.task.MainTask
 import fansirsqi.xposed.sesame.task.ModelTask.Companion.stopAllTaskAndJoin
+import fansirsqi.xposed.sesame.task.TaskRecoveryRegistry
 import fansirsqi.xposed.sesame.task.antForest.AntForest
+import fansirsqi.xposed.sesame.task.antForest.AntForestRpcCall
 import fansirsqi.xposed.sesame.task.customTasks.CustomTask
 import fansirsqi.xposed.sesame.task.customTasks.ManualTask
 import fansirsqi.xposed.sesame.task.customTasks.ManualTaskModel
@@ -85,6 +89,7 @@ import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedModuleInterface.PackageReadyParam
 import org.luckypray.dexkit.DexKitBridge
 import kotlinx.coroutines.runBlocking
+import org.json.JSONObject
 import java.io.File
 import java.lang.AutoCloseable
 import java.util.Calendar
@@ -347,6 +352,10 @@ class ApplicationHook {
                 BroadcastActions.RE_LOGIN -> reOpenApp()
                 BroadcastActions.RPC_TEST -> handleRpcTest(intent)
                 BroadcastActions.MANUAL_TASK -> {
+                    if (RequestManager.restartVerificationRecovery()) {
+                        record(TAG, "人工验证阻断中，已重新开始30次恢复探测")
+                        return
+                    }
                     record(TAG, "🚀 收到手动庄园任务指令")
                     execute {
                         val taskName = intent.getStringExtra("task")
@@ -639,7 +648,20 @@ class ApplicationHook {
                     currentOwnerProvider = {
                         classLoader?.let { HookUtil.getUserId(it) }
                     },
-                    requestExecution = {
+                    requestExecution = { persistentSchedule ->
+                        if (persistentSchedule.kind == PersistentScheduleKind.VERIFICATION_PROBE) {
+                            val verificationGeneration = runCatching {
+                                JSONObject(persistentSchedule.payloadJson)
+                                    .optLong("verificationGeneration", -1L)
+                            }.getOrDefault(-1L)
+                            return@initializeTarget verificationGeneration > 0L &&
+                                RequestManager.runScheduledVerificationProbe(
+                                    verificationGeneration
+                                )
+                        }
+                        if (RequestManager.isVerificationBlocked()) {
+                            return@initializeTarget false
+                        }
                         val task = mainTask ?: return@initializeTarget false
                         task.startTask(false)
                         true
@@ -674,6 +696,46 @@ class ApplicationHook {
                 show(successMsg)
 
                 offline = false
+                RequestManager.configureVerificationRecovery(
+                    ownerUserId = userId,
+                    schedule = { delayMillis, taskName, block ->
+                        val parts = taskName.split(":")
+                        val verificationGeneration = parts.getOrNull(1)?.toLongOrNull()
+                        val attempt = parts.getOrNull(2)?.toIntOrNull() ?: 1
+                        val legacySchedule = {
+                            ensureScheduler()
+                            schedule(delayMillis, taskName, block)
+                            Unit
+                        }
+                        val controller = PersistentSchedulerRuntime.targetController()
+                        if (controller == null || verificationGeneration == null) {
+                            legacySchedule()
+                        } else {
+                            val ownerUserId = classLoader?.let { HookUtil.getUserId(it) }
+                            execute {
+                                runCatching {
+                                    controller.scheduleVerificationProbe(
+                                        triggerAtMillis = System.currentTimeMillis() + delayMillis,
+                                        ownerUserId = ownerUserId,
+                                        verificationGeneration = verificationGeneration,
+                                        attempt = attempt,
+                                        legacySchedule = legacySchedule
+                                    )
+                                }.onFailure {
+                                    Log.printStackTrace(
+                                        TAG,
+                                        "注册人工验证持久探测失败，回退进程内调度",
+                                        it
+                                    )
+                                    legacySchedule()
+                                }
+                            }
+                        }
+                    },
+                    probe = AntForestRpcCall::queryHomePageForVerificationProbe,
+                    onRecovered = ::handleVerificationRecovered,
+                    onExhausted = ::handleVerificationProbeExhausted
+                )
                 RequestManager.onRpcBridgeReady()
                 init = true
                 execute {
@@ -683,7 +745,6 @@ class ApplicationHook {
                         Log.printStackTrace(TAG, "恢复持久调度失败", it)
                     }
                 }
-                execHandler()
                 return true
             } catch (th: Throwable) {
                 printStackTrace(TAG, "startHandler", th)
@@ -739,7 +800,54 @@ class ApplicationHook {
         }
 
         fun execHandler() {
-            if (mainTask != null) mainTask!!.startTask(false)
+            if (RequestManager.isVerificationBlocked()) {
+                record(TAG, "人工验证阻断中，跳过普通任务启动")
+                return
+            }
+            mainTask?.startTask(false)
+        }
+
+        private fun handleVerificationRecovered(generation: Long) {
+            val recoveryTaskIds = TaskRecoveryRegistry.prepareRecovery(generation)
+            record(
+                TAG,
+                "人工验证探测已恢复，待补跑模块数=${recoveryTaskIds.size}，generation=$generation"
+            )
+            if (errNotify.value) {
+                Notify.sendNewNotification(
+                    "${TimeUtil.getTimeStr()} | 人工验证已恢复",
+                    "将补跑本轮未完成任务"
+                )
+            }
+            if (recoveryTaskIds.isNotEmpty()) {
+                scheduleRecoveryRun(generation)
+            }
+        }
+
+        private fun scheduleRecoveryRun(generation: Long) {
+            ensureScheduler()
+            schedule(1_000L, "人工验证恢复补跑:$generation") {
+                val task = mainTask
+                if (task == null) {
+                    record(TAG, "主任务未初始化，暂缓人工验证恢复补跑")
+                    return@schedule
+                }
+                if (task.isRunning) {
+                    scheduleRecoveryRun(generation)
+                    return@schedule
+                }
+                execHandler()
+            }
+        }
+
+        private fun handleVerificationProbeExhausted(generation: Long) {
+            record(TAG, "人工验证恢复探测已达到30次，保持阻断: generation=$generation")
+            if (errNotify.value) {
+                Notify.sendNewNotification(
+                    "${TimeUtil.getTimeStr()} | 人工验证仍未恢复",
+                    "已完成30次探测，请验证后手动重新调度"
+                )
+            }
         }
 
         private fun stopHandler() {

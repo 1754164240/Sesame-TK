@@ -77,6 +77,33 @@ class PersistentSchedulerControllerTest {
         assertTrue(fixture.registry.all().isEmpty())
     }
 
+    @Test
+    fun disabledPersistentSchedulerClearsProbeAndUsesProcessScheduler() {
+        val fixture = fixture(enabled = false)
+        fixture.registry.upsert(
+            PersistentSchedule(
+                dedupeKey = "verification:probe:owner:3",
+                kind = PersistentScheduleKind.VERIFICATION_PROBE,
+                triggerAtMillis = 4_000L,
+                ownerUserId = "owner"
+            ),
+            0L
+        )
+        var legacyCalls = 0
+
+        fixture.controller.scheduleVerificationProbe(
+            triggerAtMillis = 5_000L,
+            ownerUserId = "owner",
+            verificationGeneration = 3L,
+            attempt = 2
+        ) {
+            legacyCalls++
+        }
+
+        assertEquals(1, legacyCalls)
+        assertNull(fixture.registry.get("verification:probe:owner:3"))
+    }
+
     private fun fixture(enabled: Boolean): Fixture {
         val registry = PersistentScheduleRegistry(InMemoryPersistentScheduleStorage())
         val coordinator = PersistentScheduleCoordinator(

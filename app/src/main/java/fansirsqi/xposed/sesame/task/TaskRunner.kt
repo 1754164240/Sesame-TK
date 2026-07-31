@@ -70,11 +70,23 @@ class CoroutineTaskRunner(allModels: List<Model>) {
 
             CustomSettings.loadForTaskRunner()
             val status = CustomSettings.getOnceDailyStatus(enableLog = true)
+            val recoverySelection = TaskRecoveryRegistry.consumeRecoverySelection()
+            val eligibleTasks = taskList.filter { task ->
+                task.isEnable &&
+                    !CustomSettings.isOnceDailyBlackListed(task.getName(), status) &&
+                    (recoverySelection == null ||
+                        TaskRecoveryRegistry.stableTaskId(task) in recoverySelection)
+            }
+            if (recoverySelection == null) {
+                TaskRecoveryRegistry.beginRun(
+                    eligibleTasks.map(TaskRecoveryRegistry::stableTaskId)
+                )
+            }
 
             // 执行多轮任务
             repeat(rounds) { roundIndex ->
                 val round = roundIndex + 1
-                executeRound(round, rounds, status, taskConcurrency)
+                executeRound(round, rounds, eligibleTasks, taskConcurrency)
             }
 
             if (CustomSettings.onlyOnceDaily.value) {
@@ -109,15 +121,10 @@ class CoroutineTaskRunner(allModels: List<Model>) {
     private suspend fun executeRound(
         round: Int,
         totalRounds: Int,
-        status: CustomSettings.OnceDailyStatus,
+        tasksToRun: List<ModelTask>,
         taskConcurrency: Int
     ) = coroutineScope {
         val roundStartTime = System.currentTimeMillis()
-
-        // 1. 筛选任务
-        val tasksToRun = taskList.filter { task ->
-            task.isEnable && !CustomSettings.isOnceDailyBlackListed(task.getName(), status)
-        }
 
         val excludedCount = taskList.count { it.isEnable } - tasksToRun.size
         repeat(excludedCount.coerceAtLeast(0)) {
@@ -136,6 +143,10 @@ class CoroutineTaskRunner(allModels: List<Model>) {
                 semaphore.withPermit {
                     if (!TaskRunnerPolicy.shouldStart(ApplicationHook.offline, ManualTask.isManualRunning)) {
                         runCounter.record(TaskRunOutcome.SKIPPED_OFFLINE)
+                        TaskRecoveryRegistry.record(
+                            TaskRecoveryRegistry.stableTaskId(task),
+                            RecoverableTaskOutcome.BLOCKED_VERIFICATION
+                        )
                         Log.record(TAG, "⏸ 任务 ${task.getName()} 因离线或手动模式而跳过")
                         return@withPermit
                     }
@@ -188,6 +199,20 @@ class CoroutineTaskRunner(allModels: List<Model>) {
             }
 
             val time = System.currentTimeMillis() - startTime
+            val taskStableId = TaskRecoveryRegistry.stableTaskId(task)
+            if (ApplicationHook.offline) {
+                TaskRecoveryRegistry.record(
+                    taskStableId,
+                    RecoverableTaskOutcome.BLOCKED_VERIFICATION
+                )
+            } else {
+                val recoverableOutcome = when (outcome) {
+                    TaskRunOutcome.COMPLETED,
+                    TaskRunOutcome.STARTED_BACKGROUND -> RecoverableTaskOutcome.COMPLETED
+                    else -> RecoverableTaskOutcome.FAILED
+                }
+                TaskRecoveryRegistry.record(taskStableId, recoverableOutcome)
+            }
             runCounter.record(outcome)
             taskExecutionTimes[taskId] = time
             when (outcome) {
@@ -207,12 +232,24 @@ class CoroutineTaskRunner(allModels: List<Model>) {
             runCounter.record(TaskRunOutcome.TIMED_OUT)
             Log.error(TAG, "⏰ 超时: $taskId (${time}ms > ${timeout}ms)")
             task.stopTaskAndJoin()
+            TaskRecoveryRegistry.record(
+                TaskRecoveryRegistry.stableTaskId(task),
+                RecoverableTaskOutcome.FAILED
+            )
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             val time = System.currentTimeMillis() - startTime
             runCounter.record(TaskRunOutcome.FAILED)
             Log.error(TAG, "❌ 失败: $taskId (${e.message})")
+            TaskRecoveryRegistry.record(
+                TaskRecoveryRegistry.stableTaskId(task),
+                if (ApplicationHook.offline) {
+                    RecoverableTaskOutcome.BLOCKED_VERIFICATION
+                } else {
+                    RecoverableTaskOutcome.FAILED
+                }
+            )
         }
     }
 

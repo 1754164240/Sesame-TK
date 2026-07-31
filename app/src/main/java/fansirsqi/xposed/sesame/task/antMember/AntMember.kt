@@ -13,6 +13,8 @@ import fansirsqi.xposed.sesame.data.StatusFlags
 import fansirsqi.xposed.sesame.entity.MemberBenefit
 import fansirsqi.xposed.sesame.entity.SesameGift
 import fansirsqi.xposed.sesame.hook.ApplicationHook
+import fansirsqi.xposed.sesame.hook.RequestManager
+import fansirsqi.xposed.sesame.hook.RpcRequestContext
 import fansirsqi.xposed.sesame.hook.internal.LocationHelper.requestLocationSuspend
 import fansirsqi.xposed.sesame.hook.internal.SecurityBodyHelper.getSecurityBodyData
 import fansirsqi.xposed.sesame.model.ModelFields
@@ -1121,42 +1123,99 @@ class AntMember : ModelTask() {
             processMemberTreasureBox()
             processLimitedGameVisit()
 
-            val progressResponse = AntMemberRpcCall.queryMemberTaskProgress()
+            val runTraceId = "member-${System.currentTimeMillis()}"
+            val progressContext = memberRpcContext(runTraceId, "累计进度查询")
+            val progressResponse = callMemberRpc(
+                progressContext,
+                "com.alipay.alipaymember.biz.rpc.membertask.h5.queryTaskList"
+            ) {
+                AntMemberRpcCall.queryMemberTaskProgress(progressContext)
+            }
             val beforeProgress = parseMemberTaskProgress(progressResponse)
             val workflow = MemberTaskWorkflow(
                 queryTaskSources = {
+                    val signContext = memberRpcContext(runTraceId, "任务列表查询")
+                    val allStatusContext = memberRpcContext(runTraceId, "全部状态查询")
                     listOf(
-                        AntMemberRpcCall.querySignPageTaskList(),
-                        AntMemberRpcCall.queryAllStatusTaskList(),
+                        callMemberRpc(
+                            signContext,
+                            "com.alipay.amic.memtask.h5.MemTaskListQueryFacade.signPageTaskList"
+                        ) {
+                            AntMemberRpcCall.querySignPageTaskList(signContext)
+                        },
+                        callMemberRpc(
+                            allStatusContext,
+                            "com.alipay.amic.memtask.h5.MemTaskListQueryFacade.queryAllStatusTaskList"
+                        ) {
+                            AntMemberRpcCall.queryAllStatusTaskList(allStatusContext)
+                        },
                         progressResponse
                     )
                 },
                 applyTask = { task ->
+                    val context = memberRpcContext(runTraceId, "领取", task)
                     if (task.adBizId.isNotBlank()) {
-                        AntMemberRpcCall.applyMemberAdTask(task)
+                        callMemberRpc(
+                            context,
+                            "com.alipay.amic.memtask.h5.MemTaskAdFacade.applyAdTask"
+                        ) {
+                            AntMemberRpcCall.applyMemberAdTask(task, context)
+                        }
                     } else {
-                        AntMemberRpcCall.applyMemberTask(task)
+                        callMemberRpc(
+                            context,
+                            "com.alipay.amic.memtask.h5.MemTaskManagerFacade.applyTask"
+                        ) {
+                            AntMemberRpcCall.applyMemberTask(task, context)
+                        }
                     }
                 },
                 executeTask = { task ->
-                    AntMemberRpcCall.executeMemberTask(task)
+                    val context = memberRpcContext(runTraceId, "执行", task)
+                    callMemberRpc(
+                        context,
+                        "com.alipay.amic.memtask.h5.MemTaskManagerFacade.executeTask"
+                    ) {
+                        AntMemberRpcCall.executeMemberTask(task, context)
+                    }
                 },
                 finishAdTask = { task ->
                     if (task.adBizId.isBlank()) {
                         ""
                     } else {
-                        AntMemberRpcCall.taskFinish(task.adBizId)
+                        val context = memberRpcContext(runTraceId, "完成广告", task)
+                        callMemberRpc(
+                            context,
+                            "com.alipay.adtask.biz.mobilegw.service.task.finish"
+                        ) {
+                            AntMemberRpcCall.taskFinish(task.adBizId, context)
+                        }
                     }
                 },
                 queryTaskDetail = { task ->
+                    val context = memberRpcContext(runTraceId, "任务详情复查", task)
                     when {
                         task.adBizId.isNotBlank() && task.configId.isNotBlank() ->
-                            AntMemberRpcCall.querySingleAdTaskProcessDetail(
-                                task.configId,
-                                task.adBizId
-                            )
+                            callMemberRpc(
+                                context,
+                                "com.alipay.amic.memtask.h5.MemTaskListQueryFacade.querySingleTaskProcessDetail"
+                            ) {
+                                AntMemberRpcCall.querySingleAdTaskProcessDetail(
+                                    task.configId,
+                                    task.adBizId,
+                                    context
+                                )
+                            }
                         task.processId.isNotBlank() ->
-                            AntMemberRpcCall.querySingleTaskProcessDetail(task.processId)
+                            callMemberRpc(
+                                context,
+                                "com.alipay.amic.memtask.h5.MemTaskListQueryFacade.querySingleTaskProcessDetail"
+                            ) {
+                                AntMemberRpcCall.querySingleTaskProcessDetail(
+                                    task.processId,
+                                    context
+                                )
+                            }
                         else -> ""
                     }
                 },
@@ -1209,7 +1268,14 @@ class AntMember : ModelTask() {
 
             delay(500)
             val afterProgress = parseMemberTaskProgress(
-                AntMemberRpcCall.queryMemberTaskProgress()
+                callMemberRpc(
+                    progressContext.copy(stage = "执行后累计进度查询"),
+                    "com.alipay.alipaymember.biz.rpc.membertask.h5.queryTaskList"
+                ) {
+                    AntMemberRpcCall.queryMemberTaskProgress(
+                        progressContext.copy(stage = "执行后累计进度查询")
+                    )
+                }
             )
             if (afterProgress != null) {
                 val increased = max(
@@ -1226,6 +1292,39 @@ class AntMember : ModelTask() {
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "doAllMemberAvailableTask err:", t)
         }
+    }
+
+    private fun memberRpcContext(
+        runTraceId: String,
+        stage: String,
+        task: MemberTaskState? = null
+    ): RpcRequestContext {
+        val taskTraceId = task?.stableKey?.let { "$runTraceId:$it" } ?: runTraceId
+        return RpcRequestContext(
+            traceId = taskTraceId,
+            source = "会员任务",
+            stage = stage,
+            taskName = task?.title,
+            configId = task?.configId,
+            taskId = task?.processId,
+            targetBusiness = task?.targetBusiness
+        )
+    }
+
+    private inline fun callMemberRpc(
+        context: RpcRequestContext,
+        method: String,
+        call: () -> String
+    ): String {
+        Log.record(TAG, "[会员任务][请求] ${context.toSafeLog(method)}")
+        val result = call()
+        val failure = RequestManager.classifyResponse(result)
+        Log.record(
+            TAG,
+            "[会员任务][结果] ${context.toSafeLog(method)} | " +
+                "分类=${failure.kind} | code=${failure.code.orEmpty()}"
+        )
+        return result
     }
 
     private fun parseMemberTaskProgress(responseText: String): MemberTaskProgress? {

@@ -70,6 +70,46 @@ class RpcRecoveryPolicyTest {
     }
 
     @Test
+    fun `普通请求成功不能解除安全验证`() {
+        val policy = RpcRecoveryPolicy()
+        policy.onVerificationRequired()
+
+        assertEquals(false, policy.onSuccess(RpcRequestPurpose.BUSINESS))
+        assertEquals(RpcBlockReason.VERIFICATION, policy.blockReason)
+    }
+
+    @Test
+    fun `只有当前代际的探测成功才能解除安全验证`() {
+        val policy = RpcRecoveryPolicy()
+        policy.onVerificationRequired()
+        val oldGeneration = policy.verificationGeneration
+        policy.restartVerificationProbeCycle()
+        val currentGeneration = policy.verificationGeneration
+
+        assertEquals(
+            false,
+            policy.onSuccess(RpcRequestPurpose.VERIFICATION_PROBE, oldGeneration)
+        )
+        assertEquals(RpcBlockReason.VERIFICATION, policy.blockReason)
+        assertEquals(
+            true,
+            policy.onSuccess(RpcRequestPurpose.VERIFICATION_PROBE, currentGeneration)
+        )
+        assertEquals(RpcBlockReason.NONE, policy.blockReason)
+    }
+
+    @Test
+    fun `账号切换会清理内存中的验证阻断`() {
+        val policy = RpcRecoveryPolicy()
+        policy.restoreVerification(6L)
+
+        policy.reset()
+
+        assertEquals(RpcBlockReason.NONE, policy.blockReason)
+        assertEquals(0, policy.failureCount)
+    }
+
+    @Test
     fun `成功响应会清空阻断状态和失败计数`() {
         val policy = RpcRecoveryPolicy()
         policy.onNetworkFailure(1)

@@ -1,5 +1,7 @@
 package fansirsqi.xposed.sesame.hook.keepalive
 
+import java.util.concurrent.ConcurrentHashMap
+
 interface ScheduledRouteEnvironment {
     fun isTargetProcess(): Boolean
 
@@ -16,6 +18,7 @@ class ScheduledTaskRouter(
     private val environment: ScheduledRouteEnvironment,
     private val foregroundLaunchEnabled: (PersistentSchedule) -> Boolean
 ) : ScheduleTaskDispatcher {
+    private val launchedVerificationCycles = ConcurrentHashMap.newKeySet<String>()
 
     override fun dispatch(schedule: PersistentSchedule): ScheduleDispatchResult {
         if (schedule.kind == PersistentScheduleKind.UNKNOWN) {
@@ -38,7 +41,14 @@ class ScheduledTaskRouter(
         if (!environment.sendToTarget(schedule)) {
             return ScheduleDispatchResult.RETRY
         }
-        if (PersistentLaunchPolicy.shouldLaunchTarget(foregroundLaunchEnabled(schedule), schedule)) {
+        val shouldLaunch = PersistentLaunchPolicy.shouldLaunchTarget(
+            foregroundLaunchEnabled(schedule),
+            schedule
+        ) && (
+            schedule.kind != PersistentScheduleKind.VERIFICATION_PROBE ||
+                launchedVerificationCycles.add(schedule.dedupeKey)
+            )
+        if (shouldLaunch) {
             environment.launchTarget()
         }
 

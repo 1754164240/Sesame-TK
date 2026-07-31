@@ -3,6 +3,7 @@ package fansirsqi.xposed.sesame.hook.keepalive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.json.JSONObject
 import java.time.Instant
 import java.time.ZoneId
 
@@ -43,5 +44,25 @@ class PersistentSchedulePlannerTest {
         assertEquals(5_000L, schedule.triggerAtMillis)
         assertEquals(PersistentScheduleKind.GLOBAL_POLL, schedule.kind)
         assertTrue(PersistentLaunchPolicy.isForegroundLaunchEnabledInPayload(schedule))
+    }
+
+    @Test
+    fun verificationProbeCarriesRecoveryGenerationAndAttempt() {
+        val planner = PersistentSchedulePlanner(ZoneId.of("Asia/Shanghai"))
+
+        val schedule = planner.verificationProbe(
+            triggerAtMillis = 20_000L,
+            ownerUserId = "owner",
+            verificationGeneration = 9L,
+            attempt = 4,
+            allowForegroundLaunch = true
+        )
+        val payload = JSONObject(schedule.payloadJson)
+
+        assertEquals(PersistentScheduleKind.VERIFICATION_PROBE, schedule.kind)
+        assertEquals("verification:probe:owner:9", schedule.dedupeKey)
+        assertEquals(9L, payload.getLong("verificationGeneration"))
+        assertEquals(4, payload.getInt("attempt"))
+        assertTrue(payload.getBoolean("allowPersistentForegroundLaunch"))
     }
 }

@@ -68,6 +68,21 @@ class ScheduledTaskRouterTest {
         assertFalse(environment.launchCalled)
     }
 
+    @Test
+    fun verificationCycleIsForegroundLaunchedAtMostOnce() {
+        val environment = FakeRouteEnvironment(targetProcess = false, sendResult = true)
+        val router = ScheduledTaskRouter(environment) { true }
+        val probe = schedule(
+            kind = PersistentScheduleKind.VERIFICATION_PROBE,
+            payload = """{"launchTarget":true}"""
+        ).copy(dedupeKey = "verification:probe:owner:5")
+
+        router.dispatch(probe)
+        router.dispatch(probe.copy(generation = 2L))
+
+        assertEquals(1, environment.launchCount)
+    }
+
     private fun schedule(
         owner: String? = null,
         kind: PersistentScheduleKind = PersistentScheduleKind.GLOBAL_POLL,
@@ -92,6 +107,7 @@ private class FakeRouteEnvironment(
     val sentKeys = mutableListOf<String>()
     val executedKeys = mutableListOf<String>()
     var launchCalled = false
+    var launchCount = 0
 
     override fun isTargetProcess(): Boolean = targetProcess
 
@@ -109,6 +125,7 @@ private class FakeRouteEnvironment(
 
     override fun launchTarget(): Boolean {
         launchCalled = true
+        launchCount++
         return true
     }
 }

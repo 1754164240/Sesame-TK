@@ -51,6 +51,34 @@ class PersistentSchedulerController(
     fun cancelPoll(nowMillis: Long = nowProvider()): Boolean =
         service.cancel(PersistentScheduleKey.GLOBAL_POLL, nowMillis)
 
+    fun scheduleVerificationProbe(
+        triggerAtMillis: Long,
+        ownerUserId: String?,
+        verificationGeneration: Long,
+        attempt: Int,
+        legacySchedule: () -> Unit
+    ) {
+        val nowMillis = nowProvider()
+        if (enabled()) {
+            service.register(
+                planner.verificationProbe(
+                    triggerAtMillis = triggerAtMillis,
+                    ownerUserId = ownerUserId,
+                    verificationGeneration = verificationGeneration,
+                    attempt = attempt,
+                    allowForegroundLaunch = allowForegroundLaunch()
+                ),
+                nowMillis
+            )
+            return
+        }
+        service.cancel(
+            PersistentScheduleKey.verificationProbe(ownerUserId, verificationGeneration),
+            nowMillis
+        )
+        legacySchedule()
+    }
+
     fun reconcile(nowMillis: Long = nowProvider()): ReconcileResult =
         service.reconcile(nowMillis)
 }

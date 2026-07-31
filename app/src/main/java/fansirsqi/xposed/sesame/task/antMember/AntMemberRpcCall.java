@@ -9,6 +9,7 @@ import java.util.UUID;
 
 import fansirsqi.xposed.sesame.hook.ApplicationHook;
 import fansirsqi.xposed.sesame.hook.RequestManager;
+import fansirsqi.xposed.sesame.hook.RpcRequestContext;
 import fansirsqi.xposed.sesame.util.RandomUtil;
 
 public class AntMemberRpcCall {
@@ -70,6 +71,14 @@ public class AntMemberRpcCall {
                 "[{\"bizId\":\"" + bizId + "\"}]");
     }
 
+    public static String taskFinish(String bizId, RpcRequestContext context) {
+        return RequestManager.requestString(
+                "com.alipay.adtask.biz.mobilegw.service.task.finish",
+                "[{\"bizId\":\"" + bizId + "\"}]",
+                context
+        );
+    }
+
     public static String taskReceive(String taskCode) {
         return RequestManager.requestString("alipay.mrchservbase.sqyj.task.receive",
                 "[{\"compId\":\"ZTS_TASK_RECEIVE\",\"extInfo\":{\"taskCode\":\"" + taskCode + "\"}}]");
@@ -95,9 +104,18 @@ public class AntMemberRpcCall {
      * 查询会员签到页任务墙。
      */
     public static String querySignPageTaskList() {
+        return querySignPageTaskList(null);
+    }
+
+    public static String querySignPageTaskList(RpcRequestContext context) {
+        String method = "com.alipay.amic.memtask.h5.MemTaskListQueryFacade.signPageTaskList";
+        String data = MemberTaskProtocol.buildSignPageTaskListArgs().toString();
+        if (context != null) {
+            return RequestManager.requestString(method, data, context);
+        }
         return RequestManager.requestString(
-                "com.alipay.amic.memtask.h5.MemTaskListQueryFacade.signPageTaskList",
-                MemberTaskProtocol.buildSignPageTaskListArgs().toString()
+                method,
+                data
         );
     }
 
@@ -105,9 +123,18 @@ public class AntMemberRpcCall {
      * 查询会员任务的全部状态。
      */
     public static String queryAllStatusTaskList() {
+        return queryAllStatusTaskList(null);
+    }
+
+    public static String queryAllStatusTaskList(RpcRequestContext context) {
+        String method = "com.alipay.amic.memtask.h5.MemTaskListQueryFacade.queryAllStatusTaskList";
+        String data = MemberTaskProtocol.buildAllStatusTaskListArgs().toString();
+        if (context != null) {
+            return RequestManager.requestString(method, data, context);
+        }
         return RequestManager.requestString(
-                "com.alipay.amic.memtask.h5.MemTaskListQueryFacade.queryAllStatusTaskList",
-                MemberTaskProtocol.buildAllStatusTaskListArgs().toString()
+                method,
+                data
         );
     }
 
@@ -115,9 +142,22 @@ public class AntMemberRpcCall {
      * 查询普通会员任务详情。
      */
     public static String querySingleTaskProcessDetail(String taskProcessId) {
+        return querySingleTaskProcessDetail(taskProcessId, null);
+    }
+
+    public static String querySingleTaskProcessDetail(
+            String taskProcessId,
+            RpcRequestContext context
+    ) {
+        String method =
+                "com.alipay.amic.memtask.h5.MemTaskListQueryFacade.querySingleTaskProcessDetail";
+        String data = MemberTaskProtocol.buildSingleTaskDetailArgs(taskProcessId).toString();
+        if (context != null) {
+            return RequestManager.requestString(method, data, context);
+        }
         return RequestManager.requestString(
-                "com.alipay.amic.memtask.h5.MemTaskListQueryFacade.querySingleTaskProcessDetail",
-                MemberTaskProtocol.buildSingleTaskDetailArgs(taskProcessId).toString()
+                method,
+                data
         );
     }
 
@@ -125,9 +165,23 @@ public class AntMemberRpcCall {
      * 查询会员广告任务详情。
      */
     public static String querySingleAdTaskProcessDetail(String configId, String adBizId) {
+        return querySingleAdTaskProcessDetail(configId, adBizId, null);
+    }
+
+    public static String querySingleAdTaskProcessDetail(
+            String configId,
+            String adBizId,
+            RpcRequestContext context
+    ) {
+        String method =
+                "com.alipay.amic.memtask.h5.MemTaskListQueryFacade.querySingleTaskProcessDetail";
+        String data = MemberTaskProtocol.buildSingleAdTaskDetailArgs(configId, adBizId).toString();
+        if (context != null) {
+            return RequestManager.requestString(method, data, context);
+        }
         return RequestManager.requestString(
-                "com.alipay.amic.memtask.h5.MemTaskListQueryFacade.querySingleTaskProcessDetail",
-                MemberTaskProtocol.buildSingleAdTaskDetailArgs(configId, adBizId).toString()
+                method,
+                data
         );
     }
 
@@ -135,9 +189,18 @@ public class AntMemberRpcCall {
      * 按合并后的会员任务状态领取广告任务。
      */
     public static String applyMemberAdTask(MemberTaskState task) {
+        return applyMemberAdTask(task, null);
+    }
+
+    public static String applyMemberAdTask(MemberTaskState task, RpcRequestContext context) {
+        String method = "com.alipay.amic.memtask.h5.MemTaskAdFacade.applyAdTask";
+        String data = MemberTaskProtocol.buildApplyAdTaskArgs(task).toString();
+        if (context != null) {
+            return RequestManager.requestString(method, data, context);
+        }
         return RequestManager.requestString(
-                "com.alipay.amic.memtask.h5.MemTaskAdFacade.applyAdTask",
-                MemberTaskProtocol.buildApplyAdTaskArgs(task).toString()
+                method,
+                data
         );
     }
 
@@ -155,9 +218,18 @@ public class AntMemberRpcCall {
      * 按合并后的会员任务状态领取普通任务。
      */
     public static String applyMemberTask(MemberTaskState task) {
+        return applyMemberTask(task, null);
+    }
+
+    public static String applyMemberTask(MemberTaskState task, RpcRequestContext context) {
+        String method = "com.alipay.amic.memtask.h5.MemTaskManagerFacade.applyTask";
+        String data = MemberTaskProtocol.buildApplyTaskArgs(task).toString();
+        if (context != null) {
+            return RequestManager.requestString(method, data, context);
+        }
         return RequestManager.requestString(
-                "com.alipay.amic.memtask.h5.MemTaskManagerFacade.applyTask",
-                MemberTaskProtocol.buildApplyTaskArgs(task).toString()
+                method,
+                data
         );
     }
 
@@ -175,9 +247,19 @@ public class AntMemberRpcCall {
      * 按合并后的会员任务状态完成普通浏览任务。
      */
     public static String executeMemberTask(MemberTaskState task) {
+        return executeMemberTask(task, null);
+    }
+
+    public static String executeMemberTask(MemberTaskState task, RpcRequestContext context) {
+        String method = "com.alipay.amic.memtask.h5.MemTaskManagerFacade.executeTask";
+        String data =
+                MemberTaskProtocol.buildExecuteTaskArgs(task, System.currentTimeMillis()).toString();
+        if (context != null) {
+            return RequestManager.requestString(method, data, context);
+        }
         return RequestManager.requestString(
-                "com.alipay.amic.memtask.h5.MemTaskManagerFacade.executeTask",
-                MemberTaskProtocol.buildExecuteTaskArgs(task, System.currentTimeMillis()).toString()
+                method,
+                data
         );
     }
 
@@ -185,9 +267,18 @@ public class AntMemberRpcCall {
      * 查询会员积分累计任务进度。
      */
     public static String queryMemberTaskProgress() {
+        return queryMemberTaskProgress(null);
+    }
+
+    public static String queryMemberTaskProgress(RpcRequestContext context) {
+        String method = "com.alipay.alipaymember.biz.rpc.membertask.h5.queryTaskList";
+        String data = MemberTaskProtocol.buildProgressQueryArgs().toString();
+        if (context != null) {
+            return RequestManager.requestString(method, data, context);
+        }
         return RequestManager.requestString(
-                "com.alipay.alipaymember.biz.rpc.membertask.h5.queryTaskList",
-                MemberTaskProtocol.buildProgressQueryArgs().toString()
+                method,
+                data
         );
     }
 

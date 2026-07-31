@@ -7,6 +7,7 @@ enum class PersistentScheduleKind {
     GLOBAL_POLL,
     DAILY_MIDNIGHT,
     CUSTOM_WAKE,
+    VERIFICATION_PROBE,
     UNKNOWN
 }
 

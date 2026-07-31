@@ -5,6 +5,14 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class PersistentScheduleKeyTest {
+    @Test
+    fun `验证探测键包含账号和代际`() {
+        assertEquals(
+            "verification:probe:user-1:9",
+            PersistentScheduleKey.verificationProbe("user-1", 9L)
+        )
+    }
+
 
     @Test
     fun customWakeTimeUsesCanonicalStableKey() {

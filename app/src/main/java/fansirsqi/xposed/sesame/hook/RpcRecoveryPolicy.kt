@@ -2,6 +2,7 @@ package fansirsqi.xposed.sesame.hook
 
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 
 enum class RpcBlockReason {
@@ -24,12 +25,16 @@ class RpcRecoveryPolicy {
     private val reason = AtomicReference(RpcBlockReason.NONE)
     private val recoveryScheduled = AtomicBoolean(false)
     private val verificationNotified = AtomicBoolean(false)
+    private val generation = AtomicLong(0L)
 
     val blockReason: RpcBlockReason
         get() = reason.get()
 
     val failureCount: Int
         get() = consecutiveFailures.get()
+
+    val verificationGeneration: Long
+        get() = generation.get()
 
     fun onNetworkFailure(maxFailures: Int): RecoveryDecision {
         if (reason.get() != RpcBlockReason.NONE) {
@@ -61,13 +66,37 @@ class RpcRecoveryPolicy {
         return decision
     }
 
+    @Synchronized
     fun onVerificationRequired(): RecoveryDecision {
-        reason.set(RpcBlockReason.VERIFICATION)
+        if (reason.getAndSet(RpcBlockReason.VERIFICATION) != RpcBlockReason.VERIFICATION) {
+            generation.incrementAndGet()
+        }
         return if (verificationNotified.compareAndSet(false, true)) {
             RecoveryDecision.WAIT_FOR_MANUAL_VERIFICATION
         } else {
             RecoveryDecision.NONE
         }
+    }
+
+    @Synchronized
+    fun restartVerificationProbeCycle(): Long {
+        reason.set(RpcBlockReason.VERIFICATION)
+        verificationNotified.set(true)
+        return generation.incrementAndGet()
+    }
+
+    @Synchronized
+    fun restoreVerification(restoredGeneration: Long) {
+        generation.set(restoredGeneration.coerceAtLeast(1L))
+        reason.set(RpcBlockReason.VERIFICATION)
+        verificationNotified.set(true)
+    }
+
+    fun reset() {
+        consecutiveFailures.set(0)
+        reason.set(RpcBlockReason.NONE)
+        recoveryScheduled.set(false)
+        verificationNotified.set(false)
     }
 
     fun onBlockedRequest(): RecoveryDecision = RecoveryDecision.NONE
@@ -80,11 +109,25 @@ class RpcRecoveryPolicy {
 
     fun onUnknownFailure(): RecoveryDecision = RecoveryDecision.NONE
 
-    fun onSuccess() {
+    @JvmOverloads
+    fun onSuccess(
+        purpose: RpcRequestPurpose = RpcRequestPurpose.BUSINESS,
+        expectedGeneration: Long? = null
+    ): Boolean {
+        if (reason.get() == RpcBlockReason.VERIFICATION) {
+            if (
+                purpose != RpcRequestPurpose.VERIFICATION_PROBE ||
+                expectedGeneration == null ||
+                expectedGeneration != generation.get()
+            ) {
+                return false
+            }
+        }
         consecutiveFailures.set(0)
         reason.set(RpcBlockReason.NONE)
         recoveryScheduled.set(false)
         verificationNotified.set(false)
+        return true
     }
 
     private fun scheduleNetworkRecoveryOnce(): RecoveryDecision {

@@ -6,6 +6,13 @@ object PersistentScheduleKey {
     const val GLOBAL_POLL = "global:poll"
     const val DAILY_MIDNIGHT = "global:midnight"
     const val CUSTOM_WAKE_PREFIX = "global:wakeup:"
+    private const val VERIFICATION_PROBE_PREFIX = "verification:probe:"
+
+    @JvmStatic
+    fun verificationProbe(ownerUserId: String?, generation: Long): String {
+        val owner = ownerUserId?.trim().orEmpty().ifEmpty { "unknown" }
+        return "$VERIFICATION_PROBE_PREFIX$owner:$generation"
+    }
 
     @JvmStatic
     fun customWake(rawTime: String?): String? {

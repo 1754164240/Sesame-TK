@@ -1,5 +1,6 @@
 package fansirsqi.xposed.sesame.hook.keepalive
 
+import org.json.JSONObject
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -58,6 +59,29 @@ class PersistentSchedulePlanner(
 
         return result
     }
+
+    fun verificationProbe(
+        triggerAtMillis: Long,
+        ownerUserId: String?,
+        verificationGeneration: Long,
+        attempt: Int,
+        allowForegroundLaunch: Boolean
+    ): PersistentSchedule =
+        PersistentSchedule(
+            dedupeKey = PersistentScheduleKey.verificationProbe(
+                ownerUserId,
+                verificationGeneration
+            ),
+            kind = PersistentScheduleKind.VERIFICATION_PROBE,
+            triggerAtMillis = triggerAtMillis,
+            payloadJson = JSONObject()
+                .put("launchTarget", true)
+                .put("allowPersistentForegroundLaunch", allowForegroundLaunch)
+                .put("verificationGeneration", verificationGeneration)
+                .put("attempt", attempt)
+                .toString(),
+            ownerUserId = ownerUserId
+        )
 
     private fun nextOccurrence(nowMillis: Long, time: LocalTime): Long {
         val now = Instant.ofEpochMilli(nowMillis).atZone(zoneId)

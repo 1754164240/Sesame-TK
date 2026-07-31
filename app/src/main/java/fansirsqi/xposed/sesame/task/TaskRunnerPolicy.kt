@@ -12,6 +12,7 @@ enum class TaskRunOutcome {
     COMPLETED,
     STARTED_BACKGROUND,
     TIMED_OUT,
+    BLOCKED_VERIFICATION,
     SKIPPED_OFFLINE,
     SKIPPED_FILTERED,
     SKIPPED_RUNNING,
@@ -38,6 +39,7 @@ class TaskRunCounter {
             TaskRunOutcome.COMPLETED -> completed.incrementAndGet()
             TaskRunOutcome.STARTED_BACKGROUND -> startedBackground.incrementAndGet()
             TaskRunOutcome.TIMED_OUT -> timedOut.incrementAndGet()
+            TaskRunOutcome.BLOCKED_VERIFICATION,
             TaskRunOutcome.SKIPPED_OFFLINE,
             TaskRunOutcome.SKIPPED_FILTERED,
             TaskRunOutcome.SKIPPED_RUNNING -> skipped.incrementAndGet()
