@@ -14,6 +14,8 @@ object PersistentSchedulerRuntime {
     @Volatile
     private var executionHandler: PersistentExecutionRequestHandler? = null
 
+    private val bindingCircuitBreaker = PersistentBindingCircuitBreaker()
+
     @Synchronized
     fun moduleService(context: Context): PersistentScheduleService {
         moduleService?.let { return it }
@@ -47,7 +49,10 @@ object PersistentSchedulerRuntime {
         enabled: () -> Boolean,
         allowForegroundLaunch: () -> Boolean
     ): PersistentSchedulerController {
-        val gateway = RemotePersistentScheduleGateway(context)
+        val gateway = RemotePersistentScheduleGateway(
+            context,
+            bindingCircuitBreaker
+        )
         val controller = PersistentSchedulerController(
             service = gateway,
             enabled = enabled,

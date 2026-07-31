@@ -14,14 +14,22 @@ class PersistentSchedulerController(
     ) {
         val nowMillis = nowProvider()
         if (enabled()) {
-            service.register(
-                planner.globalPoll(triggerAtMillis, ownerUserId, allowForegroundLaunch()),
-                nowMillis
-            )
+            try {
+                service.register(
+                    planner.globalPoll(triggerAtMillis, ownerUserId, allowForegroundLaunch()),
+                    nowMillis
+                )
+            } catch (_: PersistentScheduleUnavailableException) {
+                legacySchedule()
+            }
             return
         }
 
-        service.cancel(PersistentScheduleKey.GLOBAL_POLL, nowMillis)
+        try {
+            service.cancel(PersistentScheduleKey.GLOBAL_POLL, nowMillis)
+        } catch (_: PersistentScheduleUnavailableException) {
+            // 持久服务不可用时无需清理远端记录
+        }
         legacySchedule()
     }
 
@@ -32,24 +40,36 @@ class PersistentSchedulerController(
         legacySchedule: () -> Unit
     ) {
         if (enabled()) {
-            service.replaceWakeSchedules(
-                planner.wakeSchedules(
-                    nowMillis,
-                    rawTimes,
-                    ownerUserId,
-                    allowForegroundLaunch()
-                ),
-                nowMillis
-            )
+            try {
+                service.replaceWakeSchedules(
+                    planner.wakeSchedules(
+                        nowMillis,
+                        rawTimes,
+                        ownerUserId,
+                        allowForegroundLaunch()
+                    ),
+                    nowMillis
+                )
+            } catch (_: PersistentScheduleUnavailableException) {
+                legacySchedule()
+            }
             return
         }
 
-        service.replaceWakeSchedules(emptyList(), nowMillis)
+        try {
+            service.replaceWakeSchedules(emptyList(), nowMillis)
+        } catch (_: PersistentScheduleUnavailableException) {
+            // 持久服务不可用时无需清理远端记录
+        }
         legacySchedule()
     }
 
     fun cancelPoll(nowMillis: Long = nowProvider()): Boolean =
-        service.cancel(PersistentScheduleKey.GLOBAL_POLL, nowMillis)
+        try {
+            service.cancel(PersistentScheduleKey.GLOBAL_POLL, nowMillis)
+        } catch (_: PersistentScheduleUnavailableException) {
+            false
+        }
 
     fun scheduleVerificationProbe(
         triggerAtMillis: Long,
@@ -60,25 +80,41 @@ class PersistentSchedulerController(
     ) {
         val nowMillis = nowProvider()
         if (enabled()) {
-            service.register(
-                planner.verificationProbe(
-                    triggerAtMillis = triggerAtMillis,
-                    ownerUserId = ownerUserId,
-                    verificationGeneration = verificationGeneration,
-                    attempt = attempt,
-                    allowForegroundLaunch = allowForegroundLaunch()
-                ),
-                nowMillis
-            )
+            try {
+                service.register(
+                    planner.verificationProbe(
+                        triggerAtMillis = triggerAtMillis,
+                        ownerUserId = ownerUserId,
+                        verificationGeneration = verificationGeneration,
+                        attempt = attempt,
+                        allowForegroundLaunch = allowForegroundLaunch()
+                    ),
+                    nowMillis
+                )
+            } catch (_: PersistentScheduleUnavailableException) {
+                legacySchedule()
+            }
             return
         }
-        service.cancel(
-            PersistentScheduleKey.verificationProbe(ownerUserId, verificationGeneration),
-            nowMillis
-        )
+        try {
+            service.cancel(
+                PersistentScheduleKey.verificationProbe(ownerUserId, verificationGeneration),
+                nowMillis
+            )
+        } catch (_: PersistentScheduleUnavailableException) {
+            // 持久服务不可用时无需清理远端记录
+        }
         legacySchedule()
     }
 
     fun reconcile(nowMillis: Long = nowProvider()): ReconcileResult =
-        service.reconcile(nowMillis)
+        try {
+            service.reconcile(nowMillis)
+        } catch (_: PersistentScheduleUnavailableException) {
+            ReconcileResult(
+                nextTriggerAtMillis = null,
+                usedFallback = true,
+                recoveredClaims = 0
+            )
+        }
 }

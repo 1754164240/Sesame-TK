@@ -13,7 +13,11 @@ import fansirsqi.xposed.sesame.util.Log
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
-class RemotePersistentScheduleGateway(context: Context) : PersistentScheduleGateway {
+class RemotePersistentScheduleGateway(
+    context: Context,
+    private val bindingCircuitBreaker: PersistentBindingCircuitBreaker =
+        PersistentBindingCircuitBreaker()
+) : PersistentScheduleGateway {
     private val applicationContext = context.applicationContext ?: context
     private val mapper = jacksonObjectMapper()
 
@@ -73,12 +77,25 @@ class RemotePersistentScheduleGateway(context: Context) : PersistentScheduleGate
     @Synchronized
     private fun service(): IPersistentSchedulerService {
         remoteService?.takeIf { it.asBinder().isBinderAlive }?.let { return it }
+        if (!bindingCircuitBreaker.tryAcquireBinding()) {
+            throw PersistentScheduleUnavailableException(
+                if (bindingCircuitBreaker.isOpen()) {
+                    "持久调度服务绑定已在当前进程熔断"
+                } else {
+                    "持久调度服务正在绑定"
+                }
+            )
+        }
 
         logBindingDiagnostics()
         var lastFailure: Throwable? = null
         repeat(MAX_BIND_ATTEMPTS) { attempt ->
-            runCatching {
-                return connect(attempt + 1)
+            val connectionResult = runCatching {
+                connect(attempt + 1)
+            }
+            connectionResult.onSuccess {
+                bindingCircuitBreaker.onConnected()
+                return it
             }.onFailure {
                 lastFailure = it
                 val failureKind = PersistentBindingFailureClassifier.classify(it)
@@ -92,7 +109,12 @@ class RemotePersistentScheduleGateway(context: Context) : PersistentScheduleGate
                 }
             }
         }
-        throw IllegalStateException("无法绑定持久调度服务", lastFailure)
+        bindingCircuitBreaker.onBindingFailed()
+        Log.error(TAG, "持久调度绑定在当前进程熔断，后续任务回退进程内调度")
+        throw PersistentScheduleUnavailableException(
+            "无法绑定持久调度服务",
+            lastFailure
+        )
     }
 
     private fun connect(attempt: Int): IPersistentSchedulerService {
@@ -103,13 +125,15 @@ class RemotePersistentScheduleGateway(context: Context) : PersistentScheduleGate
         val bound = try {
             applicationContext.bindService(intent, connection, Context.BIND_AUTO_CREATE)
         } catch (securityException: SecurityException) {
+            connectionLatch = null
             throw IllegalStateException(
                 "持久调度服务绑定被系统拒绝: component=$component, attempt=$attempt",
                 securityException
             )
         }
-        check(bound) {
-            "bindService返回false: component=$component, attempt=$attempt"
+        if (!bound) {
+            connectionLatch = null
+            error("bindService返回false: component=$component, attempt=$attempt")
         }
         if (!latch.await(CONNECTION_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
             runCatching { applicationContext.unbindService(connection) }

@@ -88,6 +88,7 @@ import fansirsqi.xposed.sesame.util.maps.UserMap.currentUid
 import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedModuleInterface.PackageReadyParam
 import org.luckypray.dexkit.DexKitBridge
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
 import java.io.File
@@ -570,7 +571,7 @@ class ApplicationHook {
                 if (execAtTimeList != null && execAtTimeList.contains("-1")) {
                     record(TAG, "定时执行未开启")
                     PersistentSchedulerRuntime.targetController()?.let { controller ->
-                        execute {
+                        execute(Dispatchers.IO) {
                             runCatching { controller.cancelPoll() }
                                 .onFailure { Log.printStackTrace(TAG, "取消持久轮询失败", it) }
                         }
@@ -605,7 +606,7 @@ class ApplicationHook {
                     legacySchedule()
                 } else {
                     val ownerUserId = HookUtil.getUserId(classLoader!!)
-                    execute {
+                    execute(Dispatchers.IO) {
                         runCatching {
                             controller.schedulePoll(nextExecutionTime, ownerUserId, legacySchedule)
                         }.onFailure {
@@ -719,7 +720,7 @@ class ApplicationHook {
                             legacySchedule()
                         } else {
                             val ownerUserId = classLoader?.let { HookUtil.getUserId(it) }
-                            execute {
+                            execute(Dispatchers.IO) {
                                 runCatching {
                                     controller.scheduleVerificationProbe(
                                         triggerAtMillis = System.currentTimeMillis() + delayMillis,
@@ -746,7 +747,7 @@ class ApplicationHook {
                 )
                 RequestManager.onRpcBridgeReady()
                 init = true
-                execute {
+                execute(Dispatchers.IO) {
                     runCatching {
                         PersistentSchedulerRuntime.targetController()?.reconcile()
                     }.onFailure {
@@ -952,7 +953,7 @@ class ApplicationHook {
             }
 
             val ownerUserId = classLoader?.let { HookUtil.getUserId(it) }
-            execute {
+            execute(Dispatchers.IO) {
                 runCatching {
                     controller.replaceWakeSchedules(
                         nowMillis,
