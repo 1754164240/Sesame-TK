@@ -745,6 +745,7 @@ class ApplicationHook {
                         Log.printStackTrace(TAG, "恢复持久调度失败", it)
                     }
                 }
+                StartupCompletion.launchInitialTask(::execHandler)
                 return true
             } catch (th: Throwable) {
                 printStackTrace(TAG, "startHandler", th)
