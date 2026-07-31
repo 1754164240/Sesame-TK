@@ -491,6 +491,13 @@ class ApplicationHook {
 
         var mainTask: MainTask? = null
 
+        private val verificationTaskCoordinator = VerificationTaskCoordinator {
+            execute {
+                record(TAG, "人工验证阻断已触发，停止当前主任务及业务模块")
+                stopHandler()
+            }
+        }
+
         @Volatile
         var rpcBridge: RpcBridge? = null
         private val rpcBridgeLock = Any()
@@ -733,6 +740,7 @@ class ApplicationHook {
                         }
                     },
                     probe = AntForestRpcCall::queryHomePageForVerificationProbe,
+                    onBlocked = verificationTaskCoordinator::stopForVerification,
                     onRecovered = ::handleVerificationRecovered,
                     onExhausted = ::handleVerificationProbeExhausted
                 )
@@ -809,6 +817,10 @@ class ApplicationHook {
         }
 
         private fun handleVerificationRecovered(generation: Long) {
+            if (!verificationTaskCoordinator.claimRecovery(generation)) {
+                record(TAG, "人工验证恢复回调已处理，忽略重复回调: generation=$generation")
+                return
+            }
             val recoveryTaskIds = TaskRecoveryRegistry.prepareRecovery(generation)
             record(
                 TAG,

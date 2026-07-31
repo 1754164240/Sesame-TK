@@ -192,7 +192,7 @@ public class NewRpcBridge implements RpcBridge {
         ClassLoader localLoader = loader;
         Class<?>[] localBridgeCallbackClazzArray = bridgeCallbackClazzArray;
 
-        if (ApplicationHook.offline) {
+        if (RequestManager.shouldBlockBridgeRequest()) {
             return null;
         }
 
@@ -227,6 +227,7 @@ public class NewRpcBridge implements RpcBridge {
                 count++;
                 try {
                     RpcIntervalLimit.INSTANCE.enterIntervalLimit(Objects.requireNonNull(rpcEntity.getRequestMethod()));
+                    RequestManager.markBridgeRequestDispatched(rpcEntity.getRequestMethod());
                     Class<?>[] finalLocalBridgeCallbackClazzArray = localBridgeCallbackClazzArray;
                     localNewRpcCallMethod.invoke(
                             localNewRpcInstance, rpcEntity.getRequestMethod(), false, false, "json", localParseObjectMethod.invoke(null,

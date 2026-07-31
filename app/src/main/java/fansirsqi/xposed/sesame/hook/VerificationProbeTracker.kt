@@ -7,6 +7,11 @@ enum class ProbeCompletion {
     STALE
 }
 
+data class VerificationProbeResult(
+    val dispatched: Boolean,
+    val successful: Boolean
+)
+
 class VerificationProbeTracker(
     val intervalMillis: Long = DEFAULT_INTERVAL_MILLIS,
     private val maxAttempts: Int = DEFAULT_MAX_ATTEMPTS
@@ -30,17 +35,23 @@ class VerificationProbeTracker(
             return false
         }
         inFlight = true
-        attemptCount++
         return true
     }
 
     @Synchronized
-    fun completeAttempt(expectedGeneration: Long, successful: Boolean): ProbeCompletion {
+    fun completeAttempt(
+        expectedGeneration: Long,
+        result: VerificationProbeResult
+    ): ProbeCompletion {
         if (expectedGeneration != generation) {
             return ProbeCompletion.STALE
         }
         inFlight = false
-        if (successful) {
+        if (!result.dispatched) {
+            return ProbeCompletion.SCHEDULE_NEXT
+        }
+        attemptCount++
+        if (result.successful) {
             return ProbeCompletion.RECOVERED
         }
         return if (attemptCount >= maxAttempts) {

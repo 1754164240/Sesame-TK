@@ -76,13 +76,18 @@ class FishPondWorkflow(
                     if (bizNo.isEmpty()) {
                         return state.result(retryNeeded = true)
                     }
-                    if (callSuccess {
-                            gateway.fishpondAngleRodPositioning(
-                                bizNo,
-                                "SPECIAL_BIG_ZONE"
-                            )
-                        } == null
-                    ) {
+                    val positioningRaw = gateway.fishpondAngleRodPositioning(
+                        bizNo,
+                        "SPECIAL_BIG_ZONE"
+                    )
+                    if (parseSuccess(positioningRaw) == null) {
+                        val positioningError = parseObject(positioningRaw)
+                        if (
+                            positioningError?.optString("resultCode")
+                                .equals("C09", ignoreCase = true)
+                        ) {
+                            syncAfterAction(TASK_COMPLETION_SYNC_TYPES)
+                        }
                         return state.result(retryNeeded = true)
                     }
                 }

@@ -2,13 +2,16 @@ package fansirsqi.xposed.sesame.hook.rpc.intervallimit
 
 import fansirsqi.xposed.sesame.util.GlobalThreadPools
 import fansirsqi.xposed.sesame.util.Log
-import java.util.concurrent.ConcurrentHashMap
 
 object RpcIntervalLimit {
     private const val TAG = "RpcIntervalLimit"
     private const val DEFAULT_INTERVAL = 500
     private val DEFAULT_INTERVAL_LIMIT = DefaultIntervalLimit(DEFAULT_INTERVAL)
-    private val intervalLimitMap = ConcurrentHashMap<String, IntervalLimit>()
+    private val limiter = RpcIntervalLimiter(
+        globalLimit = DEFAULT_INTERVAL_LIMIT,
+        nowMillis = System::currentTimeMillis,
+        sleepMillis = GlobalThreadPools::sleepCompat
+    )
 
     /**
      * 为指定方法添加间隔限制。
@@ -27,12 +30,9 @@ object RpcIntervalLimit {
      * @param intervalLimit 自定义的间隔限制对象
      */
     fun addIntervalLimit(method: String, intervalLimit: IntervalLimit) {
-        synchronized(intervalLimitMap) {
-            if (intervalLimitMap.containsKey(method)) {
-                Log.record(TAG, "方法：$method 间隔限制已存在")
-                throw IllegalArgumentException("方法：$method 间隔限制已存在")
-            }
-            intervalLimitMap[method] = intervalLimit
+        if (!limiter.putIfAbsent(method, intervalLimit)) {
+            Log.record(TAG, "方法：$method 间隔限制已存在")
+            throw IllegalArgumentException("方法：$method 间隔限制已存在")
         }
     }
 
@@ -53,7 +53,7 @@ object RpcIntervalLimit {
      * @param intervalLimit 新的自定义间隔限制对象
      */
     fun updateIntervalLimit(method: String, intervalLimit: IntervalLimit) {
-        intervalLimitMap[method] = intervalLimit
+        limiter.put(method, intervalLimit)
     }
 
     /**
@@ -62,28 +62,13 @@ object RpcIntervalLimit {
      * @param method 方法名称
      */
     fun enterIntervalLimit(method: String) {
-        val intervalLimit = intervalLimitMap.getOrDefault(method, DEFAULT_INTERVAL_LIMIT)
-        val lock = requireNotNull(intervalLimit) { "间隔限制对象不能为空" }
-
-        synchronized(lock) {
-            // 解决 Int? 的问题，使用默认值兜底
-            val interval = intervalLimit.interval ?: DEFAULT_INTERVAL
-            val now = System.currentTimeMillis()
-            val lastTime = intervalLimit.time
-            val sleep = interval - (now - lastTime)
-
-            if (sleep > 0) {
-                GlobalThreadPools.sleepCompat(sleep)
-            }
-
-            intervalLimit.time = now
-        }
+        limiter.enter(method)
     }
 
     /**
      * 清除所有方法的间隔限制。
      */
     fun clearIntervalLimit() {
-        intervalLimitMap.clear()
+        limiter.clear()
     }
 }

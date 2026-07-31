@@ -4,9 +4,11 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
+import android.content.pm.ApplicationInfo
 import android.os.IBinder
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import fansirsqi.xposed.sesame.data.General
+import fansirsqi.xposed.sesame.util.GlobalThreadPools
 import fansirsqi.xposed.sesame.util.Log
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -79,11 +81,15 @@ class RemotePersistentScheduleGateway(context: Context) : PersistentScheduleGate
                 return connect(attempt + 1)
             }.onFailure {
                 lastFailure = it
+                val failureKind = PersistentBindingFailureClassifier.classify(it)
                 Log.error(
                     TAG,
                     "持久调度服务绑定失败: attempt=${attempt + 1}/$MAX_BIND_ATTEMPTS, " +
-                        "type=${it.javaClass.simpleName}, message=${it.message}"
+                        "kind=$failureKind, type=${it.javaClass.simpleName}, message=${it.message}"
                 )
+                if (attempt + 1 < MAX_BIND_ATTEMPTS) {
+                    GlobalThreadPools.sleepCompat(RETRY_DELAY_MILLIS)
+                }
             }
         }
         throw IllegalStateException("无法绑定持久调度服务", lastFailure)
@@ -119,7 +125,12 @@ class RemotePersistentScheduleGateway(context: Context) : PersistentScheduleGate
         val component = schedulerComponent()
         val details = runCatching {
             val serviceInfo = applicationContext.packageManager.getServiceInfo(component, 0)
-            "serviceFound=true, enabled=${serviceInfo.enabled}, exported=${serviceInfo.exported}"
+            val applicationInfo = serviceInfo.applicationInfo
+            val packageStopped =
+                applicationInfo.flags and ApplicationInfo.FLAG_STOPPED != 0
+            "serviceFound=true, enabled=${serviceInfo.enabled}, " +
+                "exported=${serviceInfo.exported}, " +
+                "packageEnabled=${applicationInfo.enabled}, packageStopped=$packageStopped"
         }.getOrElse {
             "serviceFound=false, error=${it.javaClass.simpleName}:${it.message}"
         }
@@ -136,5 +147,6 @@ class RemotePersistentScheduleGateway(context: Context) : PersistentScheduleGate
         private const val TAG = "PersistentScheduleGateway"
         private const val CONNECTION_TIMEOUT_SECONDS = 3L
         private const val MAX_BIND_ATTEMPTS = 2
+        private const val RETRY_DELAY_MILLIS = 500L
     }
 }

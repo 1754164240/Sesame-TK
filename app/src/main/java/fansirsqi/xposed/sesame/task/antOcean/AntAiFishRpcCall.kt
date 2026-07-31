@@ -1,6 +1,7 @@
 package fansirsqi.xposed.sesame.task.antOcean
 
 import fansirsqi.xposed.sesame.hook.RequestManager
+import fansirsqi.xposed.sesame.hook.RpcRequestContext
 import fansirsqi.xposed.sesame.util.RandomUtil
 import org.json.JSONArray
 import org.json.JSONObject
@@ -40,6 +41,13 @@ object AntAiFishRpcCall {
                 taskType,
                 "${taskType}_${RandomUtil.nextDouble()}",
                 uniqueId()
+            ),
+            RpcRequestContext(
+                traceId = "ai-fish-finish-${System.nanoTime()}",
+                source = "AI摸鱼",
+                stage = "任务完成",
+                taskId = taskType,
+                targetBusiness = sceneCode
             )
         )
     }

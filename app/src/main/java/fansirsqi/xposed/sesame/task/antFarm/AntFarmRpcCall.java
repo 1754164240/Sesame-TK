@@ -9,6 +9,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.UUID;
 
 import fansirsqi.xposed.sesame.hook.RequestManager;
+import fansirsqi.xposed.sesame.hook.RpcRequestContext;
 import fansirsqi.xposed.sesame.hook.ApplicationHook;
 import fansirsqi.xposed.sesame.util.Log;
 import fansirsqi.xposed.sesame.util.RandomUtil;
@@ -1193,7 +1194,19 @@ public class AntFarmRpcCall {
         args.put("taskType", taskType);
 
         String params = "[" + args + "]";
-        return RequestManager.requestString("com.alipay.antiep.finishTask", params);
+        return RequestManager.requestString(
+                "com.alipay.antiep.finishTask",
+                params,
+                new RpcRequestContext(
+                        "farm-finish-" + System.nanoTime(),
+                        "蚂蚁庄园",
+                        "任务完成",
+                        null,
+                        null,
+                        taskType,
+                        sceneCode
+                )
+        );
     }
 
     /**

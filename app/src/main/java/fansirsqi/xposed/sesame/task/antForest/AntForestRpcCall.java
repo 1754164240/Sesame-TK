@@ -14,6 +14,7 @@ import fansirsqi.xposed.sesame.entity.RpcEntity;
 import fansirsqi.xposed.sesame.hook.ApplicationHook;
 import fansirsqi.xposed.sesame.hook.RequestManager;
 import fansirsqi.xposed.sesame.hook.RpcRequestContext;
+import fansirsqi.xposed.sesame.hook.VerificationProbeResult;
 import fansirsqi.xposed.sesame.util.Log;
 import fansirsqi.xposed.sesame.util.RandomUtil;
 
@@ -114,7 +115,7 @@ public class AntForestRpcCall {
         );
     }
 
-    public static boolean queryHomePageForVerificationProbe(long generation) {
+    public static VerificationProbeResult queryHomePageForVerificationProbe(long generation) {
         try {
             RpcRequestContext context = new RpcRequestContext(
                     "verification-probe-" + generation,
@@ -132,7 +133,7 @@ public class AntForestRpcCall {
                     context
             );
         } catch (JSONException e) {
-            return false;
+            return new VerificationProbeResult(false, false);
         }
     }
 

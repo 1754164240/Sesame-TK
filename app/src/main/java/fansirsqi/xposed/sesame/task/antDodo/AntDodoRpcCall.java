@@ -3,6 +3,7 @@ package fansirsqi.xposed.sesame.task.antDodo;
 import org.json.JSONObject;
 
 import fansirsqi.xposed.sesame.hook.RequestManager;
+import fansirsqi.xposed.sesame.hook.RpcRequestContext;
 import fansirsqi.xposed.sesame.util.RandomUtil;
 
 public class AntDodoRpcCall {
@@ -33,7 +34,16 @@ public class AntDodoRpcCall {
         return RequestManager.requestString("com.alipay.antiep.finishTask",
                 "[{\"outBizNo\":\"" + uniqueId + "\",\"requestType\":\"rpc\",\"sceneCode\":\""
                         + sceneCode + "\",\"source\":\"af-biodiversity\",\"taskType\":\""
-                        + taskType + "\",\"uniqueId\":\"" + uniqueId + "\"}]");
+                        + taskType + "\",\"uniqueId\":\"" + uniqueId + "\"}]",
+                new RpcRequestContext(
+                        "dodo-finish-" + System.nanoTime(),
+                        "神奇物种",
+                        "任务完成",
+                        null,
+                        null,
+                        taskType,
+                        sceneCode
+                ));
     }
 
     private static String getUniqueId() {

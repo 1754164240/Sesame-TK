@@ -2,7 +2,7 @@ package fansirsqi.xposed.sesame.hook
 
 class VerificationRecoveryCoordinator(
     private val schedule: (Long, String, () -> Unit) -> Unit,
-    private val probe: (Long) -> Boolean,
+    private val probe: (Long) -> VerificationProbeResult,
     private val onRecovered: (Long) -> Unit,
     private val onExhausted: (Long) -> Unit,
     private val onAttemptChanged: (Long, Int) -> Unit = { _, _ -> },
@@ -29,9 +29,12 @@ class VerificationRecoveryCoordinator(
         if (!tracker.tryBeginAttempt(generation)) {
             return
         }
-        onAttemptChanged(generation, tracker.attemptCount)
-        val successful = runCatching { probe(generation) }.getOrDefault(false)
-        when (tracker.completeAttempt(generation, successful)) {
+        val result = runCatching { probe(generation) }
+            .getOrDefault(VerificationProbeResult(dispatched = false, successful = false))
+        if (result.dispatched) {
+            onAttemptChanged(generation, tracker.attemptCount + 1)
+        }
+        when (tracker.completeAttempt(generation, result)) {
             ProbeCompletion.SCHEDULE_NEXT -> scheduleNext(generation)
             ProbeCompletion.RECOVERED -> onRecovered(generation)
             ProbeCompletion.EXHAUSTED -> onExhausted(generation)

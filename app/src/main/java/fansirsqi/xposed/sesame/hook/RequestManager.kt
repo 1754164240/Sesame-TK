@@ -24,6 +24,7 @@ object RequestManager {
 
     private val recoveryPolicy = RpcRecoveryPolicy()
     private val callMetadata = ThreadLocal<RpcCallMetadata?>()
+    private val dispatchMetrics = RpcDispatchMetrics()
 
     @Volatile
     private var verificationCoordinator: VerificationRecoveryCoordinator? = null
@@ -34,11 +35,17 @@ object RequestManager {
     @Volatile
     private var verificationOwnerUserId: String = ""
 
-    private data class RpcCallMetadata(
+    private class RpcCallMetadata(
         val purpose: RpcRequestPurpose,
         val generation: Long?,
         val context: RpcRequestContext?
-    )
+    ) {
+        var dispatched: Boolean = false
+        var dispatchCompleted: Boolean = false
+    }
+
+    @Volatile
+    private var verificationBlockedCallback: (Long) -> Unit = {}
 
     @JvmStatic
     fun isEmptyRpcResponse(result: String?): Boolean {
@@ -77,6 +84,9 @@ object RequestManager {
 
         val contextLog = context?.verificationBlockLog(method)
             ?: "RPC方法=${method.orEmpty()}"
+        val dispatchSnapshot = dispatchMetrics.snapshot()
+        val methodCounts = dispatchSnapshot.methodCounts
+            .joinToString(separator = ",") { (rpcMethod, count) -> "$rpcMethod=$count" }
         verificationStateStore?.save(
             VerificationRecoverySnapshot(
                 generation = recoveryPolicy.verificationGeneration,
@@ -87,20 +97,28 @@ object RequestManager {
                 context = context
             )
         )
-        Log.record(TAG, "检测到安全验证，暂停后续RPC请求 | $contextLog")
+        Log.record(
+            TAG,
+            "检测到安全验证，暂停后续RPC请求 | $contextLog | " +
+                "近10秒请求=${dispatchSnapshot.totalRequests} | " +
+                "最大在途=${dispatchSnapshot.maxInFlight} | 主要方法=[$methodCounts]"
+        )
         if (BaseModel.errNotify.value) {
             Notify.sendNewNotification(
                 "${TimeUtil.getTimeStr()} | 触发安全验证",
                 "请手动完成验证后再继续任务"
             )
         }
-        verificationCoordinator?.start(recoveryPolicy.verificationGeneration)
+        val generation = recoveryPolicy.verificationGeneration
+        verificationBlockedCallback(generation)
+        verificationCoordinator?.start(generation)
     }
 
     fun configureVerificationRecovery(
         ownerUserId: String?,
         schedule: (Long, String, () -> Unit) -> Unit,
-        probe: (Long) -> Boolean,
+        probe: (Long) -> VerificationProbeResult,
+        onBlocked: (Long) -> Unit,
         onRecovered: (Long) -> Unit,
         onExhausted: (Long) -> Unit
     ) {
@@ -117,6 +135,7 @@ object RequestManager {
         }
         verificationStateStore = store
         verificationOwnerUserId = normalizedOwnerUserId
+        verificationBlockedCallback = onBlocked
         verificationCoordinator = VerificationRecoveryCoordinator(
             schedule = schedule,
             probe = probe,
@@ -169,6 +188,26 @@ object RequestManager {
         return true
     }
 
+    @JvmStatic
+    fun shouldBlockBridgeRequest(): Boolean {
+        val metadata = callMetadata.get()
+        return RpcBridgeDispatchPolicy.shouldBlock(
+            offline = ApplicationHook.offline,
+            purpose = metadata?.purpose,
+            requestGeneration = metadata?.generation,
+            currentGeneration = recoveryPolicy.verificationGeneration,
+            blockReason = recoveryPolicy.blockReason
+        )
+    }
+
+    @JvmStatic
+    fun markBridgeRequestDispatched(method: String?) {
+        val metadata = callMetadata.get() ?: return
+        if (metadata.dispatched) return
+        metadata.dispatched = true
+        dispatchMetrics.onStarted(method.orEmpty().ifBlank { "unknown" })
+    }
+
     /**
      * 核心执行函数 (内联优化)
      * 流程：离线检查 -> 获取 Bridge -> 执行请求 -> 结果校验 -> 错误计数/重置
@@ -178,6 +217,7 @@ object RequestManager {
         purpose: RpcRequestPurpose = RpcRequestPurpose.BUSINESS,
         context: RpcRequestContext? = null,
         generation: Long? = null,
+        onDispatchResult: (Boolean) -> Unit = {},
         block: (RpcBridge) -> String?
     ): String {
         // 1. 【前置检查】如果已经离线，直接中断并尝试恢复
@@ -199,19 +239,34 @@ object RequestManager {
         // 如果这里获取失败，也视为一次错误
         val bridge = getRpcBridge()
         if (bridge == null) {
+            onDispatchResult(false)
             handleFailure("Network/Bridge Unavailable", "网络或Bridge不可用")
             return EMPTY_RPC_RESPONSE
         }
 
         // 3. 执行请求
+        val metadata = RpcCallMetadata(purpose, generation, context)
         val result = try {
-            callMetadata.set(RpcCallMetadata(purpose, generation, context))
+            callMetadata.set(metadata)
             block(bridge)
         } catch (e: Throwable) {
             Log.printStackTrace(TAG, "RPC 执行异常: $methodLog", e)
             null // 异常视为 null，触发失败逻辑
         } finally {
             callMetadata.remove()
+            onDispatchResult(metadata.dispatched)
+            if (metadata.dispatched && !metadata.dispatchCompleted) {
+                metadata.dispatchCompleted = true
+                dispatchMetrics.onCompleted()
+            }
+        }
+        if (purpose == RpcRequestPurpose.VERIFICATION_PROBE) {
+            val failure = classifyResponse(result)
+            Log.record(
+                TAG,
+                "人工验证探测结果 | generation=$generation | 已投递=${metadata.dispatched} | " +
+                    "分类=${failure.kind} | code=${failure.code}"
+            )
         }
 
         // 4. 结果校验与状态维护
@@ -263,7 +318,14 @@ object RequestManager {
 
             RpcFailureKind.UNKNOWN -> {
                 recoveryPolicy.onUnknownFailure()
-                Log.error(TAG, "RPC 返回未知失败，不重置恢复状态: $methodLog code=${failure.code} msg=${failure.message}")
+                val safeContext = context?.toSafeLog(methodLog)
+                    ?.let { " | $it" }
+                    .orEmpty()
+                Log.error(
+                    TAG,
+                    "RPC 返回未知失败，不重置恢复状态: $methodLog " +
+                        "code=${failure.code} msg=${failure.message}$safeContext"
+                )
             }
         }
         return result.orEmpty()
@@ -409,17 +471,22 @@ object RequestManager {
         data: String,
         generation: Long,
         context: RpcRequestContext
-    ): Boolean {
+    ): VerificationProbeResult {
+        var dispatched = false
         val result = executeRpc(
             methodLog = method,
             purpose = RpcRequestPurpose.VERIFICATION_PROBE,
             context = context,
-            generation = generation
+            generation = generation,
+            onDispatchResult = { dispatched = it }
         ) { bridge ->
             bridge.requestString(method, data, 1, 0)
         }
-        return classifyResponse(result).kind == RpcFailureKind.SUCCESS &&
-            recoveryPolicy.blockReason == RpcBlockReason.NONE
+        return VerificationProbeResult(
+            dispatched = dispatched,
+            successful = classifyResponse(result).kind == RpcFailureKind.SUCCESS &&
+                recoveryPolicy.blockReason == RpcBlockReason.NONE
+        )
     }
 
     @JvmStatic

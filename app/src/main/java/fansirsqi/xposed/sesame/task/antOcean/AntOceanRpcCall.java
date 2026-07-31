@@ -5,6 +5,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import fansirsqi.xposed.sesame.hook.RequestManager;
+import fansirsqi.xposed.sesame.hook.RpcRequestContext;
 import fansirsqi.xposed.sesame.util.Log;
 import fansirsqi.xposed.sesame.util.RandomUtil;
 
@@ -57,7 +58,16 @@ public class AntOceanRpcCall {
         String outBizNo = taskType + "_" + RandomUtil.nextDouble();
         return RequestManager.requestString("com.alipay.antiep.finishTask",
                 "[{\"outBizNo\":\"" + outBizNo + "\",\"requestType\":\"RPC\",\"sceneCode\":\"" +
-                        sceneCode + "\",\"source\":\"ANTFOCEAN\",\"taskType\":\"" + taskType + "\",\"uniqueId\":\"" + getUniqueId() + "\"}]");
+                        sceneCode + "\",\"source\":\"ANTFOCEAN\",\"taskType\":\"" + taskType + "\",\"uniqueId\":\"" + getUniqueId() + "\"}]",
+                new RpcRequestContext(
+                        "ocean-finish-" + System.nanoTime(),
+                        "神奇海洋",
+                        "任务完成",
+                        null,
+                        null,
+                        taskType,
+                        sceneCode
+                ));
     }
 
     public static String unLockReplicaPhase(String replicaCode, String replicaPhaseCode) {

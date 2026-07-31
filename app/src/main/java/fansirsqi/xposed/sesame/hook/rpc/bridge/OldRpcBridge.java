@@ -88,7 +88,7 @@ public class OldRpcBridge implements RpcBridge {
     }
     @Override
     public RpcEntity requestObject(RpcEntity rpcEntity, int tryCount, int retryInterval) {
-        if (ApplicationHook.offline) {
+        if (RequestManager.shouldBlockBridgeRequest()) {
             return null; // 如果离线，直接返回 null
         }
         int id = rpcEntity.hashCode(); // 获取请求 ID
@@ -97,6 +97,7 @@ public class OldRpcBridge implements RpcBridge {
         for (int count = 0; count < tryCount; count++) {
             try {
                 RpcIntervalLimit.INSTANCE.enterIntervalLimit(Objects.requireNonNull(method)); // 进入 RPC 调用间隔限制
+                RequestManager.markBridgeRequestDispatched(method);
                 Object response = invokeRpcCall(method, args); // 调用 RPC 方法
                 return processResponse(rpcEntity, response, id, method, args, retryInterval); // 处理响应
             } catch (Throwable t) {

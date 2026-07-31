@@ -1,6 +1,7 @@
 package fansirsqi.xposed.sesame.task.antOrchard
 
 import fansirsqi.xposed.sesame.hook.RequestManager
+import fansirsqi.xposed.sesame.hook.RpcRequestContext
 import fansirsqi.xposed.sesame.util.RandomUtil
 import org.json.JSONArray
 import org.json.JSONObject
@@ -23,8 +24,15 @@ object GoldenBeanRpcCall {
         .put("source", SOURCE)
         .put("version", VERSION)
 
-    private fun request(method: String, args: String): String =
+    private fun request(
+        method: String,
+        args: String,
+        context: RpcRequestContext? = null
+    ): String = if (context == null) {
         RequestManager.requestString(method, args)
+    } else {
+        RequestManager.requestString(method, args, context)
+    }
 
     internal fun buildIndexArgs(): String =
         JSONArray().put(baseArgs().put("darwinSceneList", JSONArray())).toString()
@@ -76,7 +84,14 @@ object GoldenBeanRpcCall {
             "${System.currentTimeMillis()}${RandomUtil.getRandomString(12)}"
         return request(
             "com.alipay.antieptask.finishTaskantorchard",
-            buildFinishTaskArgs(taskType, sceneCode, outBizNo)
+            buildFinishTaskArgs(taskType, sceneCode, outBizNo),
+            RpcRequestContext(
+                traceId = "golden-bean-finish-${System.nanoTime()}",
+                source = "金豆夺宝",
+                stage = "任务完成",
+                taskId = taskType,
+                targetBusiness = sceneCode
+            )
         )
     }
 

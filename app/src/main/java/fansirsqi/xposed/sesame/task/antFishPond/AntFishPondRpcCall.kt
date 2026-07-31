@@ -1,6 +1,7 @@
 package fansirsqi.xposed.sesame.task.antFishPond
 
 import fansirsqi.xposed.sesame.hook.RequestManager
+import fansirsqi.xposed.sesame.hook.RpcRequestContext
 import fansirsqi.xposed.sesame.util.RandomUtil
 import org.json.JSONArray
 import org.json.JSONObject
@@ -186,7 +187,14 @@ object AntFishPondRpcCall {
             "${taskType}_${System.currentTimeMillis()}_${RandomUtil.getRandomString(8)}"
         return RequestManager.requestString(
             "com.alipay.antiep.finishTask",
-            buildFinishTaskArgs(taskType, sceneCode, adBizNo, outBizNo)
+            buildFinishTaskArgs(taskType, sceneCode, adBizNo, outBizNo),
+            RpcRequestContext(
+                traceId = "fish-pond-finish-${System.nanoTime()}",
+                source = "鱼池",
+                stage = "任务完成",
+                taskId = taskType,
+                targetBusiness = sceneCode
+            )
         )
     }
 

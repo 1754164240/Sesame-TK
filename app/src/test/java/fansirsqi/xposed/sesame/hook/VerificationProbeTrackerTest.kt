@@ -15,7 +15,10 @@ class VerificationProbeTrackerTest {
         assertEquals(10_000L, tracker.intervalMillis)
         repeat(30) {
             assertTrue(tracker.tryBeginAttempt(7L))
-            val result = tracker.completeAttempt(7L, successful = false)
+            val result = tracker.completeAttempt(
+                7L,
+                VerificationProbeResult(dispatched = true, successful = false)
+            )
             val expected = if (it == 29) ProbeCompletion.EXHAUSTED else ProbeCompletion.SCHEDULE_NEXT
             assertEquals(expected, result)
         }
@@ -32,8 +35,36 @@ class VerificationProbeTrackerTest {
         assertFalse(tracker.tryBeginAttempt(1L))
 
         tracker.startCycle(2L)
-        assertEquals(ProbeCompletion.STALE, tracker.completeAttempt(1L, successful = true))
+        assertEquals(
+            ProbeCompletion.STALE,
+            tracker.completeAttempt(
+                1L,
+                VerificationProbeResult(dispatched = true, successful = true)
+            )
+        )
         assertTrue(tracker.tryBeginAttempt(2L))
-        assertEquals(ProbeCompletion.RECOVERED, tracker.completeAttempt(2L, successful = true))
+        assertEquals(
+            ProbeCompletion.RECOVERED,
+            tracker.completeAttempt(
+                2L,
+                VerificationProbeResult(dispatched = true, successful = true)
+            )
+        )
+    }
+
+    @Test
+    fun `请求未投递时不消耗探测次数`() {
+        val tracker = VerificationProbeTracker()
+        tracker.startCycle(9L)
+
+        assertTrue(tracker.tryBeginAttempt(9L))
+        assertEquals(
+            ProbeCompletion.SCHEDULE_NEXT,
+            tracker.completeAttempt(
+                9L,
+                VerificationProbeResult(dispatched = false, successful = false)
+            )
+        )
+        assertEquals(0, tracker.attemptCount)
     }
 }

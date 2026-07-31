@@ -244,6 +244,33 @@ class FishPondWorkflowTest {
     }
 
     @Test
+    fun `定位流水状态异常时同步一次并停止本轮钓鱼`() = runBlocking {
+        val fake = FakeFishPondGateway().apply {
+            positionResponse =
+                """{"success":false,"resultCode":"C09","resultDesc":"钓鱼流水状态异常"}"""
+        }
+        val persistedCounts = mutableListOf<Int>()
+
+        val result = FishPondWorkflow(fake, waitForTask = {}).run(
+            taskEnabled = false,
+            autoFishEnabled = true,
+            todayFishCount = 5,
+            dailyLimit = 30,
+            riskToken = "risk-token",
+            onFishConfirmed = persistedCounts::add
+        )
+
+        assertEquals(1, fake.angleCalls)
+        assertEquals(
+            listOf("FISH_ACTIVITY", "TASK_DISPLAY", "TOMORROW_ROD", "LOTTERY_PLUS"),
+            fake.syncCalls.last()
+        )
+        assertEquals(0, result.confirmedFishCount)
+        assertTrue(result.retryNeeded)
+        assertTrue(persistedCounts.isEmpty())
+    }
+
+    @Test
     fun `福利鱼定位成功后才计入每日次数`() = runBlocking {
         val fake = FakeFishPondGateway()
         val persistedCounts = mutableListOf<Int>()
