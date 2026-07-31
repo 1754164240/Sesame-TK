@@ -148,14 +148,34 @@ object RequestManager {
         store?.load()?.takeIf { snapshot ->
             snapshot.ownerUserId == verificationOwnerUserId
         }?.let { snapshot ->
-            recoveryPolicy.restoreVerification(snapshot.generation)
-            ApplicationHook.setOffline(true)
-            verificationCoordinator?.start(snapshot.generation, snapshot.attemptCount)
-            Log.record(
-                TAG,
-                "恢复人工验证阻断状态: generation=${snapshot.generation}, " +
-                    "attempt=${snapshot.attemptCount}"
-            )
+            when (
+                VerificationStartupStatePolicy.resolve(
+                    currentBlockReason = recoveryPolicy.blockReason,
+                    currentGeneration = recoveryPolicy.verificationGeneration,
+                    persistedGeneration = snapshot.generation
+                )
+            ) {
+                VerificationStartupAction.CLEAR_STALE -> {
+                    store.clear()
+                    recoveryPolicy.reset()
+                    ApplicationHook.setOffline(false)
+                    Log.record(
+                        TAG,
+                        "清除上次进程遗留的人工验证阻断: " +
+                            "generation=${snapshot.generation}, attempt=${snapshot.attemptCount}"
+                    )
+                }
+
+                VerificationStartupAction.RESUME_CURRENT -> {
+                    ApplicationHook.setOffline(true)
+                    verificationCoordinator?.start(snapshot.generation, snapshot.attemptCount)
+                    Log.record(
+                        TAG,
+                        "继续当前进程人工验证阻断: generation=${snapshot.generation}, " +
+                            "attempt=${snapshot.attemptCount}"
+                    )
+                }
+            }
         }
     }
 
