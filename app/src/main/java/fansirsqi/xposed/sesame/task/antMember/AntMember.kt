@@ -1219,8 +1219,7 @@ class AntMember : ModelTask() {
                         else -> ""
                     }
                 },
-                pauseBeforeCompletion = { waitMillis -> delay(waitMillis) },
-                isTaskBlocked = { task -> isTaskInBlacklist(task.title) }
+                pauseBeforeCompletion = { waitMillis -> delay(waitMillis) }
             )
             val result = workflow.run(
                 maxActionTasks = beforeProgress?.remainingCount ?: Int.MAX_VALUE

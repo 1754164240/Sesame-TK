@@ -255,11 +255,16 @@ class MemberTaskWorkflowTest {
     }
 
     @Test
-    fun `用户黑名单命中时白名单任务也不执行`() = runBlocking {
+    fun `跨业务黑名单命中时会员浏览任务仍然执行`() = runBlocking {
         var actionCalls = 0
         val workflow = MemberTaskWorkflow(
             queryTaskSources = {
-                listOf(taskListResponse(status = "PROCESSING"))
+                listOf(
+                    taskListResponse(
+                        status = "PROCESSING",
+                        title = "去玩小游戏"
+                    )
+                )
             },
             applyTask = {
                 actionCalls++
@@ -270,15 +275,14 @@ class MemberTaskWorkflowTest {
                 """{"success":true}"""
             },
             queryTaskDetail = { taskDetailResponse(status = "COMPLETE") },
-            pauseBeforeCompletion = {},
-            isTaskBlocked = { true }
+            pauseBeforeCompletion = {}
         )
 
         val result = workflow.run()
 
-        assertEquals(0, actionCalls)
-        assertEquals(0, result.confirmed)
-        assertEquals(1, result.skipped)
+        assertEquals(1, actionCalls)
+        assertEquals(1, result.confirmed)
+        assertEquals(0, result.skipped)
     }
 
     @Test

@@ -28,8 +28,7 @@ class MemberTaskWorkflow(
     private val executeTask: suspend (MemberTaskState) -> String,
     private val finishAdTask: suspend (MemberTaskState) -> String = { "" },
     private val queryTaskDetail: suspend (MemberTaskState) -> String,
-    private val pauseBeforeCompletion: suspend (Long) -> Unit,
-    private val isTaskBlocked: (MemberTaskState) -> Boolean = { false }
+    private val pauseBeforeCompletion: suspend (Long) -> Unit
 ) {
 
     suspend fun run(maxActionTasks: Int = Int.MAX_VALUE): MemberTaskRunResult {
@@ -44,14 +43,6 @@ class MemberTaskWorkflow(
                     task,
                     MemberTaskDecision.CLAIM_ONLY,
                     "服务端任务已终态"
-                )
-                continue
-            }
-            if (isTaskBlocked(task)) {
-                outcomes += skipped(
-                    task,
-                    MemberTaskDecision.SKIP_UNSUPPORTED,
-                    "用户黑名单已阻止"
                 )
                 continue
             }
