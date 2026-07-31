@@ -6,6 +6,8 @@ interface AiFishGateway {
     fun listTasks(sceneCode: String): String
     fun finishTask(sceneCode: String, taskType: String): String
     fun receiveTaskAward(sceneCode: String, taskType: String): String
+    fun hasCompletedToday(taskType: String): Boolean
+    fun markCompletedToday(taskType: String)
     fun rescueFish(): String
     fun touchFish(): String
     fun waitMillis(millis: Long)
@@ -99,13 +101,18 @@ class AiFishWorkflow(
                     task.status.equals("FINISHED", true) &&
                         attemptedRewards.add(task.taskType) -> {
                         attemptedInPass = true
+                        markCompletedTodayIfNeeded(task.taskType)
                         claimAndConfirm(task)
                     }
 
                     task.status.equals("TODO", true) &&
                         attemptedTasks.add(task.taskType) -> {
-                        attemptedInPass = true
-                        finishAndConfirm(task, attemptedRewards)
+                        if (shouldSkipToday(task)) {
+                            events += "AI摸鱼任务今日已完成，跳过[${task.title}]"
+                        } else {
+                            attemptedInPass = true
+                            finishAndConfirm(task, attemptedRewards)
+                        }
                     }
                 }
             }
@@ -130,6 +137,7 @@ class AiFishWorkflow(
             events += "AI摸鱼任务完成未受理[${task.title}]"
             return
         }
+        markCompletedTodayIfNeeded(task.taskType)
         val after = queryMainTask(task.taskType)
         when {
             after?.status.equals("FINISHED", true) -> {
@@ -142,6 +150,7 @@ class AiFishWorkflow(
 
             after?.status.equals("RECEIVED", true) -> {
                 completedTaskCount++
+                markCompletedTodayIfNeeded(task.taskType)
                 events += "AI摸鱼任务已直接领取[${task.title}]"
             }
 
@@ -175,6 +184,17 @@ class AiFishWorkflow(
             return null
         }
         return AiFishProtocol.findTask(snapshot, taskType)
+    }
+
+    private fun shouldSkipToday(task: AiFishTask): Boolean {
+        return task.taskType in DAILY_ONCE_MAIN_TASK_TYPES &&
+            gateway.hasCompletedToday(task.taskType)
+    }
+
+    private fun markCompletedTodayIfNeeded(taskType: String) {
+        if (taskType in DAILY_ONCE_MAIN_TASK_TYPES) {
+            gateway.markCompletedToday(taskType)
+        }
     }
 
     private fun touchAvailableFish(): Int {
@@ -232,5 +252,6 @@ class AiFishWorkflow(
     private companion object {
         const val MAX_TASK_PASSES = 50
         const val MAX_TOUCH_COUNT = 20
+        val DAILY_ONCE_MAIN_TASK_TYPES = setOf("AIFISH_ZHUANHUA_BWXRK")
     }
 }

@@ -18,6 +18,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import fansirsqi.xposed.sesame.entity.AlipayBeach;
 import fansirsqi.xposed.sesame.entity.AlipayUser;
+import fansirsqi.xposed.sesame.data.Status;
 import fansirsqi.xposed.sesame.hook.Toast;
 import fansirsqi.xposed.sesame.model.ModelFields;
 import fansirsqi.xposed.sesame.model.ModelGroup;
@@ -193,6 +194,16 @@ public class AntOcean extends ModelTask {
                 @Override
                 public String receiveTaskAward(String sceneCode, String taskType) {
                     return AntAiFishRpcCall.receiveTaskAward(sceneCode, taskType);
+                }
+
+                @Override
+                public boolean hasCompletedToday(String taskType) {
+                    return Status.hasFlagToday("antOcean::aiFish::" + taskType);
+                }
+
+                @Override
+                public void markCompletedToday(String taskType) {
+                    Status.setFlagToday("antOcean::aiFish::" + taskType);
                 }
 
                 @Override

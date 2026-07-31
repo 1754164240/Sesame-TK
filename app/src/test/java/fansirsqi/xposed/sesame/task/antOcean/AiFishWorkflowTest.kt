@@ -149,6 +149,31 @@ class AiFishWorkflowTest {
     }
 
     @Test
+    fun `保卫向日葵任务每天只完成一次`() {
+        val gateway = FakeAiFishGateway(
+            homeResponses = dequeOf(
+                home("CAN_TOUCH", 0, 0),
+                home("CAN_TOUCH", 0, 0),
+                home("CAN_TOUCH", 0, 0),
+                home("CAN_TOUCH", 0, 0)
+            ),
+            taskProvider = {
+                taskResponse(
+                    task("AIFISH_ZHUANHUA_BWXRK", "TODO", 0, "OTHER")
+                )
+            }
+        )
+
+        AiFishWorkflow(gateway).run()
+        AiFishWorkflow(gateway).run()
+
+        assertEquals(
+            listOf(AiFishProtocol.MAIN_SCENE to "AIFISH_ZHUANHUA_BWXRK"),
+            gateway.finishCalls
+        )
+    }
+
+    @Test
     fun `摸鱼以剩余次数或累计次数推进并在无进展时停止`() {
         val gateway = FakeAiFishGateway(
             homeResponses = dequeOf(
@@ -259,6 +284,7 @@ class AiFishWorkflowTest {
         val finishCalls = mutableListOf<Pair<String, String>>()
         val receiveCalls = mutableListOf<Pair<String, String>>()
         val waits = mutableListOf<Long>()
+        val completedTodayTaskTypes = mutableSetOf<String>()
         var homeCalls = 0
         var rescueCalls = 0
         var touchCalls = 0
@@ -289,6 +315,14 @@ class AiFishWorkflowTest {
         ): String {
             receiveCalls += sceneCode to taskType
             return """{"success":true,"code":"100000000"}"""
+        }
+
+        override fun hasCompletedToday(taskType: String): Boolean {
+            return completedTodayTaskTypes.contains(taskType)
+        }
+
+        override fun markCompletedToday(taskType: String) {
+            completedTodayTaskTypes += taskType
         }
 
         override fun rescueFish(): String {
