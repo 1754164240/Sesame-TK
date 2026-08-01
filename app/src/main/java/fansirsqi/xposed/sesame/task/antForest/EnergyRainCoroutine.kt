@@ -18,7 +18,6 @@ import kotlin.random.Random
  */
 object EnergyRainCoroutine {
     private const val TAG = "EnergyRain"
-    private const val ENERGY_RAIN_VERIFICATION_FLAG = "EnergyRain::安全验证暂停"
     private const val EXEC_COOLDOWN_MS = 30_000L
     private const val LOOP_DELAY_MIN_MS = 8_000
     private const val LOOP_DELAY_MAX_MS = 12_000
@@ -53,8 +52,7 @@ object EnergyRainCoroutine {
     }
 
     private fun pauseForVerification(stage: String, result: JSONObject) {
-        Status.setFlagToday(ENERGY_RAIN_VERIFICATION_FLAG)
-        Log.record(TAG, "能量雨${stage}触发安全验证，当天停止能量雨流程: $result")
+        Log.record(TAG, "能量雨${stage}触发安全验证，本次流程结束，后续可再次执行: $result")
     }
 
     private fun finishSettlementForVerification(result: JSONObject) {
@@ -66,11 +64,6 @@ object EnergyRainCoroutine {
      */
     suspend fun execEnergyRain() {
         try {
-            if (Status.hasFlagToday(ENERGY_RAIN_VERIFICATION_FLAG)) {
-                Log.record(TAG, "今日能量雨已触发安全验证，跳过执行")
-                return
-            }
-
             // 执行频率检查：防止短时间内重复执行
             val currentTime = System.currentTimeMillis()
             val timeSinceLastExec = currentTime - lastExecuteTime
@@ -101,10 +94,6 @@ object EnergyRainCoroutine {
             val maxPlayLimit = 10
 
             do {
-                if (Status.hasFlagToday(ENERGY_RAIN_VERIFICATION_FLAG)) {
-                    break
-                }
-
                 val joEnergyRainHome = JSONObject(AntForestRpcCall.queryEnergyRainHome())
                 randomDelay(500, 900)
                 if (isVerificationRequiredResult(joEnergyRainHome)) {
@@ -121,7 +110,9 @@ object EnergyRainCoroutine {
 
                 // 1️⃣ 检查是否可以开始能量雨
                 if (canPlayToday) {
-                    startEnergyRain()
+                    if (!startEnergyRain()) {
+                        break
+                    }
                     playedCount++
                     randomDelay(LOOP_DELAY_MIN_MS, LOOP_DELAY_MAX_MS)
                     continue
@@ -138,6 +129,7 @@ object EnergyRainCoroutine {
                     val grantInfos = joEnergyRainCanGrantList.optJSONArray("grantInfos") ?: org.json.JSONArray()
                     val giveEnergyRainSet = AntForest.giveEnergyRainList!!.value
                     var granted = false
+                    var verificationRequired = false
 
                     for (j in 0 until grantInfos.length()) {
                         val grantInfo = grantInfos.getJSONObject(j)
@@ -148,6 +140,7 @@ object EnergyRainCoroutine {
                                 Log.record(TAG, "尝试送能量雨给【${UserMap.getMaskName(uid)}】")
                                 if (isVerificationRequiredResult(rainJsonObj)) {
                                     pauseForVerification("赠送", rainJsonObj)
+                                    verificationRequired = true
                                     break
                                 }
                                 if (ResChecker.checkRes(TAG, rainJsonObj)) {
@@ -169,7 +162,7 @@ object EnergyRainCoroutine {
                     }
                     if (granted) {
                         continue
-                    } else if (Status.hasFlagToday(ENERGY_RAIN_VERIFICATION_FLAG)) {
+                    } else if (verificationRequired) {
                         break
                     } else {
                         Log.record(TAG, "今日无可送能量雨好友或已达到赠送上限")
@@ -238,14 +231,15 @@ object EnergyRainCoroutine {
 
     /**
      * 开始能量雨（协程版本）
+     * @return 当前能量雨流程是否可以继续
      */
-    private suspend fun startEnergyRain() {
+    private suspend fun startEnergyRain(): Boolean {
         try {
             Log.record("开始执行能量雨🌧️")
             val joStart = JSONObject(AntForestRpcCall.startEnergyRain())
             if (isVerificationRequiredResult(joStart)) {
                 pauseForVerification("开始", joStart)
-                return
+                return false
             }
 
             if (ResChecker.checkRes(TAG, joStart)) {
@@ -261,7 +255,7 @@ object EnergyRainCoroutine {
                 val resultJson = JSONObject(AntForestRpcCall.energyRainSettlement(sum, token))
                 if (isVerificationRequiredResult(resultJson)) {
                     finishSettlementForVerification(resultJson)
-                    return
+                    return false
                 }
 
                 if (ResChecker.checkRes(TAG, resultJson)) {
@@ -273,6 +267,7 @@ object EnergyRainCoroutine {
             } else {
                 Log.record(TAG, "startEnergyRain: $joStart")
             }
+            return true
         } catch (e: kotlinx.coroutines.CancellationException) {
             // 协程取消是正常现象，不记录为错误
             Log.record(TAG, "startEnergyRain 协程被取消")
@@ -280,6 +275,7 @@ object EnergyRainCoroutine {
         } catch (th: Throwable) {
             Log.record(TAG, "startEnergyRain err:")
             Log.printStackTrace(TAG, th)
+            return true
         }
     }
 
