@@ -39,6 +39,13 @@
             background-color: rgba(22, 22, 26, 0.8);
         }
 
+        .header-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
         .field-row {
             display: flex;
             justify-content: space-between;
@@ -113,6 +120,7 @@
     <script src="./js/semi-ui.min.js"></script>
     <!-- Semi Icons -->
     <script src="./js/semi-icons.min.js"></script>
+    <script src="./js/settings-search-contract.js"></script>
     <!-- Babel -->
     <script src="./js/babel.min.js"></script>
 </head>
@@ -178,6 +186,8 @@
 
             const [tabs, setTabs] = useState([]);
             const [modelsMap, setModelsMap] = useState({});
+            const [settingsSearch, setSettingsSearch] = useState('');
+            const [activeSettingsKey, setActiveSettingsKey] = useState(null);
 
             // 列表弹窗相关的 State
             const [sheetVisible, setSheetVisible] = useState(false);
@@ -197,6 +207,29 @@
                 });
                 setModelsMap(initialMap);
             }, []);
+
+            useEffect(() => {
+                if (activeSettingsKey === null && tabs.length > 0) {
+                    setActiveSettingsKey(tabs[0].modelCode);
+                }
+            }, [tabs, activeSettingsKey]);
+
+            const filteredModels = useMemo(
+                () => window.SettingsSearchContract.filterSettingsModels(
+                    tabs,
+                    modelsMap,
+                    settingsSearch
+                ),
+                [tabs, modelsMap, settingsSearch]
+            );
+
+            const visibleSettingsActiveKey = useMemo(
+                () => window.SettingsSearchContract.visibleSettingsActiveKey(
+                    filteredModels,
+                    activeSettingsKey
+                ),
+                [filteredModels, activeSettingsKey]
+            );
 
             const handleFieldChange = (modelCode, fieldCode, newValue) => {
                 setModelsMap(prev => {
@@ -402,28 +435,48 @@
             return (
                 <div className="container">
                     <div className="header">
-                        <Title heading={2} style={{ margin: 0 }}>Sesame-VN 设置</Title>
-                        <Button style={{}} onClick={switchMode} > 切换主题 </Button>
+                        <div className="header-row">
+                            <Title heading={2} style={{ margin: 0 }}>Sesame-VN 设置</Title>
+                            <Button onClick={switchMode}>切换主题</Button>
+                        </div>
+                        <Input
+                            prefix={<IconSearch />}
+                            value={settingsSearch}
+                            onChange={setSettingsSearch}
+                            showClear
+                            placeholder="搜索模块或设置项"
+                            style={{ marginTop: 12, width: '100%' }}
+                        />
                     </div>
 
                     <div className="section-padding">
-                        <Collapse accordion defaultActiveKey={tabs[0]?.modelCode}>
-                            {tabs.map((tab) => (
-                                <Collapse.Panel
-                                    header={<div style={{ fontWeight: 600 }}>{tab.modelName}</div>}
-                                    itemKey={tab.modelCode}
-                                    key={tab.modelCode}
-                                >
-                                    <div>
-                                        {modelsMap[tab.modelCode] ? (
-                                            modelsMap[tab.modelCode].map(field => renderFieldItem(tab.modelCode, field))
-                                        ) : (
-                                            <div style={{ padding: 20, textAlign: 'center' }}>加载中...</div>
-                                        )}
-                                    </div>
-                                </Collapse.Panel>
-                            ))}
-                        </Collapse>
+                        {tabs.length === 0 ? (
+                            <div style={{ padding: 32, textAlign: 'center', color: 'var(--semi-color-text-2)' }}>
+                                加载中...
+                            </div>
+                        ) : filteredModels.length > 0 ? (
+                            <Collapse
+                                accordion
+                                activeKey={visibleSettingsActiveKey}
+                                onChange={setActiveSettingsKey}
+                            >
+                                {filteredModels.map(({ tab, fields }) => (
+                                    <Collapse.Panel
+                                        header={<div style={{ fontWeight: 600 }}>{tab.modelName}</div>}
+                                        itemKey={tab.modelCode}
+                                        key={tab.modelCode}
+                                    >
+                                        <div>
+                                            {fields.map(field => renderFieldItem(tab.modelCode, field))}
+                                        </div>
+                                    </Collapse.Panel>
+                                ))}
+                            </Collapse>
+                        ) : (
+                            <div style={{ padding: 32, textAlign: 'center', color: 'var(--semi-color-text-2)' }}>
+                                未找到匹配设置
+                            </div>
+                        )}
                     </div>
 
                     <div style={{ padding: 20, textAlign: 'center' }}>

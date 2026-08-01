@@ -16,9 +16,141 @@ import java.util.Set;
  */
 public class AntOceanRpcCall {
     private static final String VERSION = "20241203";
+    static final String AI_FISH_STATUS_METHOD = "alipay.antaifish.h5.status";
+    static final String AI_FISH_HOMEPAGE_METHOD = "alipay.antaifish.h5.homepage";
+    static final String AI_FISH_LIST_TASKS_METHOD = "com.alipay.antieptask.listTaskopengreen";
+    static final String AI_FISH_FINISH_TASK_METHOD = "com.alipay.antiep.finishTask";
+    static final String AI_FISH_RECEIVE_AWARD_METHOD = "com.alipay.antieptask.receiveTaskAwardopengreen";
+    static final String AI_FISH_RESCUE_METHOD = "alipay.antaifish.h5.rescueFish";
+    static final String AI_FISH_TOUCH_METHOD = "alipay.antaifish.h5.touchfish";
 
     private static String getUniqueId() {
         return String.valueOf(System.currentTimeMillis()) + RandomUtil.nextLong();
+    }
+
+    public static String aiFishStatus() {
+        return RequestManager.requestString(
+                AI_FISH_STATUS_METHOD,
+                buildAiFishStatusArgs(getUniqueId())
+        );
+    }
+
+    public static String aiFishHomepage() {
+        return RequestManager.requestString(
+                AI_FISH_HOMEPAGE_METHOD,
+                buildAiFishOceanActionArgs(getUniqueId())
+        );
+    }
+
+    public static String aiFishListTasks(String sceneCode) {
+        return RequestManager.requestString(
+                AI_FISH_LIST_TASKS_METHOD,
+                buildAiFishListTasksArgs(sceneCode, getUniqueId())
+        );
+    }
+
+    public static String aiFishFinishTask(String sceneCode, String taskType) {
+        return RequestManager.requestString(
+                AI_FISH_FINISH_TASK_METHOD,
+                buildAiFishFinishTaskArgs(
+                        sceneCode,
+                        taskType,
+                        taskType + "_" + RandomUtil.nextDouble(),
+                        getUniqueId()
+                )
+        );
+    }
+
+    public static String aiFishReceiveTaskAward(String sceneCode, String taskType) {
+        return RequestManager.requestString(
+                AI_FISH_RECEIVE_AWARD_METHOD,
+                buildAiFishReceiveTaskAwardArgs(sceneCode, taskType, getUniqueId())
+        );
+    }
+
+    public static String aiFishRescue() {
+        return RequestManager.requestString(
+                AI_FISH_RESCUE_METHOD,
+                buildAiFishOceanActionArgs(getUniqueId())
+        );
+    }
+
+    public static String aiFishTouch() {
+        return RequestManager.requestString(
+                AI_FISH_TOUCH_METHOD,
+                buildAiFishOceanActionArgs(getUniqueId())
+        );
+    }
+
+    static String buildAiFishStatusArgs(String uniqueId) {
+        return arguments(jsonObject(
+                "source", "nengliangtixing",
+                "uniqueId", uniqueId
+        ));
+    }
+
+    static String buildAiFishOceanActionArgs(String uniqueId) {
+        return arguments(jsonObject(
+                "source", "ANT_OCEAN",
+                "uniqueId", uniqueId
+        ));
+    }
+
+    static String buildAiFishListTasksArgs(String sceneCode, String uniqueId) {
+        return arguments(jsonObject(
+                "extend", jsonObject("appMode", "normal"),
+                "requestType", "RPC",
+                "sceneCode", sceneCode,
+                "source", "ANTAIFISH",
+                "uniqueId", uniqueId
+        ));
+    }
+
+    static String buildAiFishFinishTaskArgs(
+            String sceneCode,
+            String taskType,
+            String outBizNo,
+            String uniqueId
+    ) {
+        return arguments(jsonObject(
+                "outBizNo", outBizNo,
+                "requestType", "RPC",
+                "sceneCode", sceneCode,
+                "source", "ANTAIFISH",
+                "taskType", taskType,
+                "uniqueId", uniqueId
+        ));
+    }
+
+    static String buildAiFishReceiveTaskAwardArgs(
+            String sceneCode,
+            String taskType,
+            String uniqueId
+    ) {
+        return arguments(jsonObject(
+                "ignoreLimit", false,
+                "requestType", "RPC",
+                "sceneCode", sceneCode,
+                "source", "ANTAIFISH",
+                "taskType", taskType,
+                "uniqueId", uniqueId
+        ));
+    }
+
+    private static JSONObject jsonObject(Object... keyValues) {
+        JSONObject value = new JSONObject();
+        try {
+            for (int index = 0; index < keyValues.length; index += 2) {
+                value.put(String.valueOf(keyValues[index]), keyValues[index + 1]);
+            }
+            return value;
+        } catch (JSONException e) {
+            throw new IllegalStateException("构造 AI 摸鱼请求参数失败", e);
+        }
+    }
+
+    private static String arguments(JSONObject request) {
+        return new JSONArray().put(request).toString();
     }
 
     public static String queryOceanStatus() {

@@ -7,6 +7,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.util.HashSet;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -18,6 +19,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import fansirsqi.xposed.sesame.entity.AlipayBeach;
 import fansirsqi.xposed.sesame.entity.AlipayUser;
+import fansirsqi.xposed.sesame.data.Status;
 import fansirsqi.xposed.sesame.hook.Toast;
 import fansirsqi.xposed.sesame.model.ModelFields;
 import fansirsqi.xposed.sesame.model.ModelGroup;
@@ -87,6 +89,7 @@ public class AntOcean extends ModelTask {
     }
 
     private BooleanModelField dailyOceanTask;
+    private BooleanModelField aiFish;
     private BooleanModelField cleanOcean;
     private ChoiceModelField cleanOceanType;
     private SelectModelField cleanOceanList;
@@ -109,6 +112,7 @@ public class AntOcean extends ModelTask {
     public ModelFields getFields() {
         ModelFields modelFields = new ModelFields();
         modelFields.addField(dailyOceanTask = new BooleanModelField("dailyOceanTask", "海洋任务", false));
+        modelFields.addField(aiFish = new BooleanModelField("aiFish", "AI摸鱼", false));
         modelFields.addField(cleanOcean = new BooleanModelField("cleanOcean", "清理 | 开启", false));
         modelFields.addField(cleanOceanType = new ChoiceModelField("cleanOceanType", "清理 | 动作", CleanOceanType.DONT_CLEAN, CleanOceanType.nickNames));
         modelFields.addField(cleanOceanList = new SelectModelField("cleanOceanList", "清理 | 好友列表", new LinkedHashSet<>(), AlipayUser::getList));
@@ -134,6 +138,10 @@ public class AntOcean extends ModelTask {
                 receiveTaskAward();
             }
 
+            if (aiFish.getValue()) {
+                doAiFish();
+            }
+
             if (!userprotectType.getValue().equals(protectType.DONT_PROTECT)) {
                 protectOcean();
             }
@@ -153,6 +161,67 @@ public class AntOcean extends ModelTask {
             Log.printStackTrace(TAG,"start.run err:", t);
         } finally {
             Log.record(TAG, "执行结束-" + getName());
+        }
+    }
+
+    private void doAiFish() {
+        try {
+            AiFishRunResult result = new AiFishRunner(new AiFishGateway() {
+                @Override
+                public String queryStatus() {
+                    return AntOceanRpcCall.aiFishStatus();
+                }
+
+                @Override
+                public String queryHome() {
+                    return AntOceanRpcCall.aiFishHomepage();
+                }
+
+                @Override
+                public String listTasks(String sceneCode) {
+                    return AntOceanRpcCall.aiFishListTasks(sceneCode);
+                }
+
+                @Override
+                public String finishTask(String sceneCode, String taskType) {
+                    return AntOceanRpcCall.aiFishFinishTask(sceneCode, taskType);
+                }
+
+                @Override
+                public String receiveTaskAward(String sceneCode, String taskType) {
+                    return AntOceanRpcCall.aiFishReceiveTaskAward(sceneCode, taskType);
+                }
+
+                @Override
+                public boolean hasCompletedToday(String taskType) {
+                    return Status.hasFlagToday("antOcean::aiFish::" + taskType);
+                }
+
+                @Override
+                public void markCompletedToday(String taskType) {
+                    Status.setFlagToday("antOcean::aiFish::" + taskType);
+                }
+
+                @Override
+                public String rescueFish() {
+                    return AntOceanRpcCall.aiFishRescue();
+                }
+
+                @Override
+                public String touchFish() {
+                    return AntOceanRpcCall.aiFishTouch();
+                }
+
+                @Override
+                public void waitMillis(long millis) {
+                    GlobalThreadPools.sleepCompat(millis);
+                }
+            }).run();
+            for (String event : result.getEvents()) {
+                Log.forest("神奇海洋🌊[" + event + "]");
+            }
+        } catch (Throwable t) {
+            Log.printStackTrace(TAG, "AI摸鱼执行异常:", t);
         }
     }
 
@@ -984,6 +1053,512 @@ public class AntOcean extends ModelTask {
             }
         } catch (Throwable t) {
             Log.printStackTrace(TAG,  "usePropByType error:",t);
+        }
+    }
+
+    static final String AI_FISH_MAIN_SCENE = "ANTAIFISH";
+    static final String AI_FISH_RESCUE_SCENE = "ANTAIFISH_RESCUE_AND_RESTORE";
+
+    interface AiFishGateway {
+        String queryStatus();
+
+        String queryHome();
+
+        String listTasks(String sceneCode);
+
+        String finishTask(String sceneCode, String taskType);
+
+        String receiveTaskAward(String sceneCode, String taskType);
+
+        boolean hasCompletedToday(String taskType);
+
+        void markCompletedToday(String taskType);
+
+        String rescueFish();
+
+        String touchFish();
+
+        void waitMillis(long millis);
+    }
+
+    static final class AiFishHomeSnapshot {
+        private final boolean recognized;
+        private final String fishStatus;
+        private final Integer remainTouchChance;
+        private final Integer touchTotal;
+
+        AiFishHomeSnapshot(
+                boolean recognized,
+                String fishStatus,
+                Integer remainTouchChance,
+                Integer touchTotal
+        ) {
+            this.recognized = recognized;
+            this.fishStatus = fishStatus;
+            this.remainTouchChance = remainTouchChance;
+            this.touchTotal = touchTotal;
+        }
+
+        public boolean isRecognized() {
+            return recognized;
+        }
+
+        public String getFishStatus() {
+            return fishStatus;
+        }
+
+        public Integer getRemainTouchChance() {
+            return remainTouchChance;
+        }
+
+        public Integer getTouchTotal() {
+            return touchTotal;
+        }
+    }
+
+    static final class AiFishTask {
+        private final String sceneCode;
+        private final String taskType;
+        private final String title;
+        private final String status;
+        private final int waitSeconds;
+        private final String playType;
+
+        AiFishTask(
+                String sceneCode,
+                String taskType,
+                String title,
+                String status,
+                int waitSeconds,
+                String playType
+        ) {
+            this.sceneCode = sceneCode;
+            this.taskType = taskType;
+            this.title = title;
+            this.status = status;
+            this.waitSeconds = waitSeconds;
+            this.playType = playType;
+        }
+
+        public String getSceneCode() {
+            return sceneCode;
+        }
+
+        public String getTaskType() {
+            return taskType;
+        }
+
+        public String getTitle() {
+            return title;
+        }
+
+        public String getStatus() {
+            return status;
+        }
+
+        public int getWaitSeconds() {
+            return waitSeconds;
+        }
+
+        public String getPlayType() {
+            return playType;
+        }
+    }
+
+    static final class AiFishTaskSnapshot {
+        private final boolean recognized;
+        private final List<AiFishTask> tasks;
+
+        AiFishTaskSnapshot(boolean recognized, List<AiFishTask> tasks) {
+            this.recognized = recognized;
+            this.tasks = tasks;
+        }
+
+        public boolean isRecognized() {
+            return recognized;
+        }
+
+        public List<AiFishTask> getTasks() {
+            return tasks;
+        }
+    }
+
+    static final class AiFishRunResult {
+        private final boolean available;
+        private final boolean rescued;
+        private final int completedTaskCount;
+        private final int receivedRewardCount;
+        private final int touchCount;
+        private final List<String> events;
+
+        AiFishRunResult(
+                boolean available,
+                boolean rescued,
+                int completedTaskCount,
+                int receivedRewardCount,
+                int touchCount,
+                List<String> events
+        ) {
+            this.available = available;
+            this.rescued = rescued;
+            this.completedTaskCount = completedTaskCount;
+            this.receivedRewardCount = receivedRewardCount;
+            this.touchCount = touchCount;
+            this.events = events;
+        }
+
+        public boolean isAvailable() {
+            return available;
+        }
+
+        public boolean isRescued() {
+            return rescued;
+        }
+
+        public int getCompletedTaskCount() {
+            return completedTaskCount;
+        }
+
+        public int getReceivedRewardCount() {
+            return receivedRewardCount;
+        }
+
+        public int getTouchCount() {
+            return touchCount;
+        }
+
+        public List<String> getEvents() {
+            return events;
+        }
+    }
+
+    static AiFishHomeSnapshot parseAiFishHome(String response) {
+        JSONObject root = aiFishResponseRoot(response);
+        if (root == null) {
+            return unknownAiFishHome();
+        }
+        JSONObject interact = root.optJSONObject("myFish");
+        interact = interact == null ? null : interact.optJSONObject("interactVO");
+        if (interact == null
+                || !interact.has("fishInteractStatus")
+                || !interact.has("remainTouchChance")
+                || !interact.has("touchTotal")) {
+            return unknownAiFishHome();
+        }
+        return new AiFishHomeSnapshot(
+                true,
+                interact.optString("fishInteractStatus"),
+                interact.optInt("remainTouchChance"),
+                interact.optInt("touchTotal")
+        );
+    }
+
+    static AiFishTaskSnapshot parseAiFishTasks(String response) {
+        JSONObject root = aiFishResponseRoot(response);
+        JSONArray taskArray = root == null ? null : root.optJSONArray("taskInfoList");
+        if (taskArray == null) {
+            return new AiFishTaskSnapshot(false, List.of());
+        }
+        List<AiFishTask> tasks = new ArrayList<>();
+        for (int index = 0; index < taskArray.length(); index++) {
+            AiFishTask task = parseAiFishTask(taskArray.optJSONObject(index));
+            if (task != null) {
+                tasks.add(task);
+            }
+        }
+        return new AiFishTaskSnapshot(true, tasks);
+    }
+
+    static boolean isAiFishActionAccepted(String response) {
+        JSONObject root = aiFishResponseRoot(response);
+        return root != null && (root.optBoolean("success", false)
+                || "SUCCESS".equalsIgnoreCase(root.optString("resultCode"))
+                || "100000000".equals(root.optString("code")));
+    }
+
+    static AiFishTask selectAiFishRescueTask(AiFishTaskSnapshot snapshot) {
+        if (!snapshot.isRecognized()) {
+            return null;
+        }
+        AiFishTask selected = null;
+        for (AiFishTask task : snapshot.getTasks()) {
+            boolean eligible = AI_FISH_RESCUE_SCENE.equals(task.getSceneCode())
+                    && "TODO".equalsIgnoreCase(task.getStatus())
+                    && "VISIT_FLOAT_BALL".equalsIgnoreCase(task.getPlayType())
+                    && task.getWaitSeconds() > 0;
+            if (eligible && (selected == null
+                    || task.getTaskType().compareTo(selected.getTaskType()) < 0)) {
+                selected = task;
+            }
+        }
+        return selected;
+    }
+
+    private static AiFishTask parseAiFishTask(JSONObject task) {
+        JSONObject baseInfo = task == null ? null : task.optJSONObject("taskBaseInfo");
+        if (baseInfo == null) {
+            return null;
+        }
+        String taskType = baseInfo.optString("taskType").trim();
+        String sceneCode = baseInfo.optString("sceneCode").trim();
+        String status = baseInfo.optString("taskStatus").trim();
+        if (taskType.isEmpty() || sceneCode.isEmpty() || status.isEmpty()) {
+            return null;
+        }
+        JSONObject bizInfo = aiFishObjectValue(baseInfo, "bizInfo");
+        JSONObject playParam = aiFishObjectValue(baseInfo, "prodPlayParam");
+        int waitSeconds = playParam == null ? 0 : playParam.optInt("timeCount", 0);
+        waitSeconds = Math.max(0, Math.min(60, waitSeconds));
+        return new AiFishTask(
+                sceneCode,
+                taskType,
+                bizInfo == null ? "" : bizInfo.optString("taskTitle"),
+                status,
+                waitSeconds,
+                baseInfo.optString("taskProdPlayType")
+        );
+    }
+
+    private static JSONObject aiFishObjectValue(JSONObject parent, String key) {
+        Object value = parent.opt(key);
+        if (value instanceof JSONObject jsonObject) {
+            return jsonObject;
+        }
+        if (value instanceof String text) {
+            try {
+                return new JSONObject(text);
+            } catch (JSONException ignored) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    private static JSONObject aiFishResponseRoot(String response) {
+        try {
+            JSONObject root = new JSONObject(response);
+            JSONObject data = root.optJSONObject("resData");
+            return data == null ? root : data;
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private static AiFishHomeSnapshot unknownAiFishHome() {
+        return new AiFishHomeSnapshot(false, null, null, null);
+    }
+
+    static final class AiFishRunner {
+        private static final int MAX_TASK_PASSES = 50;
+        private static final int MAX_TOUCH_COUNT = 20;
+        private static final Set<String> DAILY_ONCE_MAIN_TASK_TYPES =
+                Set.of("AIFISH_ZHUANHUA_BWXRK");
+
+        private final AiFishGateway gateway;
+        private final List<String> events = new ArrayList<>();
+        private int completedTaskCount;
+        private int receivedRewardCount;
+
+        AiFishRunner(AiFishGateway gateway) {
+            this.gateway = gateway;
+        }
+
+        AiFishRunResult run() {
+            if (!isAiFishActionAccepted(gateway.queryStatus())) {
+                events.add("AI摸鱼状态接口不可用");
+                return result(false, false, 0);
+            }
+            AiFishHomeSnapshot home = parseAiFishHome(gateway.queryHome());
+            if (!home.isRecognized()) {
+                events.add("AI摸鱼主页结构未知");
+                return result(true, false, 0);
+            }
+
+            boolean rescued = false;
+            if ("CAPTURED".equalsIgnoreCase(home.getFishStatus())) {
+                rescued = rescueCapturedFish();
+                if (!rescued) {
+                    return result(true, false, 0);
+                }
+            }
+
+            processMainTasks();
+            return result(true, rescued, touchAvailableFish());
+        }
+
+        private boolean rescueCapturedFish() {
+            AiFishTask task = selectAiFishRescueTask(
+                    parseAiFishTasks(gateway.listTasks(AI_FISH_RESCUE_SCENE))
+            );
+            if (task == null) {
+                events.add("AI摸鱼未找到可用找回任务");
+                return false;
+            }
+            events.add("AI摸鱼找回任务等待" + task.getWaitSeconds() + "秒");
+            gateway.waitMillis((task.getWaitSeconds() + 1L) * 1000L);
+            if (!isAiFishActionAccepted(gateway.rescueFish())) {
+                events.add("AI摸鱼找回接口未受理");
+                return false;
+            }
+            AiFishHomeSnapshot confirmed = parseAiFishHome(gateway.queryHome());
+            boolean rescued = confirmed.isRecognized()
+                    && !"CAPTURED".equalsIgnoreCase(confirmed.getFishStatus());
+            events.add(rescued ? "AI摸鱼被抓的鱼已找回" : "AI摸鱼找回状态未确认");
+            return rescued;
+        }
+
+        private void processMainTasks() {
+            Set<String> attemptedTasks = new LinkedHashSet<>();
+            Set<String> attemptedRewards = new LinkedHashSet<>();
+            for (int pass = 0; pass < MAX_TASK_PASSES; pass++) {
+                AiFishTaskSnapshot snapshot = parseAiFishTasks(
+                        gateway.listTasks(AI_FISH_MAIN_SCENE)
+                );
+                if (!snapshot.isRecognized()) {
+                    events.add("AI摸鱼主任务结构未知");
+                    return;
+                }
+                boolean attemptedInPass = false;
+                for (AiFishTask task : snapshot.getTasks()) {
+                    try {
+                        if ("FINISHED".equalsIgnoreCase(task.getStatus())
+                                && attemptedRewards.add(task.getTaskType())) {
+                            attemptedInPass = true;
+                            markCompletedTodayIfNeeded(task.getTaskType());
+                            claimAndConfirm(task);
+                        } else if ("TODO".equalsIgnoreCase(task.getStatus())
+                                && attemptedTasks.add(task.getTaskType())) {
+                            if (shouldSkipToday(task)) {
+                                events.add("AI摸鱼任务今日已完成，跳过[" + task.getTitle() + "]");
+                            } else {
+                                attemptedInPass = true;
+                                finishAndConfirm(task, attemptedRewards);
+                            }
+                        }
+                    } catch (Throwable t) {
+                        events.add("AI摸鱼任务异常，已跳过[" + task.getTitle() + "]");
+                    }
+                }
+                if (!attemptedInPass) {
+                    return;
+                }
+            }
+            events.add("AI摸鱼主任务达到轮询上限");
+        }
+
+        private void finishAndConfirm(AiFishTask task, Set<String> attemptedRewards) {
+            events.add("AI摸鱼任务等待" + task.getWaitSeconds() + "秒[" + task.getTitle() + "]");
+            gateway.waitMillis(task.getWaitSeconds() * 1000L);
+            if (!isAiFishActionAccepted(
+                    gateway.finishTask(task.getSceneCode(), task.getTaskType())
+            )) {
+                events.add("AI摸鱼任务完成未受理[" + task.getTitle() + "]");
+                return;
+            }
+            markCompletedTodayIfNeeded(task.getTaskType());
+            AiFishTask after = queryMainTask(task.getTaskType());
+            if (after != null && "FINISHED".equalsIgnoreCase(after.getStatus())) {
+                completedTaskCount++;
+                events.add("AI摸鱼任务完成已确认[" + task.getTitle() + "]");
+                if (attemptedRewards.add(task.getTaskType())) {
+                    claimAndConfirm(after);
+                }
+            } else if (after != null && "RECEIVED".equalsIgnoreCase(after.getStatus())) {
+                completedTaskCount++;
+                markCompletedTodayIfNeeded(task.getTaskType());
+                events.add("AI摸鱼任务已直接领取[" + task.getTitle() + "]");
+            } else {
+                events.add("AI摸鱼任务状态未推进[" + task.getTitle() + "]");
+            }
+        }
+
+        private void claimAndConfirm(AiFishTask task) {
+            if (!isAiFishActionAccepted(
+                    gateway.receiveTaskAward(task.getSceneCode(), task.getTaskType())
+            )) {
+                events.add("AI摸鱼奖励领取未受理[" + task.getTitle() + "]");
+                return;
+            }
+            AiFishTask after = queryMainTask(task.getTaskType());
+            if (after != null && "RECEIVED".equalsIgnoreCase(after.getStatus())) {
+                receivedRewardCount++;
+                events.add("AI摸鱼奖励领取已确认[" + task.getTitle() + "]");
+            } else {
+                events.add("AI摸鱼奖励状态未推进[" + task.getTitle() + "]");
+            }
+        }
+
+        private AiFishTask queryMainTask(String taskType) {
+            AiFishTaskSnapshot snapshot = parseAiFishTasks(
+                    gateway.listTasks(AI_FISH_MAIN_SCENE)
+            );
+            if (!snapshot.isRecognized()) {
+                return null;
+            }
+            for (AiFishTask task : snapshot.getTasks()) {
+                if (taskType.equals(task.getTaskType())) {
+                    return task;
+                }
+            }
+            return null;
+        }
+
+        private boolean shouldSkipToday(AiFishTask task) {
+            return DAILY_ONCE_MAIN_TASK_TYPES.contains(task.getTaskType())
+                    && gateway.hasCompletedToday(task.getTaskType());
+        }
+
+        private void markCompletedTodayIfNeeded(String taskType) {
+            if (DAILY_ONCE_MAIN_TASK_TYPES.contains(taskType)) {
+                gateway.markCompletedToday(taskType);
+            }
+        }
+
+        private int touchAvailableFish() {
+            AiFishHomeSnapshot before = parseAiFishHome(gateway.queryHome());
+            if (!before.isRecognized()) {
+                events.add("AI摸鱼主页复查结构未知");
+                return 0;
+            }
+            int touchCount = 0;
+            for (int count = 0; count < MAX_TOUCH_COUNT; count++) {
+                if (before.getRemainTouchChance() == null
+                        || before.getRemainTouchChance() <= 0) {
+                    return touchCount;
+                }
+                String response = gateway.touchFish();
+                if (!isAiFishActionAccepted(response)) {
+                    events.add("AI摸鱼动作未受理");
+                    return touchCount;
+                }
+                AiFishHomeSnapshot after = parseAiFishHome(response);
+                if (!after.isRecognized()) {
+                    events.add("AI摸鱼响应结构未知");
+                    return touchCount;
+                }
+                boolean progressed = after.getTouchTotal() > before.getTouchTotal()
+                        || after.getRemainTouchChance() < before.getRemainTouchChance();
+                if (!progressed) {
+                    events.add("AI摸鱼状态无进展");
+                    return touchCount;
+                }
+                touchCount++;
+                events.add("AI摸鱼成功，累计" + after.getTouchTotal() + "次");
+                before = after;
+            }
+            events.add("AI摸鱼达到单轮上限");
+            return touchCount;
+        }
+
+        private AiFishRunResult result(boolean available, boolean rescued, int touchCount) {
+            return new AiFishRunResult(
+                    available,
+                    rescued,
+                    completedTaskCount,
+                    receivedRewardCount,
+                    touchCount,
+                    List.copyOf(events)
+            );
         }
     }
 
