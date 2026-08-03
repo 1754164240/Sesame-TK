@@ -210,8 +210,6 @@ jobs:
           body: |
             > ## 下载说明
             <b>- arm64-v8a:</b> 适用于64位ARM设备 (主流新手机)
-            >
-            > **如果不确定，请下载 `universal` 版本。**
 
       - name: 🔁 Sync Release to Target Repository
         uses: softprops/action-gh-release@v2
@@ -219,15 +217,6 @@ jobs:
           name: ${{ steps.extract_info.outputs.release_date }} # 发布的名称。默认为标签名称
           files: |
             ${{ steps.extract_apks.outputs.signed_arm64 }}
-            ${{ steps.extract_apks.outputs.signed_armv7 }}
-            ${{ steps.extract_apks.outputs.signed_x86 }}
-            ${{ steps.extract_apks.outputs.signed_x86_64 }}
-            ${{ steps.extract_apks.outputs.signed_universal }}
-            CHECKSUMS-Sesame-arm64-v8a-${{ steps.extract_info.outputs.version }}.apk.sha256
-            CHECKSUMS-Sesame-armeabi-v7a-${{ steps.extract_info.outputs.version }}.apk.sha256
-            CHECKSUMS-Sesame-x86-${{ steps.extract_info.outputs.version }}.apk.sha256
-            CHECKSUMS-Sesame-x86_64-${{ steps.extract_info.outputs.version }}.apk.sha256
-            CHECKSUMS-Sesame-universal-${{ steps.extract_info.outputs.version }}.apk.sha256
           tag_name: ${{ steps.extract_info.outputs.version}}
           draft: false
           make_latest: true
