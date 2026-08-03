@@ -4,7 +4,6 @@ package fansirsqi.xposed.sesame.task.antFarm
 import fansirsqi.xposed.sesame.util.GlobalThreadPools
 import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.ResChecker
-import fansirsqi.xposed.sesame.util.maps.UserMap
 import org.json.JSONArray
 import org.json.JSONObject
 import kotlin.math.abs
@@ -39,6 +38,7 @@ class ChouChouLe {
         var rightsTimesLimit: Int = 0,
         var awardType: String = "",
         var awardCount: Int = 0,
+        var description: String = "",
         var targetUrl: String = ""
     ) {
         /**
@@ -56,26 +56,16 @@ class ChouChouLe {
     fun chouchoule(): Boolean {
         var allFinished = true
         try {
-            val response = AntFarmRpcCall.queryLoveCabin(UserMap.currentUid)
-            val jo = JSONObject(response)
-            if (!ResChecker.checkRes(TAG, jo)) {
+            val drawTypes = ChouChouLeProtocol.discoverDrawTypes { scene, otherScene, source ->
+                AntFarmRpcCall.queryDrawMachineActivity_New(scene, otherScene, source)
+            }
+            if (drawTypes.isEmpty()) {
+                Log.error(TAG, "抽抽乐🎁[未发现有效抽抽乐活动]")
                 return false
             }
 
-            val drawMachineInfo = jo.optJSONObject("drawMachineInfo")
-            if (drawMachineInfo == null) {
-                Log.error(TAG, "抽抽乐🎁[获取抽抽乐活动信息失败]")
-                return false
-            }
-
-            // 执行IP抽抽乐
-            if (drawMachineInfo.has("ipDrawMachineActivityId")) {
-                allFinished = true and doChouchoule("ipDraw")
-            }
-
-            // 执行普通抽抽乐
-            if (drawMachineInfo.has("dailyDrawMachineActivityId")) {
-                allFinished = allFinished and doChouchoule("dailyDraw")
+            for (drawType in drawTypes) {
+                allFinished = allFinished and doChouchoule(drawType)
             }
 
             return allFinished
@@ -165,9 +155,21 @@ class ChouChouLe {
 
             // 校验抽奖次数
             val drawJo = if ("ipDraw" == drawType) {
-                JSONObject(AntFarmRpcCall.queryDrawMachineActivity_New("ipDrawMachine", "dailyDrawMachine"))
+                JSONObject(
+                    AntFarmRpcCall.queryDrawMachineActivity_New(
+                        "ipDrawMachine",
+                        "dailyDrawMachine",
+                        ChouChouLeProtocol.sourceFor(drawType)
+                    )
+                )
             } else {
-                JSONObject(AntFarmRpcCall.queryDrawMachineActivity_New("dailyDrawMachine", "ipDrawMachine"))
+                JSONObject(
+                    AntFarmRpcCall.queryDrawMachineActivity_New(
+                        "dailyDrawMachine",
+                        "ipDrawMachine",
+                        ChouChouLeProtocol.sourceFor(drawType)
+                    )
+                )
             }
             if (!ResChecker.checkRes(TAG, drawJo)) return false
             val drawTimes = drawJo.optInt("drawTimes", 0)
@@ -196,6 +198,7 @@ class ChouChouLe {
                 rightsTimesLimit = item.optInt("rightsTimesLimit", 0),
                 awardType = item.optString("awardType"),
                 awardCount = item.optInt("awardCount", 0),
+                description = item.optString("desc"),
                 targetUrl = item.optString("targetUrl", "")
             )
             list.add(info)
@@ -251,42 +254,23 @@ class ChouChouLe {
      */
     private fun handleAdTask(drawType: String, task: TaskInfo): Boolean {
         try {
-            val referToken = AntFarm.loadAntFarmReferToken()
             val taskSceneCode = if (drawType == "ipDraw") "ANTFARM_IP_DRAW_TASK" else "ANTFARM_DAILY_DRAW_TASK"
-
-            // 如果有referToken，尝试执行广告任务
-            if (!referToken.isNullOrEmpty()) {
-                val response = AntFarmRpcCall.xlightPlugin(referToken, "HDWFCJGXNZW_CUSTOM_20250826173111")
-                val jo = JSONObject(response)
-
-                if (jo.optString("retCode") == "0") {
-                    val resData = jo.getJSONObject("resData")
-                    val adList = resData.optJSONArray("adList")
-
-                    if (adList != null && adList.length() > 0) {
-                        // 检查是否有猜一猜任务
-                        val playingResult = resData.optJSONObject("playingResult")
-                        if (playingResult != null &&
-                            "XLIGHT_GUESS_PRICE_FEEDS" == playingResult.optString("playingStyleType")
-                        ) {
-                            return handleGuessTask(drawType, task, adList, playingResult)
-                        }
-                    }
+            Log.record(TAG, "浏览杂货铺任务[按服务端时长等待后完成: ${task.title}]")
+            val success = ChouChouLeProtocol.executeBrowseTask(
+                targetUrl = task.targetUrl,
+                description = task.description,
+                queryLayer = AntFarmRpcCall::queryDrawTaskLayer,
+                sleeper = GlobalThreadPools::sleepCompat,
+                finishTask = {
+                    val outBizNo = task.taskId + "_" + System.currentTimeMillis() + "_" +
+                        Integer.toHexString((Math.random() * 0xFFFFFF).toInt())
+                    AntFarmRpcCall.finishTask(task.taskId, taskSceneCode, outBizNo)
                 }
-                Log.record(TAG, "浏览广告任务[没有可用广告或不支持，使用普通完成方式]")
-            } else {
-                Log.record(TAG, "浏览广告任务[没有可用Token，请手动看一起广告]")
-            }
+            )
 
-            // 没有token或广告任务失败，使用普通完成方式
-            val outBizNo = task.taskId + "_" + System.currentTimeMillis() + "_" +
-                    Integer.toHexString((Math.random() * 0xFFFFFF).toInt())
-            val response = AntFarmRpcCall.finishTask(task.taskId, taskSceneCode, outBizNo)
-            val jo = JSONObject(response)
-
-            if (jo.optBoolean("success", false)) {
+            if (success) {
                 Log.farm((if (drawType == "ipDraw") "IP抽抽乐" else "抽抽乐") + "🧾️[任务: ${task.title}]")
-                GlobalThreadPools.sleepCompat(3000L)
+                GlobalThreadPools.sleepCompat(300L)
                 return true
             }
             return false
@@ -367,7 +351,11 @@ class ChouChouLe {
      */
     private fun receiveTaskAward(drawType: String, taskId: String): Boolean {
         try {
-            val s = AntFarmRpcCall.chouchouleReceiveFarmTaskAward(drawType, taskId)
+            val s = AntFarmRpcCall.chouchouleReceiveFarmTaskAward(
+                drawType,
+                taskId,
+                ChouChouLeProtocol.sourceFor(drawType)
+            )
             val jo = JSONObject(s)
             if (ResChecker.checkRes(TAG, jo)) {
                 return true
@@ -385,7 +373,7 @@ class ChouChouLe {
         try {
             val jo = JSONObject(
                 AntFarmRpcCall.queryDrawMachineActivity_New(
-                    "ipDrawMachine", "dailyDrawMachine"
+                    "ipDrawMachine", "dailyDrawMachine", ChouChouLeProtocol.sourceFor("ipDraw")
                 )
             )
             if (!ResChecker.checkRes(TAG, jo)) {
@@ -408,7 +396,10 @@ class ChouChouLe {
                 val batchCount = remainingTimes.coerceAtMost(10)
                 Log.record(TAG, "执行 IP 抽抽乐 $batchCount 连抽...")
 
-                val response = AntFarmRpcCall.drawMachineIP(batchCount)
+                val response = AntFarmRpcCall.drawMachineIP(
+                    batchCount,
+                    ChouChouLeProtocol.sourceFor("ipDraw")
+                )
                 allSuccess = allSuccess and drawPrize("IP抽抽乐", response)
 
                 remainingTimes -= batchCount
@@ -433,7 +424,7 @@ class ChouChouLe {
         try {
             val jo = JSONObject(
                 AntFarmRpcCall.queryDrawMachineActivity_New(
-                    "dailyDrawMachine", "ipDrawMachine"
+                    "dailyDrawMachine", "ipDrawMachine", ChouChouLeProtocol.sourceFor("dailyDraw")
                 )
             )
             if (!ResChecker.checkRes(TAG, jo)) {

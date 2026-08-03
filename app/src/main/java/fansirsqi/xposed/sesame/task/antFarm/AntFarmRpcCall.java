@@ -1042,6 +1042,10 @@ public class AntFarmRpcCall {
      * @throws JSONException JSON异常
      */
     public static String chouchouleReceiveFarmTaskAward(String drawType, String taskId) throws JSONException {
+        return chouchouleReceiveFarmTaskAward(drawType, taskId, "antfarm_villa");
+    }
+
+    public static String chouchouleReceiveFarmTaskAward(String drawType, String taskId, String source) throws JSONException {
         String taskSceneCode = "dailyDraw".equals(drawType) ?
                 "ANTFARM_DAILY_DRAW_TASK" : "ANTFARM_IP_DRAW_TASK";
         String awardType = "dailyDraw".equals(drawType) ?
@@ -1051,7 +1055,7 @@ public class AntFarmRpcCall {
         args.put("awardType", awardType);
         args.put("requestType", "RPC");
         args.put("sceneCode", "ANTFARM");
-        args.put("source", "antfarm_villa");
+        args.put("source", source);
         args.put("taskId", taskId);
         args.put("taskSceneCode", taskSceneCode);
         String params = "[" + args + "]";
@@ -1066,13 +1070,17 @@ public class AntFarmRpcCall {
      * @return 返回结果JSON字符串
      */
     public static String queryDrawMachineActivity_New(String scene, String otherScene) {
+        return queryDrawMachineActivity_New(scene, otherScene, "antfarm_villa");
+    }
+
+    public static String queryDrawMachineActivity_New(String scene, String otherScene, String source) {
         return RequestManager.requestString(
                 "com.alipay.antfarm.queryDrawMachineActivity",
                 "[{\"otherScenes\":[\"" + otherScene + "\"],"
                         + "\"requestType\":\"RPC\","
                         + "\"scene\":\"" + scene + "\","
                         + "\"sceneCode\":\"ANTFARM\","
-                        + "\"source\":\"antfarm_villa\"}]");
+                        + "\"source\":\"" + source + "\"}]");
     }
 
     /**
@@ -1090,15 +1098,28 @@ public class AntFarmRpcCall {
      * @return 返回结果JSON字符串
      */
     public static String drawMachineIP(int batchDrawTimes) {
+        return drawMachineIP(batchDrawTimes, "antfarm_villa");
+    }
+
+    public static String drawMachineIP(int batchDrawTimes, String source) {
         String data = "[{"
                 + "\"batchDrawTimes\":" + batchDrawTimes + ","
                 + "\"requestType\":\"RPC\","
                 + "\"scene\":\"ipDrawMachine\","
                 + "\"sceneCode\":\"ANTFARM\","
-                + "\"source\":\"antfarm_villa\""
+                + "\"source\":\"" + source + "\""
                 + "}]";
 
         return RequestManager.requestString("com.alipay.antfarm.drawMachine", data);
+    }
+
+    public static String queryDrawTaskLayer(String layerSpaceCode) throws JSONException {
+        JSONObject args = new JSONObject();
+        args.put("spaceCode", layerSpaceCode);
+        return RequestManager.requestString(
+                "com.alipay.adtask.biz.mobilegw.service.applayer.query",
+                "[" + args + "]"
+        );
     }
 
     /**
