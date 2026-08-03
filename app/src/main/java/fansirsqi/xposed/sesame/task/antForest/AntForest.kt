@@ -890,6 +890,14 @@ class AntForest : ModelTask(), EnergyCollectCallback {
             collectFriendEnergyCoroutine() // 内部会自动调用 usePropBeforeCollectEnergy(userId, false)
             tc.countDebug("收取好友能量（同步）")
 
+            // 本轮收取好友能量后，重新检查倍率卡新增的待领取能量
+            try {
+                updateSelfHomePage()
+                tc.countDebug("复查倍率卡能量")
+            } catch (th: Throwable) {
+                Log.printStackTrace(TAG, "复查倍率卡能量失败", th)
+            }
+
             // -------------------------------
             // 后续任务流程
             // -------------------------------
@@ -2999,7 +3007,13 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                         if (!extInfo.isEmpty()) {
                             val extInfoObj = JSONObject(extInfo)
                             val leftEnergy = extInfoObj.optString("leftEnergy", "0").toDouble()
-                            if (leftEnergy > robExpandCardLimt!!.value || ("true" == extInfoObj.optString("overLimitToday", "false") && leftEnergy >= 1)) {
+                            val overLimitToday = "true" == extInfoObj.optString("overLimitToday", "false")
+                            if (AntForestResponsePolicy.shouldCollectRobExpandEnergy(
+                                    leftEnergy,
+                                    robExpandCardLimt!!.value,
+                                    overLimitToday
+                                )
+                            ) {
                                 val propId = userUsingProp.getString("propId")
                                 val propType = userUsingProp.getString("propType")
                                 val jo = JSONObject(AntForestRpcCall.collectRobExpandEnergy(propId, propType))
