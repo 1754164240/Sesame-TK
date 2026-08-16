@@ -63,7 +63,6 @@ import fansirsqi.xposed.sesame.util.AssetUtil.checkerDestFile
 import fansirsqi.xposed.sesame.util.AssetUtil.copyStorageSoFileToPrivateDir
 import fansirsqi.xposed.sesame.util.AssetUtil.dexkitDestFile
 import fansirsqi.xposed.sesame.util.DataStore.init
-import fansirsqi.xposed.sesame.util.Detector
 import fansirsqi.xposed.sesame.util.Detector.loadLibrary
 import fansirsqi.xposed.sesame.util.Files
 import fansirsqi.xposed.sesame.util.GlobalThreadPools.execute
@@ -292,11 +291,6 @@ class ApplicationHook {
                     service = appService
                     appContext = appService.applicationContext
                     ensureScheduler()
-
-                    if (Detector.isLegitimateEnvironment(appContext!!)) {
-                        Detector.dangerous(appContext!!)
-                        return
-                    }
 
                     DexKitBridge.create(apkPath).use { _ ->
                         record(TAG, "Hook DexKit successfully")
