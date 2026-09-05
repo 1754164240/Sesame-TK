@@ -1,6 +1,7 @@
 package fansirsqi.xposed.sesame.task.antMember
 
 import android.annotation.SuppressLint
+import fansirsqi.xposed.sesame.data.Status
 import fansirsqi.xposed.sesame.data.Status.Companion.canMemberPointExchangeBenefitToday
 import fansirsqi.xposed.sesame.data.Status.Companion.canMemberSignInToday
 import fansirsqi.xposed.sesame.data.Status.Companion.hasFlagToday
@@ -47,6 +48,24 @@ import java.util.regex.Pattern
 import kotlin.math.max
 
 class AntMember : ModelTask() {
+    private val gameDailyPolicy = MemberGameDailyPolicy(
+        { flag ->
+            synchronized(Status.Companion) {
+                Status.save()
+                hasFlagToday(flag)
+            }
+        },
+        { flag ->
+            synchronized(Status.Companion) {
+                // 必须先清理跨日状态，再添加当天记录，避免 save 时把新标记一并清空。
+                Status.save()
+                setFlagToday(flag)
+            }
+        },
+        { UserMap.currentUid.orEmpty() },
+        { SimpleDateFormat("yyyy-MM-dd", Locale.CHINA).format(Date()) }
+    )
+
     override fun getName(): String {
         return "会员"
     }
@@ -1206,24 +1225,29 @@ class AntMember : ModelTask() {
     }
 
     private suspend fun processLimitedGameVisit() {
+        var ticket: MemberGameDailyPolicy.Ticket? = null
+        var visited = false
         try {
             val today = SimpleDateFormat("yyyy-MM-dd", Locale.CHINA).format(Date())
-            if (hasLimitedGameVisitReward(today)) {
-                record(TAG, "会员任务🎖️[限时游戏访问奖励今日已领取]")
-                return
-            }
-
             val entranceResponse = JSONObject(AntMemberRpcCall.queryGameEntranceInfo())
             if (!ResChecker.checkRes("$TAG.queryGameEntranceInfo", entranceResponse)) {
                 return
             }
-            val context = MemberTaskProtocol.parseGameVisitContext(entranceResponse)
-            if (context == null) {
-                Log.error(TAG, "会员任务限时游戏入口参数解析失败")
+            val context = try {
+                MemberTaskProtocol.parseGameVisitContext(entranceResponse)
+            } catch (e: IllegalArgumentException) {
+                Log.error(TAG, "会员任务限时游戏入口参数解析失败: ${e.message}")
                 return
             }
+            if (context == null) {
+                record(TAG, "会员任务[当前没有限时游戏入口]")
+                return
+            }
+            ticket = gameDailyPolicy.tryStart(context.dailyTaskId) ?: return
 
-            val requests = listOf(
+            val requests = if (context.external) listOf(
+                "queryMemberGameHome" to { AntMemberRpcCall.queryMemberGameHome(context) }
+            ) else listOf(
                 "queryMemberGameHome" to { AntMemberRpcCall.queryMemberGameHome(context) },
                 "queryMemberGameModule" to { AntMemberRpcCall.queryMemberGameModule(context) },
                 "queryMemberWalkMain" to { AntMemberRpcCall.queryMemberWalkMain(context) }
@@ -1234,6 +1258,11 @@ class AntMember : ModelTask() {
                     return
                 }
             }
+            visited = true
+            if (context.external) {
+                record(TAG, "会员任务[新版游戏入口今日已访问，奖励以页面任务为准]")
+                return
+            }
 
             delay(1_000L)
             if (hasLimitedGameVisitReward(today)) {
@@ -1243,6 +1272,8 @@ class AntMember : ModelTask() {
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "processLimitedGameVisit err:", t)
+        } finally {
+            ticket?.let { gameDailyPolicy.finish(it, visited) }
         }
     }
 
@@ -1756,7 +1787,9 @@ class AntMember : ModelTask() {
     private suspend fun enableGameCenter() {
         try {
             // 1. 查询签到状态并尝试签到
-            try {
+            val signTicket = gameDailyPolicy.tryStart("gameCenter:signIn")
+            var signCompleted = false
+            if (signTicket != null) try {
                 val resp = AntMemberRpcCall.querySignInBall()
                 val root = JSONObject(resp)
                 if (!ResChecker.checkRes(TAG, root)) {
@@ -1773,6 +1806,7 @@ class AntMember : ModelTask() {
                     val signModule = data.optJSONObject("signInBallModule")
                     val signed = signModule != null && signModule.optBoolean("signInStatus", false)
                     if (signed) {
+                        signCompleted = true
                         record("$TAG.enableGameCenter.signIn", "游戏中心🎮[今日已签到]")
                     } else {
                         val signResp = AntMemberRpcCall.continueSignIn()
@@ -1798,6 +1832,7 @@ class AntMember : ModelTask() {
                             }
                             val toastSuccess = "SUCCESS".equals(type, ignoreCase = true) && !title.contains("失败") && !desc.contains("失败")
                             if (toastSuccess) {
+                                signCompleted = true
                                 val sb = StringBuilder()
                                 sb.append("游戏中心🎮[每日签到成功]")
                                 if (!title.isEmpty()) {
@@ -1825,6 +1860,8 @@ class AntMember : ModelTask() {
                 }
             } catch (th: Throwable) {
                 Log.printStackTrace(TAG, "enableGameCenter.signIn err:", th)
+            } finally {
+                gameDailyPolicy.finish(signTicket, signCompleted)
             }
 
             // 2. 查询任务列表,完成平台任务
@@ -1844,8 +1881,7 @@ class AntMember : ModelTask() {
                                 var total = 0
                                 var finished = 0
                                 var failed = 0
-                                var lastFailedTaskId = ""
-                                var lastFailedCount = 0
+                                val attemptedTaskIds = mutableSetOf<String>()
 
                                 for (i in 0..<platformTaskList.length()) {
                                     val task = platformTaskList.optJSONObject(i) ?: continue
@@ -1858,21 +1894,11 @@ class AntMember : ModelTask() {
                                         continue
                                     }
 
-                                    // 如果是上次失败的任务,计数加1
-                                    if (taskId == lastFailedTaskId) {
-                                        lastFailedCount++
-                                        if (lastFailedCount >= 2) {
-                                            record(
-                                                "$TAG.enableGameCenter.tasks", "游戏中心🎮任务[" + task.optString("title") + "]连续失败2次,跳过"
-                                            )
-                                            continue
-                                        }
-                                    } else {
-                                        // 新任务,重置计数
-                                        lastFailedTaskId = taskId
-                                        lastFailedCount = 0
-                                    }
+                                    if (!attemptedTaskIds.add(taskId)) continue
 
+                                    val gameTicket = gameDailyPolicy.tryStart("platform:$taskId") ?: continue
+                                    var gameCompleted = false
+                                    var skipGameToday = false
                                     total++
                                     val title = task.optString("title")
                                     val subTitle = task.optString("subTitle")
@@ -1886,6 +1912,7 @@ class AntMember : ModelTask() {
                                             delay(300)
                                             val signUpJo = JSONObject(signUpResp)
                                             if (!ResChecker.checkRes(TAG, signUpJo)) {
+                                                skipGameToday = signUpJo.opt("retryable") == false || signUpJo.opt("retriable") == false
                                                 val msg = signUpJo.optString(
                                                     "errorMsg", signUpJo.optString("resultView", signUpResp)
                                                 )
@@ -1904,27 +1931,22 @@ class AntMember : ModelTask() {
 
                                         if (ResChecker.checkRes(TAG, doJo)) {
                                             // 检查返回的任务状态
-                                            val doData = doJo.optJSONObject("data")
-                                            val resultStatus = if (doData != null) doData.optString(
-                                                "taskStatus", ""
-                                            ) else ""
-
-                                            if ("SIGNUP_COMPLETE" == resultStatus || "NOT_DONE" == resultStatus) {
+                                            if (!MemberTaskProtocol.isGameTaskCompleted(doJo)) {
                                                 // 状态未变更,记为失败
                                                 Log.error(
                                                     "$TAG.enableGameCenter.tasks", "游戏中心🎮任务[$title]状态未变更,可能无法完成"
                                                 )
                                                 failed++
                                             } else {
+                                                gameCompleted = true
                                                 // 真正完成,重置失败计数
                                                 Log.other(
                                                     "游戏中心🎮任务[" + (subTitle.ifEmpty { title }) + "]#完成,奖励" + pointAmount + "玩乐豆" + (if (needSignUp) "(签到任务)" else "")
                                                 )
                                                 finished++
-                                                lastFailedTaskId = ""
-                                                lastFailedCount = 0
                                             }
                                         } else {
+                                            skipGameToday = doJo.opt("retryable") == false || doJo.opt("retriable") == false
                                             val msg = doJo.optString(
                                                 "errorMsg", doJo.optString("resultView", doResp)
                                             )
@@ -1936,6 +1958,8 @@ class AntMember : ModelTask() {
                                     } catch (e: Throwable) {
                                         Log.printStackTrace("$TAG.enableGameCenter.tasks.doTask", e)
                                         failed++
+                                    } finally {
+                                        gameDailyPolicy.finish(gameTicket, gameCompleted, skipGameToday)
                                     }
                                 }
 

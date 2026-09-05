@@ -55,6 +55,8 @@ abstract class ModelTask : Model() {
     /** 当前顶层业务任务，用于在销毁模型前等待实际业务退出 */
     @Volatile
     private var currentTaskJob: Job? = null
+    /** 取消后仍未退出的任务也必须可等待，避免恢复时漏掉旧业务。 */
+    private val stoppingJobs = mutableSetOf<Job>()
     
     /** 子任务映射表，存储当前任务的所有子任务 */
     private val childTaskMap: MutableMap<String, ChildModelTask> = ConcurrentHashMap()
@@ -116,6 +118,7 @@ abstract class ModelTask : Model() {
 
     /** 检查任务是否可以执行  */
     open fun check(): Boolean {
+        if (fansirsqi.xposed.sesame.hook.ApplicationHook.offline) return false
         TaskCommon.update()
 
         // 只有蚂蚁森林启用且当前不是蚂蚁森林任务时，才拦截能量时间
@@ -315,6 +318,8 @@ abstract class ModelTask : Model() {
         val stats = TaskExecutionStats()
         
         for (round in 1..rounds) {
+            currentCoroutineContext().ensureActive()
+            if (fansirsqi.xposed.sesame.hook.ApplicationHook.offline) break
             if (getName() != "MAIN_TASK") {
                 Log.record(TAG, "开始执行第${round}轮任务: ${getName()}")
             }
@@ -344,10 +349,11 @@ abstract class ModelTask : Model() {
         try {
             run()
             stats.recordTaskEnd("${getName()}-Round$round", true)
-        } catch (_: CancellationException) {
+        } catch (e: CancellationException) {
             // 本轮被取消，记录为跳过而非失败
             stats.recordSkipped("${getName()}-Round$round")
             Log.record(TAG, "任务本轮被取消: ${getName()}-Round$round")
+            throw e
         } catch (e: Exception) {
             stats.recordTaskEnd("${getName()}-Round$round", false)
             throw e
@@ -360,10 +366,17 @@ abstract class ModelTask : Model() {
         return synchronized(taskLifecycleLock) {
             val scope = taskScope
             val jobs = buildList {
+                addAll(stoppingJobs)
                 currentTaskJob?.let(::add)
                 scope?.coroutineContext?.get(Job)?.let(::add)
                 childTaskMap.values.mapNotNullTo(this) { it.job }
             }.distinct()
+            stoppingJobs.addAll(jobs)
+            jobs.forEach { job ->
+                job.invokeOnCompletion {
+                    synchronized(taskLifecycleLock) { stoppingJobs.remove(job) }
+                }
+            }
 
             childTaskMap.values.forEach { childTask ->
                 try {

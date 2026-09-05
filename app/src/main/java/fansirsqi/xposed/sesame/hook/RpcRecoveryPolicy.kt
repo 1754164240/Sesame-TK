@@ -61,6 +61,7 @@ class RpcRecoveryPolicy {
         return decision
     }
 
+    @Synchronized
     fun onVerificationRequired(): RecoveryDecision {
         reason.set(RpcBlockReason.VERIFICATION)
         return if (verificationNotified.compareAndSet(false, true)) {
@@ -76,7 +77,14 @@ class RpcRecoveryPolicy {
         // 无返回值请求无法证明 Bridge 已恢复，保留当前熔断状态。
     }
 
+    @Synchronized
     fun onSuccess() {
+        if (reason.get() == RpcBlockReason.VERIFICATION) return
+        reset()
+    }
+
+    @Synchronized
+    fun reset() {
         consecutiveFailures.set(0)
         reason.set(RpcBlockReason.NONE)
         recoveryScheduled.set(false)

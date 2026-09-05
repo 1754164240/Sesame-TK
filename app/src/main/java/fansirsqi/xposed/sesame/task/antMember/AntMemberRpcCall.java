@@ -176,7 +176,9 @@ public class AntMemberRpcCall {
      */
     public static String queryMemberGameHome(MemberGameVisitContext context) {
         return RequestManager.requestString(
-                "com.alipay.gamecenterhome.biz.rpc.queryHomePage",
+                context.getExternal()
+                        ? "com.alipay.gamecenteruprod.biz.rpc.external.gamecenter.queryHomePage"
+                        : "com.alipay.gamecenterhome.biz.rpc.queryHomePage",
                 MemberTaskProtocol.buildGameHomeArgs(context).toString()
         );
     }

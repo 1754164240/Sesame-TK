@@ -9,6 +9,25 @@ import java.util.concurrent.atomic.AtomicInteger
 class RpcRecoveryPolicyTest {
 
     @Test
+    fun `验证后晚到的成功响应不能解除暂停`() {
+        val policy = RpcRecoveryPolicy()
+        policy.onVerificationRequired()
+        policy.onSuccess()
+        assertEquals(RpcBlockReason.VERIFICATION, policy.blockReason)
+    }
+
+    @Test
+    fun `只有显式重置才解除验证暂停并允许下一次验证通知`() {
+        val policy = RpcRecoveryPolicy()
+        policy.onVerificationRequired()
+        policy.onSuccess()
+        assertEquals(RecoveryDecision.NONE, policy.onExternalOffline())
+        policy.reset()
+        assertEquals(RpcBlockReason.NONE, policy.blockReason)
+        assertEquals(RecoveryDecision.WAIT_FOR_MANUAL_VERIFICATION, policy.onVerificationRequired())
+    }
+
+    @Test
     fun `网络失败达到阈值后只调度一次恢复`() {
         val policy = RpcRecoveryPolicy()
 

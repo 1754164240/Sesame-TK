@@ -3,10 +3,67 @@ package fansirsqi.xposed.sesame.task.antMember
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class MemberTaskProtocolTest {
+    @Test
+    fun `游戏完成必须有明确终态而非成功空包装或未知状态`() {
+        assertFalse(MemberTaskProtocol.isGameTaskCompleted(JSONObject("""{"success":true}""")))
+        assertFalse(MemberTaskProtocol.isGameTaskCompleted(JSONObject("""{"success":true,"data":{"taskStatus":"PROCESSING"}}""")))
+        assertFalse(MemberTaskProtocol.isGameTaskCompleted(JSONObject("""{"success":false,"data":{"taskStatus":"FINISHED"}}""")))
+        assertTrue(MemberTaskProtocol.isGameTaskCompleted(JSONObject("""{"success":true,"data":{"taskStatus":"FINISHED"}}""")))
+    }
+
+    @Test
+    fun `会员游戏同任务成功后当天不再执行且重建策略保留状态`() {
+        val stored = mutableSetOf<String>()
+        fun policy() = MemberGameDailyPolicy(stored::contains, { stored.add(it) }, { "account-a" }, { "2026-09-05" })
+        val first = policy()
+        val ticket = requireNotNull(first.tryStart("platform:game-a"))
+        assertNull(policy().tryStart("platform:game-a"))
+        first.finish(ticket, true)
+        assertNull(policy().tryStart("platform:game-a"))
+        val other = requireNotNull(policy().tryStart("platform:game-b"))
+        policy().finish(other, true)
+        assertEquals(2, stored.count { it.endsWith("::done") })
+    }
+
+    @Test
+    fun `会员游戏失败保留当日尝试但不写成功状态`() {
+        val stored = mutableSetOf<String>()
+        val policy = MemberGameDailyPolicy(stored::contains, { stored.add(it) }, { "account-failure" }, { "2026-09-05" })
+        val ticket = requireNotNull(policy.tryStart("game"))
+        policy.finish(ticket, false)
+        assertTrue(stored.single().endsWith("::attempted"))
+        assertNull(policy.tryStart("game"))
+        val other = requireNotNull(policy.tryStart("other-game"))
+        policy.finish(other, false, skipToday = true)
+        assertNull(policy.tryStart("other-game"))
+        assertTrue(stored.any { it.endsWith("::skipped") })
+        assertFalse(stored.any { it.endsWith("::done") })
+    }
+
+    @Test
+    fun `会员游戏跨日及跨账号独立且旧请求不污染新日期`() {
+        val stored = mutableSetOf<String>()
+        var account = "account-day"
+        var date = "2026-09-05"
+        val policy = MemberGameDailyPolicy(stored::contains, { stored.add(it) }, { account }, { date })
+        policy.finish(requireNotNull(policy.tryStart("game")), true)
+        account = "account-other"
+        policy.finish(requireNotNull(policy.tryStart("game")), true)
+        val previousDay = requireNotNull(policy.tryStart("old-request"))
+        date = "2026-09-06"
+        stored.clear()
+        policy.finish(previousDay, true)
+        assertTrue(stored.isEmpty())
+        policy.finish(requireNotNull(policy.tryStart("game")), true)
+        assertEquals(2, stored.size)
+        assertTrue(stored.all { it.contains("2026-09-06") })
+    }
 
     @Test
     fun `签到页任务查询使用真实任务墙参数`() {
@@ -358,6 +415,78 @@ class MemberTaskProtocolTest {
         assertEquals("promote", context?.tab)
         assertEquals("CY26_JULY", context?.sceneId)
         assertEquals("hyjmwf07", context?.taskId)
+        assertEquals("limited:[\"CY26_JULY\",\"hyjmwf07\"]", context?.dailyTaskId)
+    }
+
+    @Test
+    fun `新版游戏入口使用外层来源和内层场景且不编造旧任务参数`() {
+        val response = JSONObject(
+            """
+            {
+              "success": true,
+              "resultCode": "SUCCESS",
+              "critical": false,
+              "retriable": false,
+              "gameEntrancePointNum": 30,
+              "actionUrl": "alipays://platformapi/startapp?appId=2021003125685383&url=https%3A%2F%2Frender.alipay.com%2Fp%2Fyuyan%2F180020010001206617%2FexternalGameCenter.html%3FcaprMode%3Dsync%26sceneId%3Dsample_scene&chInfo=sample_source&startMultApp=YES&appClearTop=false"
+            }
+            """.trimIndent()
+        )
+
+        val context = MemberTaskProtocol.parseGameVisitContext(response)
+
+        assertEquals("sample_source", context?.source)
+        assertEquals("sample_scene", context?.sceneId)
+        assertEquals("", context?.tab)
+        assertEquals("", context?.taskId)
+        assertEquals("external:[\"sample_scene\",\"sample_source\"]", context?.dailyTaskId)
+        val request = MemberTaskProtocol.buildGameHomeArgs(requireNotNull(context)).getJSONObject(0)
+        assertEquals("sample_scene", request.getString("sceneId"))
+        assertEquals("sample_source", request.getString("source"))
+        assertEquals("", request.getString("channelTaskPassThrough"))
+        assertEquals("", request.getString("guideType"))
+        assertEquals("", request.getString("moduleId"))
+        assertFalse(request.has("sourceTab"))
+        assertFalse(request.has("__git"))
+    }
+
+    @Test
+    fun `成功响应没有活动入口时正常跳过`() {
+        assertNull(MemberTaskProtocol.parseGameVisitContext(JSONObject("""{"success":true}""")))
+        assertNull(MemberTaskProtocol.parseGameVisitContext(JSONObject("""{"success":true,"actionUrl":""}""")))
+        assertNull(MemberTaskProtocol.parseGameVisitContext(JSONObject("""{"success":true,"actionUrl":null}""")))
+    }
+
+    @Test
+    fun `入口格式错误只提供缺失字段诊断且不泄露地址参数`() {
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            MemberTaskProtocol.parseGameVisitContext(
+                JSONObject().put("actionUrl", "alipays://platformapi/startapp?secret=private-token")
+            )
+        }
+        assertEquals("入口缺少 url", error.message)
+    }
+
+    @Test
+    fun `新版入口缺少场景时拒绝猜测旧活动参数`() {
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            MemberTaskProtocol.parseGameVisitContext(JSONObject().put(
+                "actionUrl",
+                "alipays://platformapi/startapp?url=https%3A%2F%2Frender.alipay.com%2FexternalGameCenter.html%3FcaprMode%3Dsync&chInfo=sample_source"
+            ))
+        }
+        assertEquals("新版入口缺少 sceneId", error.message)
+    }
+
+    @Test
+    fun `旧版入口缺少任务透传时报告必要字段而非无活动`() {
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            MemberTaskProtocol.parseGameVisitContext(JSONObject().put(
+                "actionUrl",
+                "alipays://platformapi/startapp?url=https%3A%2F%2Frender.alipay.com%2Findex.html%3Ftab%3Dpromote&chInfo=sample_source"
+            ))
+        }
+        assertEquals("旧版入口缺少 channelTaskPassThrough", error.message)
     }
 
     @Test
