@@ -3,6 +3,7 @@ package fansirsqi.xposed.sesame.task.antMember
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URLDecoder
+import java.net.URI
 import java.nio.charset.StandardCharsets
 import kotlin.math.max
 
@@ -60,13 +61,60 @@ data class MemberGameVisitContext(
     val source: String,
     val tab: String,
     val sceneId: String,
-    val taskId: String
+    val taskId: String,
+    val external: Boolean = false
 ) {
+    val dailyTaskId: String
+        get() = if (external) "external:${JSONArray().put(sceneId).put(source)}"
+        else "limited:${JSONArray().put(sceneId).put(taskId)}"
+
     val channelTaskPassThrough: String
-        get() = JSONObject()
+        get() = if (external) "" else JSONObject()
             .put("sceneId", sceneId)
             .put("taskId", taskId)
             .toString()
+}
+
+class MemberGameDailyPolicy(
+    private val hasFlag: (String) -> Boolean,
+    private val saveFlag: (String) -> Unit,
+    private val account: () -> String,
+    private val date: () -> String
+) {
+    class Ticket internal constructor(val key: String, val account: String, val date: String)
+
+    fun tryStart(taskId: String): Ticket? = synchronized(inFlight) {
+        val uid = account()
+        val today = date()
+        if (uid.isBlank() || taskId.isBlank()) return@synchronized null
+        val key = "memberGame::${JSONArray().put(uid).put(today).put(taskId)}"
+        if (hasFlag("$key::attempted") || hasFlag("$key::done") || hasFlag("$key::skipped") || !inFlight.add(key)) {
+            return@synchronized null
+        }
+        try {
+            saveFlag("$key::attempted")
+        } catch (e: Throwable) {
+            inFlight.remove(key)
+            throw e
+        }
+        Ticket(key, uid, today)
+    }
+
+    fun finish(ticket: Ticket, successful: Boolean, skipToday: Boolean = false) = synchronized(inFlight) {
+        try {
+            // 当天记录由 Status 保存及清理，跨日或切换账号后的旧请求不写入新状态。
+            if (ticket.account == account() && ticket.date == date()) {
+                if (successful) saveFlag("${ticket.key}::done")
+                else if (skipToday) saveFlag("${ticket.key}::skipped")
+            }
+        } finally {
+            inFlight.remove(ticket.key)
+        }
+    }
+
+    private companion object {
+        val inFlight = mutableSetOf<String>()
+    }
 }
 
 object MemberTaskProtocol {
@@ -284,13 +332,24 @@ object MemberTaskProtocol {
 
     @JvmStatic
     fun parseGameVisitContext(response: JSONObject): MemberGameVisitContext? {
-        val outerParams = parseUrlQuery(response.optString("actionUrl"))
-        val innerUrl = outerParams["url"] ?: return null
+        if (response.isNull("actionUrl")) return null
+        val actionUrl = response.opt("actionUrl")
+        require(actionUrl is String) { "actionUrl 类型错误" }
+        if (actionUrl.isBlank()) return null
+        val outerParams = parseUrlQuery(actionUrl)
+        val innerUrl = requireNotNull(outerParams["url"]?.takeIf { it.isNotBlank() }) { "入口缺少 url" }
         val innerParams = parseUrlQuery(innerUrl)
         val source = innerParams["chInfo"].orEmpty()
             .ifEmpty { outerParams["chInfo"].orEmpty() }
+        require(source.isNotBlank()) { "入口缺少 chInfo" }
+        if (runCatching { URI(innerUrl).path.substringAfterLast('/') }.getOrNull() == "externalGameCenter.html") {
+            val sceneId = innerParams["sceneId"].orEmpty()
+            require(sceneId.isNotBlank()) { "新版入口缺少 sceneId" }
+            return MemberGameVisitContext(source, "", sceneId, "", external = true)
+        }
         val tab = innerParams["tab"].orEmpty()
         var passThrough = innerParams["channelTaskPassThrough"].orEmpty()
+        require(passThrough.isNotBlank()) { "旧版入口缺少 channelTaskPassThrough" }
         repeat(4) {
             val decoded = decodeUrlComponent(passThrough)
             if (decoded == passThrough) return@repeat
@@ -301,15 +360,29 @@ object MemberTaskProtocol {
                 JSONArray("[$passThrough]").getString(0)
             }.getOrDefault(passThrough)
         }
-        val taskContext = runCatching { JSONObject(passThrough) }.getOrNull() ?: return null
-        val sceneId = taskContext.optString("sceneId")
-        val taskId = taskContext.optString("taskId")
-        if (source.isEmpty() || tab.isEmpty() || sceneId.isEmpty() || taskId.isEmpty()) return null
+        val taskContext = requireNotNull(runCatching { JSONObject(passThrough) }.getOrNull()) {
+            "旧版入口 channelTaskPassThrough 格式错误"
+        }
+        val sceneId = taskContext.opt("sceneId") as? String ?: ""
+        val taskId = taskContext.opt("taskId") as? String ?: ""
+        require(tab.isNotBlank()) { "旧版入口缺少 tab" }
+        require(sceneId.isNotBlank()) { "旧版入口缺少 sceneId" }
+        require(taskId.isNotBlank()) { "旧版入口缺少 taskId" }
         return MemberGameVisitContext(source, tab, sceneId, taskId)
     }
 
     @JvmStatic
     fun buildGameHomeArgs(context: MemberGameVisitContext): JSONArray {
+        if (context.external) {
+            return JSONArray().put(JSONObject()
+                .put("channelTaskPassThrough", "")
+                .put("deviceLevel", "high")
+                .put("guideType", "")
+                .put("moduleId", "")
+                .put("sceneId", context.sceneId)
+                .put("source", context.source)
+                .put("unityDeviceLevel", "high"))
+        }
         return JSONArray().put(
             JSONObject()
                 .put("deviceLevel", "high")
@@ -408,6 +481,12 @@ object MemberTaskProtocol {
             receivedAwardPoint = receivedAwardPoint,
             status = process.optString("status")
         )
+    }
+
+    @JvmStatic
+    fun isGameTaskCompleted(response: JSONObject): Boolean {
+        return isFinishSuccess(response) && response.optJSONObject("data")?.optString("taskStatus") in
+            setOf("DONE", "FINISHED", "COMPLETE", "SUCCESS", "AWARDED")
     }
 
     @JvmStatic

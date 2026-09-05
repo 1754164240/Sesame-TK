@@ -110,6 +110,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
      */
     @Volatile
     private var shieldEndTime: Long = 0
+    private val shieldRetryPolicy = AntForestShieldRetryPolicy()
 
     /**
      * 炸弹卡结束时间
@@ -283,9 +284,9 @@ class AntForest : ModelTask(), EnergyCollectCallback {
     }
 
     override val runnerExecutionPolicy: RunnerExecutionPolicy =
-        RunnerExecutionPolicy.START_ONLY
+        RunnerExecutionPolicy.AWAIT_COMPLETION
 
-    override val runnerTimeoutMillis: Long = 30_000L
+    override val runnerTimeoutMillis: Long = 10 * 60_000L
 
     override fun getGroup(): ModelGroup {
         return ModelGroup.FOREST
@@ -810,6 +811,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
     }
 
     override suspend fun runSuspend() {
+        shieldRetryPolicy.startRound()
         val runStartTime = System.currentTimeMillis()
         Log.record(TAG, "🌲🌲🌲 森林主任务开始执行 🌲🌲🌲")
         val authCode = AuthCodeHelper.getAuthCode("2060170000363691" )
@@ -3405,7 +3407,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                         ", needEnergyBombCard=" + needEnergyBombCard + ", needBubbleBoostCard=" + needBubbleBoostCard
             )
             if (needDouble || needStealth || needShield || needEnergyBombCard || needrobExpand || needBubbleBoostCard) {
-                synchronized(doubleCardLockObj) {
+                val shieldBag = synchronized(doubleCardLockObj) {
                     val bagObject = queryPropList()
                     // Log.runtime(TAG, "bagObject=" + (bagObject == null ? "null" : bagObject.toString()));
                     if (needDouble) useDoubleCard(bagObject!!) // 使用双击卡
@@ -3420,14 +3422,13 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                     ) {
                         this.useBubbleBoostCard()
                     } // 使用加速卡
-                    if (needShield) {
-                        Log.record(TAG, "尝试使用保护罩罩")
-                        useShieldCard(bagObject)
-                    } else if (needEnergyBombCard) {
+                    if (needEnergyBombCard) {
                         Log.record(TAG, "准备使用能量炸弹卡")
                         useEnergyBombCard(bagObject)
                     }
+                    bagObject
                 }
+                if (needShield) useShieldCard(shieldBag)
             } else {
                 Log.record(TAG, "没有需要使用的道具")
             }
@@ -4389,9 +4390,8 @@ class AntForest : ModelTask(), EnergyCollectCallback {
      * @param bagObject 当前背包的 JSON 对象（可能为 null）
      */
     private fun useShieldCard(bagObject: JSONObject?) {
+        var attemptStarted = false
         try {
-            Log.record(TAG, "尝试使用保护罩...")
-
             // 定义支持的保护罩类型
             val shieldTypes = listOf(
                 "LIMIT_TIME_ENERGY_SHIELD_TREE",   // 限时森林保护罩（通常来自活动/青春特权）
@@ -4411,11 +4411,20 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                     val prop = forestPropVOList.optJSONObject(i) ?: continue
                     val propType = prop.optJSONObject("propConfigVO")?.optString("propType") ?: ""
 
-                    if (shieldTypes.contains(propType)) {
+                    if (shieldTypes.contains(propType) && (prop.optJSONArray("propIdList")?.length() ?: 0) > 0) {
                         availableShields.add(prop)
                     }
                 }
             }
+
+            // 只用保护罩实例标识判断有效更新，其他道具变化不重启无收益流程。
+            val shieldIds = availableShields.flatMap { prop ->
+                val ids = prop.optJSONArray("propIdList") ?: JSONArray()
+                (0 until ids.length()).map { ids.optString(it) }
+            }.filter { it.isNotBlank() }.toSet()
+            if (!shieldRetryPolicy.tryBegin(shieldIds)) return
+            attemptStarted = true
+            Log.record(TAG, "尝试使用保护罩...")
 
             // 步骤2: 如果没有找到保护罩，尝试获取
             if (availableShields.isEmpty()) {
@@ -4423,7 +4432,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                 if (youthPrivilege?.value == true) {
                     Log.record(TAG, "尝试通过青春特权获取保护罩...")
                     if (youthPrivilege()) {
-                        val freshBag = querySelfHome()
+                        val freshBag = queryPropList(true)
                         val freshPropList = freshBag?.optJSONArray("forestPropVOList")
                         if (freshPropList != null) {
                             for (i in 0..<freshPropList.length()) {
@@ -4443,7 +4452,7 @@ class AntForest : ModelTask(), EnergyCollectCallback {
                     Log.record(TAG, "尝试通过活力值兑换保护罩...")
                     if (exchangeEnergyShield()) {
                         // 兑换后通常获得的是 LIMIT_TIME_ENERGY_SHIELD
-                        val exchangeBag = querySelfHome()
+                        val exchangeBag = queryPropList(true)
                         val exchangePropList = exchangeBag?.optJSONArray("forestPropVOList")
                         if (exchangePropList != null) {
                             for (i in 0..<exchangePropList.length()) {
@@ -4471,6 +4480,11 @@ class AntForest : ModelTask(), EnergyCollectCallback {
 
                 // 步骤4: 逐个尝试使用保护罩
                 for (shieldObj in availableShields) {
+                    // 包括本次领取或兑换后新出现的道具，使用失败也不在同轮重复尝试。
+                    val ids = shieldObj.optJSONArray("propIdList") ?: JSONArray()
+                    shieldRetryPolicy.recordAttemptedIds(
+                        (0 until ids.length()).map { ids.optString(it) }.filter { it.isNotBlank() }.toSet()
+                    )
                     val propType = shieldObj.optJSONObject("propConfigVO")?.optString("propType") ?: ""
                     val propName = shieldObj.optJSONObject("propConfigVO")?.optString("propName") ?: propType
                     Log.record(TAG, "尝试使用保护罩: $propName")
@@ -4487,6 +4501,8 @@ class AntForest : ModelTask(), EnergyCollectCallback {
 
         } catch (th: Throwable) {
             Log.printStackTrace(TAG, "useShieldCard err", th)
+        } finally {
+            if (attemptStarted) shieldRetryPolicy.finish()
         }
     }
 

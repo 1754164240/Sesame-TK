@@ -99,9 +99,9 @@ class AntSports : ModelTask() {
     override fun getName(): String = "运动"
 
     override val runnerExecutionPolicy: RunnerExecutionPolicy =
-        RunnerExecutionPolicy.START_ONLY
+        RunnerExecutionPolicy.AWAIT_COMPLETION
 
-    override val runnerTimeoutMillis: Long = 30_000L
+    override val runnerTimeoutMillis: Long = 10 * 60 * 1000L
 
     /**
      * @brief 所属任务分组

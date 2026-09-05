@@ -75,11 +75,12 @@ class CoroutineTaskRunner(allModels: List<Model>) {
 
             // 执行多轮任务
             repeat(rounds) { roundIndex ->
+                if (ApplicationHook.offline) return@coroutineScope
                 val round = roundIndex + 1
                 executeRound(round, rounds, status)
             }
 
-            if (CustomSettings.onlyOnceDaily.value) {
+            if (CustomSettings.onlyOnceDaily.value && !ApplicationHook.offline) {
                 // 确保时间状态是最新的
                 TaskCommon.update()
                 if (TaskCommon.IS_MODULE_SLEEP_TIME) {
@@ -99,7 +100,7 @@ class CoroutineTaskRunner(allModels: List<Model>) {
             Log.printStackTrace(TAG, "任务流程异常", e)
         } finally {
             printExecutionSummary(startTime, System.currentTimeMillis())
-            if (TaskRunnerPolicy.shouldScheduleNext(currentCoroutineContext().isActive)) {
+            if (TaskRunnerPolicy.shouldScheduleNext(currentCoroutineContext().isActive) && !ApplicationHook.offline) {
                 scheduleNext()
             }
         }

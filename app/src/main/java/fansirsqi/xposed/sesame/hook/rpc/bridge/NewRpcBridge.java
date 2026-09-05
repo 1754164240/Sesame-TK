@@ -226,7 +226,11 @@ public class NewRpcBridge implements RpcBridge {
             do {
                 count++;
                 try {
-                    RpcIntervalLimit.INSTANCE.enterIntervalLimit(Objects.requireNonNull(rpcEntity.getRequestMethod()));
+                    if (!fansirsqi.xposed.sesame.hook.RpcDispatchGate.awaitPermission(
+                            () -> ApplicationHook.offline,
+                            () -> RpcIntervalLimit.INSTANCE.enterIntervalLimit(Objects.requireNonNull(rpcEntity.getRequestMethod())))) {
+                        return verificationRequiredResponse(rpcEntity);
+                    }
                     Class<?>[] finalLocalBridgeCallbackClazzArray = localBridgeCallbackClazzArray;
                     localNewRpcCallMethod.invoke(
                             localNewRpcInstance, rpcEntity.getRequestMethod(), false, false, "json", localParseObjectMethod.invoke(null,

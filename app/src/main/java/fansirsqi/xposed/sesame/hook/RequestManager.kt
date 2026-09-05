@@ -1,6 +1,11 @@
 package fansirsqi.xposed.sesame.hook
 
 import android.Manifest
+import android.app.Activity
+import android.app.AlertDialog
+import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
 import androidx.annotation.RequiresPermission
 import fansirsqi.xposed.sesame.entity.RpcEntity
 import fansirsqi.xposed.sesame.hook.rpc.bridge.RpcBridge
@@ -10,6 +15,9 @@ import fansirsqi.xposed.sesame.util.Log
 import fansirsqi.xposed.sesame.util.NetworkUtils
 import fansirsqi.xposed.sesame.util.Notify
 import fansirsqi.xposed.sesame.util.TimeUtil
+import fansirsqi.xposed.sesame.util.maps.UserMap
+import fansirsqi.xposed.sesame.task.ModelTask
+import java.util.UUID
 
 /**
  * RPC 请求管理器 (带熔断与兜底机制)
@@ -23,6 +31,14 @@ object RequestManager {
         """{"success":false,"resultCode":"RPC_VERIFICATION_REQUIRED","resultDesc":"触发安全验证，请人工验证后继续"}"""
 
     private val recoveryPolicy = RpcRecoveryPolicy()
+    private const val VERIFICATION_PREFS = "sesame_rpc_verification"
+    private var resumeDialogVisible = false
+
+    private fun verificationPrefs() = ApplicationHook.appContext
+        ?.getSharedPreferences(VERIFICATION_PREFS, Context.MODE_PRIVATE)
+
+    @JvmStatic
+    fun isVerificationPaused(): Boolean = recoveryPolicy.blockReason == RpcBlockReason.VERIFICATION
 
     @JvmStatic
     fun isEmptyRpcResponse(result: String?): Boolean {
@@ -45,13 +61,61 @@ object RequestManager {
             return
         }
 
-        Log.record(TAG, "检测到安全验证，暂停后续RPC请求: $method")
-        if (BaseModel.errNotify.value) {
-            Notify.sendNewNotification(
-                "${TimeUtil.getTimeStr()} | 触发安全验证",
-                "请手动完成验证后再继续任务"
-            )
+        UserMap.currentUid?.let { uid ->
+            verificationPrefs()?.edit()?.putString(uid, UUID.randomUUID().toString())?.commit()
         }
+        ModelTask.stopAllTask()
+        Log.record(TAG, "检测到安全验证，暂停后续RPC请求: $method")
+        notifyVerificationPause()
+    }
+
+    private fun notifyVerificationPause() {
+        val context = ApplicationHook.appContext ?: return
+        val uid = UserMap.currentUid ?: return
+        val token = verificationPrefs()?.getString(uid, null) ?: return
+        val intent = Intent(ApplicationHook.BroadcastActions.RESUME_VERIFIED)
+            .setPackage(context.packageName)
+            .putExtra("userId", uid)
+            .putExtra("verificationToken", token)
+        val action = PendingIntent.getBroadcast(context, 109,
+            intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        Notify.sendNewNotification("自动任务已暂停", "请先在支付宝完成验证，再点已验证恢复", action)
+    }
+
+    fun showVerificationResumeDialog(activity: Activity) {
+        if (!isVerificationPaused() || resumeDialogVisible || activity.isFinishing || activity.isDestroyed) return
+        val uid = UserMap.currentUid ?: return
+        val token = verificationPrefs()?.getString(uid, null) ?: return
+        resumeDialogVisible = true
+        AlertDialog.Builder(activity)
+            .setTitle("自动任务已暂停")
+            .setMessage("完成支付宝安全验证后，可恢复自动任务。")
+            .setNegativeButton("保持暂停", null)
+            .setPositiveButton("已验证，恢复任务") { _, _ ->
+                activity.sendBroadcast(Intent(ApplicationHook.BroadcastActions.RESUME_VERIFIED)
+                    .setPackage(activity.packageName).putExtra("userId", uid)
+                    .putExtra("verificationToken", token))
+            }
+            .setOnDismissListener { resumeDialogVisible = false }
+            .show()
+    }
+
+    @Synchronized
+    fun resumeAfterManualVerification(intent: Intent): Boolean {
+        val uid = UserMap.currentUid ?: return false
+        val expected = verificationPrefs()?.getString(uid, null) ?: return false
+        if (intent.getStringExtra("userId") != uid ||
+            intent.getStringExtra("verificationToken") != expected) return false
+        // 先等待旧业务退出，避免解除暂停时旧请求继续发出。
+        Log.record(TAG, "等待已暂停任务退出后恢复")
+        kotlinx.coroutines.runBlocking { ModelTask.stopAllTaskAndJoin() }
+        if (UserMap.currentUid != uid || !isVerificationPaused() ||
+            verificationPrefs()?.getString(uid, null) != expected) return false
+        verificationPrefs()?.edit()?.remove(uid)?.commit()
+        recoveryPolicy.reset()
+        ApplicationHook.setOffline(false)
+        Log.record(TAG, "已由用户确认恢复自动任务")
+        return true
     }
 
     /**
@@ -81,6 +145,9 @@ object RequestManager {
             null // 异常视为 null，触发失败逻辑
         }
 
+        // 在途请求可能在验证后才结束，不能按普通空响应处理。
+        if (ApplicationHook.offline) return blockedResponse()
+
         // 4. 结果校验与状态维护
         if (isEmptyRpcResponse(result)) {
             // 失败：增加计数，检查兜底
@@ -95,6 +162,7 @@ object RequestManager {
         val hadFailure = recoveryPolicy.failureCount > 0 ||
             recoveryPolicy.blockReason != RpcBlockReason.NONE
         recoveryPolicy.onSuccess()
+        if (isVerificationPaused()) return blockedResponse()
         if (hadFailure) {
             Log.record(TAG, "RPC 恢复正常，错误计数重置")
         }
@@ -133,7 +201,14 @@ object RequestManager {
 
     @JvmStatic
     fun onRpcBridgeReady() {
-        recoveryPolicy.onSuccess()
+        val uid = UserMap.currentUid
+        recoveryPolicy.reset()
+        if (uid != null && verificationPrefs()?.contains(uid) == true) {
+            recoveryPolicy.onVerificationRequired()
+            ApplicationHook.setOffline(true)
+            Log.record(TAG, "保留安全验证暂停状态，等待用户确认恢复")
+            notifyVerificationPause()
+        }
     }
 
     /**
