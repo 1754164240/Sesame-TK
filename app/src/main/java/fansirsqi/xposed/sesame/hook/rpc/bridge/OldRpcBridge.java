@@ -95,11 +95,8 @@ public class OldRpcBridge implements RpcBridge {
         String method = rpcEntity.getRequestMethod(); // 获取请求方法
         String args = rpcEntity.getRequestData(); // 获取请求参数
         for (int count = 0; count < tryCount; count++) {
-            if (ApplicationHook.offline) return null;
             try {
-                if (!fansirsqi.xposed.sesame.hook.RpcDispatchGate.awaitPermission(
-                        () -> ApplicationHook.offline,
-                        () -> RpcIntervalLimit.INSTANCE.enterIntervalLimit(Objects.requireNonNull(method)))) return null;
+                RpcIntervalLimit.INSTANCE.enterIntervalLimit(Objects.requireNonNull(method)); // 进入 RPC 调用间隔限制
                 Object response = invokeRpcCall(method, args); // 调用 RPC 方法
                 return processResponse(rpcEntity, response, id, method, args, retryInterval); // 处理响应
             } catch (Throwable t) {

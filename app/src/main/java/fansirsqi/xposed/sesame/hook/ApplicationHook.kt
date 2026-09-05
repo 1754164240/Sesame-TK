@@ -96,10 +96,9 @@ import kotlin.concurrent.Volatile
 class ApplicationHook {
     var xposedInterface: XposedInterface? = null
 
-    internal object BroadcastActions {
+    private object BroadcastActions {
         const val RESTART: String = "com.eg.android.AlipayGphone.sesame.restart"
         const val RE_LOGIN: String = "com.eg.android.AlipayGphone.sesame.reLogin"
-        const val RESUME_VERIFIED: String = "com.eg.android.AlipayGphone.sesame.resumeVerified"
         const val STATUS: String = "com.eg.android.AlipayGphone.sesame.status"
         const val RPC_TEST: String = "com.eg.android.AlipayGphone.sesame.rpctest"
         const val MANUAL_TASK: String = "com.eg.android.AlipayGphone.sesame.manual_task"
@@ -254,11 +253,6 @@ class ApplicationHook {
                 "onResume",
                 object : XC_MethodHook() {
                     override fun afterHookedMethod(param: MethodHookParam?) {
-                        (param?.thisObject as? android.app.Activity)?.let { activity ->
-                            activity.window.decorView.post {
-                                RequestManager.showVerificationResumeDialog(activity)
-                            }
-                        }
                         val targetUid = HookUtil.getUserId(classLoader!!)
                         if (targetUid == null) {
                             show("用户未登录")
@@ -378,11 +372,6 @@ class ApplicationHook {
                 })
 
                 BroadcastActions.RE_LOGIN -> reOpenApp()
-                BroadcastActions.RESUME_VERIFIED -> execute {
-                    if (RequestManager.resumeAfterManualVerification(intent)) {
-                        execHandler()
-                    }
-                }
                 BroadcastActions.RPC_TEST -> handleRpcTest(intent)
                 BroadcastActions.MANUAL_TASK -> {
                     record(TAG, "🚀 收到手动庄园任务指令")
@@ -789,10 +778,8 @@ class ApplicationHook {
         }
 
         fun reOpenApp() {
-            if (RequestManager.isVerificationPaused()) return
             ensureScheduler()
             schedule(20000L, "重新登录") {
-                if (RequestManager.isVerificationPaused()) return@schedule
                 try {
                     val intent = Intent(Intent.ACTION_VIEW)
                     intent.setClassName(General.PACKAGE_NAME, General.CURRENT_USING_ACTIVITY)
@@ -855,7 +842,6 @@ class ApplicationHook {
                 val filter = IntentFilter()
                 filter.addAction(BroadcastActions.RESTART)
                 filter.addAction(BroadcastActions.RE_LOGIN)
-                filter.addAction(BroadcastActions.RESUME_VERIFIED)
                 filter.addAction(BroadcastActions.STATUS)
                 filter.addAction(BroadcastActions.RPC_TEST)
                 filter.addAction(BroadcastActions.MANUAL_TASK)

@@ -114,9 +114,9 @@ class AntFarm : ModelTask() {
     }
 
     override val runnerExecutionPolicy: RunnerExecutionPolicy =
-        RunnerExecutionPolicy.AWAIT_COMPLETION
+        RunnerExecutionPolicy.START_ONLY
 
-    override val runnerTimeoutMillis: Long = 10 * 60 * 1000L
+    override val runnerTimeoutMillis: Long = 30_000L
 
     override fun getGroup(): ModelGroup {
         return ModelGroup.FARM
@@ -752,12 +752,13 @@ class AntFarm : ModelTask() {
             }
             if (harvestProduce!!.value && benevolenceScore >= 1) {
                 Log.record(TAG, "有可收取的爱心鸡蛋")
-                if (!harvestProduce(ownerFarmId)) return
+                harvestProduce(ownerFarmId)
                 tc.countDebug("收鸡蛋")
             }
             if (donation!!.value && Status.canDonationEgg(userId) && harvestBenevolenceScore >= 1) {
-                if (!handleDonation(donationCount!!.value)) return
+                handleDonation(donationCount!!.value)
                 tc.countDebug("每日捐蛋")
+                Log.farm("今日捐蛋完成")
             }
 
             // 做饲料任务
@@ -1750,30 +1751,30 @@ class AntFarm : ModelTask() {
         }
     }
 
-    private fun harvestProduce(farmId: String?): Boolean {
+    private fun harvestProduce(farmId: String?) {
         try {
             val s = AntFarmRpcCall.harvestProduce(farmId)
             val jo = JSONObject(s)
-            if (AntFarmDonationResponse.requiresVerification(jo)) return false
+            val memo = jo.getString("memo")
             if (ResChecker.checkRes(TAG, jo)) {
                 val harvest = jo.getDouble("harvestBenevolenceScore")
                 harvestBenevolenceScore = jo.getDouble("finalBenevolenceScore")
                 Log.farm("收取鸡蛋🥚[" + harvest + "颗]#剩余" + harvestBenevolenceScore + "颗")
             } else {
-                Log.record(AntFarmDonationResponse.failureMessage(jo))
+                Log.record(memo)
+                Log.record(s)
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "harvestProduce err:",t)
         }
-        return true
     }
 
     /* 捐赠爱心鸡蛋 */
-    private fun handleDonation(donationType: Int): Boolean {
+    private fun handleDonation(donationType: Int) {
         try {
             val s = AntFarmRpcCall.listActivityInfo()
             var jo = JSONObject(s)
-            if (AntFarmDonationResponse.requiresVerification(jo)) return false
+            val memo = jo.getString("memo")
             if (ResChecker.checkRes(TAG, jo)) {
                 val jaActivityInfos = jo.getJSONArray("activityInfos")
                 var activityId: String? = null
@@ -1781,18 +1782,11 @@ class AntFarm : ModelTask() {
                 var isDonation = false
                 for (i in 0..<jaActivityInfos.length()) {
                     jo = jaActivityInfos.getJSONObject(i)
-                    if (!AntFarmDonationResponse.supportsAutomaticDonation(jo)) {
-                        Log.record(TAG, "跳过自营捐蛋项目：当前配置未指定标的，请在官方页面选择后捐赠")
-                        continue
-                    }
                     if (jo.get("donationTotal") != jo.get("donationLimit")) {
                         activityId = jo.getString("activityId")
                         activityName = jo.optString("projectName", activityId)
-                        val result = performDonation(activityId, activityName)
-                        if (result == DonationResult.VERIFICATION_REQUIRED) return false
-                        if (result == DonationResult.SUCCESS) {
+                        if (performDonation(activityId, activityName)) {
                             isDonation = true
-                            Status.donationEgg(UserMap.currentUid)
                             if (donationType == DonationCount.ONE) {
                                 break
                             }
@@ -1800,41 +1794,39 @@ class AntFarm : ModelTask() {
                     }
                 }
                 if (isDonation) {
-                    Log.farm("今日捐蛋完成")
+                    val userId = UserMap.currentUid
+                    Status.donationEgg(userId)
                 }
                 if (activityId == null) {
-                    Log.record(TAG, "今日已无可自动捐赠的普通活动")
+                    Log.record(TAG, "今日已无可捐赠的活动")
                 }
             } else {
-                Log.record(AntFarmDonationResponse.failureMessage(jo))
+                Log.record(memo)
+                Log.record(s)
             }
         } catch (t: Throwable) {
             Log.printStackTrace(TAG, "donation err:",t)
         }
-        return true
     }
 
-    private enum class DonationResult { SUCCESS, FAILED, VERIFICATION_REQUIRED }
-
-    private fun performDonation(activityId: String?, activityName: String?): DonationResult {
+    private fun performDonation(activityId: String?, activityName: String?): Boolean {
         try {
             val s = AntFarmRpcCall.donation(activityId, 1)
             val donationResponse = JSONObject(s)
-            if (AntFarmDonationResponse.requiresVerification(donationResponse)) {
-                return DonationResult.VERIFICATION_REQUIRED
-            }
+            val memo = donationResponse.getString("memo")
             if (ResChecker.checkRes(TAG, donationResponse)) {
                 val donationDetails = donationResponse.getJSONObject("donation")
                 harvestBenevolenceScore = donationDetails.getDouble("harvestBenevolenceScore")
                 Log.farm("捐赠活动❤️[" + activityName + "]#累计捐赠" + donationDetails.getInt("donationTimesStat") + "次")
-                return DonationResult.SUCCESS
+                return true
             } else {
-                Log.record(AntFarmDonationResponse.failureMessage(donationResponse))
+                Log.record(memo)
+                Log.record(s)
             }
         } catch (t: Throwable) {
             Log.printStackTrace(t)
         }
-        return DonationResult.FAILED
+        return false
     }
 
     @Suppress("SameParameterValue")
